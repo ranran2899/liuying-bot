@@ -1,0 +1,120 @@
+"""LLM相关配置项
+
+包含对话模型、嵌入模型、轻量模型、思考模式与Token额度等配置。
+"""
+
+from liuying.configs.utils import RegisterConfig
+
+from ._common import MODULE
+
+__all__ = ["LLM_CONFIGS"]
+
+LLM_CONFIGS: list[RegisterConfig] = [
+    RegisterConfig(
+        key="CHAT_PROVIDER",
+        value=None,
+        module=MODULE,
+        help="对话模型供应商，None时用默认",
+        default_value=None,
+        type=str,
+    ),
+    RegisterConfig(
+        key="CHAT_MODEL",
+        value=None,
+        module=MODULE,
+        help="对话模型名，None时用provider默认",
+        default_value=None,
+        type=str,
+    ),
+    RegisterConfig(
+        key="EMBEDDING_PROVIDER",
+        value=None,
+        module=MODULE,
+        help="嵌入模型供应商",
+        default_value=None,
+        type=str,
+    ),
+    RegisterConfig(
+        key="EMBEDDING_MODEL",
+        value=None,
+        module=MODULE,
+        help="嵌入模型名",
+        default_value=None,
+        type=str,
+    ),
+    RegisterConfig(
+        key="THINKING_MODE_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否开启深度思考请求（开启时向模型请求思考链）",
+        default_value=False,
+        type=bool,
+    ),
+    # ===== Phase11: LLM模型管理 =====
+    RegisterConfig(
+        key="LITE_MODEL_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否启用轻量模型",
+        default_value=False,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="LITE_MODEL_PROVIDER",
+        value=None,
+        module=MODULE,
+        help="轻量模型供应商",
+        default_value=None,
+        type=str,
+    ),
+    RegisterConfig(
+        key="LITE_MODEL_NAME",
+        value=None,
+        module=MODULE,
+        help="轻量模型名",
+        default_value=None,
+        type=str,
+    ),
+    RegisterConfig(
+        key="STRICT_MAIN_MODEL",
+        value=False,
+        module=MODULE,
+        help="是否严格使用主模型不降级",
+        default_value=False,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="MONTHLY_TOKEN_QUOTA",
+        value=0,
+        module=MODULE,
+        help="月度token额度（0=不限）",
+        default_value=0,
+        type=int,
+    ),
+    # ===== 用户对话 Token 额度 =====
+    RegisterConfig(
+        key="TOKEN_QUOTA_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用用户对话token额度限制",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="TOKEN_QUOTA_REMINDER_CD",
+        value=300,
+        module=MODULE,
+        help="用户额度不足提醒冷却（秒），防止消息刷屏",
+        default_value=300,
+        type=int,
+    ),
+    RegisterConfig(
+        key="TOKEN_QUOTA_MIN_THRESHOLD",
+        value=1,
+        module=MODULE,
+        help="用户可用token最低阈值，剩余低于此值视为不足",
+        default_value=1,
+        type=int,
+    ),
+]
+"""LLM相关配置项列表"""

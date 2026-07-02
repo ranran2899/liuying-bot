@@ -1,0 +1,156 @@
+from nonebot import on_notice
+from nonebot.adapters import Bot
+from nonebot.adapters.onebot.v11 import (
+    GroupDecreaseNoticeEvent,
+    GroupIncreaseNoticeEvent,
+)
+from nonebot.adapters.onebot.v12 import (
+    GroupMemberDecreaseEvent,
+    GroupMemberIncreaseEvent,
+)
+from nonebot.plugin import PluginMetadata
+from nonebot_plugin_uninfo import Uninfo
+
+from liuying.configs.config import BotConfig, Config
+from liuying.configs.utils import PluginExtraData, RegisterConfig, Task
+from liuying.models._log.event_log import EventLog
+from liuying.models._group import GroupConsole
+from liuying.services.cache import CacheRoot
+from liuying.utils.common_utils import CommonUtils
+from liuying.utils.enum import EventLogType, PluginType
+from liuying.utils.platform import PlatformUtils
+from liuying.utils.rules import notice_rule
+
+from ..exception import ForceAddGroupError
+from .data_source import GroupManager
+
+__plugin_meta__ = PluginMetadata(
+    name="QQ群事件处理",
+    description="群事件处理",
+    usage="",
+    extra=PluginExtraData(
+        author="HibiKier",
+        version="0.1",
+        plugin_type=PluginType.HIDDEN,
+        configs=[
+            RegisterConfig(
+                module="invite_manager",
+                key="message",
+                value=f"请不要未经同意就拉{BotConfig.self_nickname}入群哦！",
+                help="强制拉群后进群回复的内容",
+            ),
+            RegisterConfig(
+                module="invite_manager",
+                key="flag",
+                value=True,
+                help="强制拉群后进群退出并回复内容",
+                default_value=True,
+                type=bool,
+            ),
+            RegisterConfig(
+                module="invite_manager",
+                key="welcome_msg_cd",
+                value=20,
+                help="群欢迎消息cd",
+                default_value=20,
+                type=int,
+            ),
+        ],
+        tasks=[
+            Task(
+                module="group_welcome",
+                name="进群欢迎",
+                create_status=False,
+                default_status=False,
+            ),
+            Task(
+                module="refund_group_remind",
+                name="退群提醒",
+                create_status=False,
+                default_status=False,
+            ),
+        ],
+    ).to_dict(),
+)
+
+
+base_config = Config.get("invite_manager")
+
+
+limit_cd = base_config.get("welcome_msg_cd")
+
+
+group_increase_handle = on_notice(
+    priority=1,
+    block=False,
+    rule=notice_rule([GroupIncreaseNoticeEvent, GroupMemberIncreaseEvent]),
+)
+"""群员增加处理"""
+group_decrease_handle = on_notice(
+    priority=1,
+    block=False,
+    rule=notice_rule([GroupMemberDecreaseEvent, GroupDecreaseNoticeEvent]),
+)
+"""群员减少处理"""
+
+cache = CacheRoot.cache_dict(
+    "REQUEST_CACHE", (base_config.get("TIP_MESSAGE_LIMIT") or 360) * 60
+)
+
+
+@group_increase_handle.handle()
+async def _(
+    bot: Bot,
+    session: Uninfo,
+    event: GroupIncreaseNoticeEvent | GroupMemberIncreaseEvent,
+):
+    if session.user.id == bot.self_id:
+        group, _ = await GroupConsole.get_or_create(
+            group_id=str(event.group_id), channel_id=None
+        )
+        try:
+            await GroupManager.add_bot(
+                bot, str(event.operator_id), str(event.group_id), group
+            )
+        except ForceAddGroupError as e:
+            if not cache.get(e.get_group_id()):
+                cache.set(e.get_group_id(), "1")
+                await PlatformUtils.send_superuser(bot, e.get_info())
+    else:
+        await GroupManager.add_user(session, bot)
+
+
+@group_decrease_handle.handle()
+async def _(
+    bot: Bot,
+    session: Uninfo,
+    event: GroupDecreaseNoticeEvent | GroupMemberIncreaseEvent,
+):
+    user_id = str(event.user_id)
+    group_id = str(event.group_id)
+    # 机器人主动退群（set_group_leave 触发）时，跳过消息发送，避免向已离开的群发消息报错
+    if user_id == str(bot.self_id) and event.sub_type == "leave":
+        return
+    match event.sub_type:
+        case "kick_me":
+            await GroupManager.kick_bot(bot, group_id, str(event.operator_id))
+            await EventLog.create(
+                user_id=user_id, group_id=group_id, event_type=EventLogType.KICK_BOT
+            )
+        case "leave" | "kick":
+            event_type_map = {
+                "leave": EventLogType.LEAVE_MEMBER,
+                "kick": EventLogType.KICK_MEMBER,
+            }
+            await EventLog.create(
+                user_id=user_id,
+                group_id=group_id,
+                event_type=event_type_map[event.sub_type],
+            )
+            result = await GroupManager.run_user(
+                bot, user_id, group_id, str(event.operator_id), event.sub_type
+            )
+            if result and not await CommonUtils.task_is_block(
+                session, "refund_group_remind"
+            ):
+                await group_decrease_handle.send(result)

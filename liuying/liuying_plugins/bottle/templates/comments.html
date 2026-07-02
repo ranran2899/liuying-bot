@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>评论审核 - 漂流瓶管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/bottle/static/css/admin.css" rel="stylesheet">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h3><i class="bi bi-droplet-fill"></i> 漂流瓶管理</h3>
+            <p>审核控制台</p>
+        </div>
+        <div class="sidebar-menu">
+            <div class="menu-category">审核管理</div>
+            <a href="/bottle/check" class="menu-item">
+                <i class="bi bi-bottle"></i>
+                瓶子审核
+                <span class="badge">{{ pending_count }}</span>
+            </a>
+            <a href="/bottle/comments" class="menu-item active">
+                <i class="bi bi-chat-dots"></i>
+                评论审核
+                <span class="badge">{{ pending_comments }}</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="page-header">
+            <h1>评论审核</h1>
+        </div>
+
+        <div class="stats-row">
+            <div class="stat-card">
+                <h4>待审核瓶子</h4>
+                <div class="number">{{ pending_count }}</div>
+            </div>
+            <div class="stat-card">
+                <h4>待审核评论</h4>
+                <div class="number">{{ pending_comments }}</div>
+            </div>
+        </div>
+
+        <div class="content-card">
+            {% if comment %}
+            <div class="info-row">
+                <span class="label">评论ID:</span>
+                <span class="value">{{ comment.id }}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">瓶子ID:</span>
+                <span class="value">{{ comment.bottle_id }}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">用户ID:</span>
+                <span class="value">{{ comment.user_id }}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">评论内容:</span>
+            </div>
+            <div class="comment-content">
+                {{ comment.content }}
+            </div>
+            <div class="action-buttons">
+                <button class="btn-approve" onclick="handleAction({{ comment.id }}, 'approve')">
+                    <i class="bi bi-check-lg"></i> 通过
+                </button>
+                <button class="btn-refuse" onclick="handleAction({{ comment.id }}, 'refuse')">
+                    <i class="bi bi-x-lg"></i> 拒绝
+                </button>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-check-circle-fill"></i>
+                <h3>没有待审核的评论</h3>
+                <p>所有评论都已审核完毕</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        async function handleAction(commentId, action) {
+            const response = await fetch(`/bottle/comments/${action}/${commentId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('操作失败，请稍后重试。');
+            }
+        }
+    </script>
+</body>
+</html>

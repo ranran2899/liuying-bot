@@ -1,0 +1,142 @@
+"""杂项配置项
+
+包含主开关、人格、响应长度、协议扩展、日记、知识书等不便归类的配置。
+"""
+
+from liuying.configs.utils import RegisterConfig
+
+from ._common import MODULE
+
+__all__ = ["MISC_CONFIGS"]
+
+MISC_CONFIGS: list[RegisterConfig] = [
+    RegisterConfig(
+        key="ENABLE_AI",
+        value=True,
+        module=MODULE,
+        help="是否启用AI对话",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="DEFAULT_PERSONA",
+        value="liuying",
+        module=MODULE,
+        help="默认人格名",
+        default_value="liuying",
+        type=str,
+    ),
+    RegisterConfig(
+        key="MAX_RESPONSE_LENGTH",
+        value=200,
+        module=MODULE,
+        help="最大响应长度",
+        default_value=200,
+        type=int,
+    ),
+    RegisterConfig(
+        key="COST_GOLD",
+        value=0,
+        module=MODULE,
+        help="调用花费金币",
+        default_value=0,
+        type=int,
+    ),
+    RegisterConfig(
+        key="PROTOCOL_EXTENSIONS",
+        value="auto",
+        module=MODULE,
+        help="协议扩展探测模式",
+        default_value="auto",
+        type=str,
+    ),
+    RegisterConfig(
+        key="DIARY_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用日记系统",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="MEME_DICT_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用梗百科",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="GROUP_AUTO_BUILD_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用群知识/风格自动构建",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="SESSION_STORE_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用会话存储",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="TIME_CONTEXT_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用时间上下文",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="FREE_SEARCH_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用免配置搜索引擎",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="SKILL_REMOTE_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否启用远程skill加载",
+        default_value=False,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="LOREBOOK_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用知识书",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="BACKGROUND_INTELLIGENCE_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用后台智能处理",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="PROACTIVE_DIAGNOSTICS_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否启用主动诊断",
+        default_value=False,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="YAML_PIPELINE_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否启用YAML管道",
+        default_value=False,
+        type=bool,
+    ),
+]
+"""杂项配置项列表"""

@@ -1,0 +1,114 @@
+# 忽略虚拟环境
+.venv/
+venv/
+
+# 忽略日志目录
+log/
+
+# 忽略资源目录(字体/图片等大文件)
+resources/
+
+# 忽略编译后的Python文件
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 忽略日志文件
+*.log
+*.log.*
+pytestdebug.log
+
+# 忽略操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 忽略IDE配置文件
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 忽略环境变量文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 忽略构建产物
+build/
+dist/
+*.egg-info/
+*.egg
+/static
+
+# 忽略缓存文件
+.cache/
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+
+# 忽略其他临时文件
+*.tmp
+*.temp
+*.bak
+*.old
+
+# Poetry相关
+poetry.lock
+poetry.toml
+
+# 其他证书和密钥文件
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+
+# 调试和错误日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# 测试报告
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# 版本管理
+.python-version
+Pipfile.lock
+MANIFEST
+
+# Buildout相关
+develop-eggs/
+.download-cache/
+eggs/
+parts/
+sdist/
+var/
+*.egg/
+
+# pybuilder相关
+.pybuilder/
+target/
+
+# 其他工具配置
+.flake8
+pip-log.txt
+pip-delete-this-directory.txt

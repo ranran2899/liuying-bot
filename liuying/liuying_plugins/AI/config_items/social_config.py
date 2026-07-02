@@ -1,0 +1,119 @@
+"""社交与主动行为配置项
+
+包含主动行为、群静默、社交智能、同伴感知、跟队形与热聊保护等配置。
+"""
+
+from liuying.configs.utils import RegisterConfig
+
+from ._common import MODULE
+
+__all__ = ["SOCIAL_CONFIGS"]
+
+SOCIAL_CONFIGS: list[RegisterConfig] = [
+    RegisterConfig(
+        key="PROACTIVE_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用主动行为",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="PROACTIVE_INTERVAL_MINUTES",
+        value=30,
+        module=MODULE,
+        help="主动行为检查间隔（分钟）",
+        default_value=30,
+        type=int,
+    ),
+    RegisterConfig(
+        key="GROUP_IDLE_MINUTES",
+        value=90,
+        module=MODULE,
+        help="群空闲触发阈值（分钟）",
+        default_value=90,
+        type=int,
+    ),
+    RegisterConfig(
+        key="PROACTIVE_DAILY_LIMIT",
+        value=3,
+        module=MODULE,
+        help="每日主动行为上限",
+        default_value=3,
+        type=int,
+    ),
+    RegisterConfig(
+        key="GROUP_QUIET_START",
+        value=0,
+        module=MODULE,
+        help="群深夜静默开始小时",
+        default_value=0,
+        type=int,
+    ),
+    RegisterConfig(
+        key="GROUP_QUIET_END",
+        value=7,
+        module=MODULE,
+        help="群深夜静默结束小时",
+        default_value=7,
+        type=int,
+    ),
+    RegisterConfig(
+        key="SOCIAL_INTELLIGENCE_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用社交智能",
+        default_value=True,
+        type=bool,
+    ),
+    # ===== Phase5: 社交智能+主动行为 =====
+    RegisterConfig(
+        key="SOCIAL_GATE_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否启用社交LLM闸门",
+        default_value=False,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="SOCIAL_QUOTA_PER_USER",
+        value=5,
+        module=MODULE,
+        help="每用户每日主动消息配额",
+        default_value=5,
+        type=int,
+    ),
+    RegisterConfig(
+        key="PEER_AWARENESS_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用同伴感知",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="REPEAT_FOLLOW_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用跟队形",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="HOT_CHAT_PROTECT_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用热聊保护",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="HOT_CHAT_MIN_PASS_RATE",
+        value=0.3,
+        module=MODULE,
+        help="热聊时随机发言最低通过率",
+        default_value=0.3,
+        type=float,
+    ),
+]
+"""社交与主动行为配置项列表"""

@@ -1,0 +1,151 @@
+"""拟人化相关配置项
+
+包含打字延迟、错别字、贴纸、表情表态、拍一拍、引用回复等配置。
+"""
+
+from liuying.configs.utils import RegisterConfig
+
+from ._common import MODULE
+
+__all__ = ["HUMANIZE_CONFIGS"]
+
+HUMANIZE_CONFIGS: list[RegisterConfig] = [
+    RegisterConfig(
+        key="HUMANIZE_TYPING_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用打字延迟拟人化",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="HUMANIZE_TYPING_CPS",
+        value=7.0,
+        module=MODULE,
+        help="打字速度（字符/秒）",
+        default_value=7.0,
+        type=float,
+    ),
+    RegisterConfig(
+        key="HUMANIZE_TYPING_MAX_DELAY",
+        value=5.0,
+        module=MODULE,
+        help="最大打字延迟（秒）",
+        default_value=5.0,
+        type=float,
+    ),
+    RegisterConfig(
+        key="HUMANIZE_TYPO_PROBABILITY",
+        value=0.0,
+        module=MODULE,
+        help="错别字注入概率",
+        default_value=0.0,
+        type=float,
+    ),
+    RegisterConfig(
+        key="STICKER_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用贴纸",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="STICKER_PROBABILITY",
+        value=0.24,
+        module=MODULE,
+        help="贴纸触发概率",
+        default_value=0.24,
+        type=float,
+    ),
+    # ===== Phase4: 拟人化发送 =====
+    RegisterConfig(
+        key="REACTION_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用表情表态",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="REACTION_PROBABILITY",
+        value=0.15,
+        module=MODULE,
+        help="沉默时表情表态概率",
+        default_value=0.15,
+        type=float,
+    ),
+    RegisterConfig(
+        key="POKE_BACK_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用拍一拍回复",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="INPUT_STATUS_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否启用输入状态显示",
+        default_value=False,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="QUOTE_REPLY_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用引用回复",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="AT_REPLY_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用@回复",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="FRAGMENT_STYLE",
+        value="prompt",
+        module=MODULE,
+        help="碎片化输出风格：off或prompt",
+        default_value="prompt",
+        type=str,
+    ),
+    RegisterConfig(
+        key="FRAGMENT_MAX_CHARS",
+        value=40,
+        module=MODULE,
+        help="碎片化输出单段最大字符数",
+        default_value=40,
+        type=int,
+    ),
+    RegisterConfig(
+        key="STICKER_SEMANTIC_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用贴纸语义分析",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="STICKER_CACHE_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用贴纸缓存",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="STICKER_AUTO_LABEL_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否启用贴纸自动标注",
+        default_value=False,
+        type=bool,
+    ),
+]
+"""拟人化相关配置项列表"""
