@@ -38,7 +38,6 @@ Thumbs.db
 *.sw?
 
 # 忽略环境变量文件
-.env
 .env.local
 .env.development.local
 .env.test.local
