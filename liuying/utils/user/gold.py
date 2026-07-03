@@ -66,7 +66,7 @@ class UserGold:
             await UserInfo.reduce_gold(
                 user_id=user_id,
                 gold=amount,
-                plugin_module=source,
+                source=source,
                 platform=platform
             )
             return True

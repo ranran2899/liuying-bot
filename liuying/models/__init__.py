@@ -3,7 +3,7 @@
 
 """
 
-from ._bot import ItemTemplate, Shop, ShopItem
+from ._economy import ItemTemplate, Shop, ShopItem
 from ._llm import ScopeTokenUsage, TokenUsage
 from .bottle import BottleComment, BottleImage, BottleLike, BottleRecord
 from .plugin_info import PluginInfo
