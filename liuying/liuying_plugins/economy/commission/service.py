@@ -60,7 +60,7 @@ class CommissionService:
     ) -> str:
         """发布求购单
 
-        先从背包查找道具模板，检查价格和数量上限，
+        从道具模板查找道具信息，检查价格和数量上限，
         预扣金币后创建求购单。同一买家对同一道具的求购单
         累加数量并更新价格。
 
@@ -81,19 +81,15 @@ class CommissionService:
         if quantity > MAX_ITEM_QUANTITY:
             return f"单次求购数量不能超过{MAX_ITEM_QUANTITY}"
 
-        inv_item = await self.inventory.resolve_inventory_item(
-            item_keyword
-        )
-        if not inv_item:
-            return f"背包中没有'{item_keyword}'这个道具"
-
-        item_id = inv_item["id"]
-        template = await ItemTemplate.get_template_by_id(item_id)
+        template = await ItemTemplate.get_template_by_id(item_keyword)
         if not template:
-            return (
-                f"道具'{inv_item.get('name', item_id)}'"
-                f"未在系统中注册，无法求购"
+            template = await ItemTemplate.get_template_by_name(
+                item_keyword
             )
+        if not template:
+            return f"系统中不存在道具'{item_keyword}'"
+
+        item_id = template["id"]
 
         existing = await CommissionOrder._find_by_buyer_and_item(
             self.user_id, item_id
@@ -128,7 +124,7 @@ class CommissionService:
             )
 
         item_data = {
-            key: inv_item.get(key, "") for key in _ITEM_DATA_KEYS
+            key: template.get(key, "") for key in _ITEM_DATA_KEYS
         }
 
         success = await CommissionOrder.add_order(
@@ -147,7 +143,7 @@ class CommissionService:
                 )
             return "求购单创建失败"
 
-        item_name = inv_item.get("name", item_keyword)
+        item_name = template.get("name", item_keyword)
         logger.info(
             f"求购单创建: {item_name} x {quantity}, "
             f"单价: {unit_price}, 买家: {self.user_id}",
