@@ -313,6 +313,21 @@ class ItemTemplate(Model):
         template = await cls._find_by_item_id(item_id, shop_name)
         return template.get_stats() if template else None
 
+    @classmethod
+    async def get_all_purchase_stats(
+        cls, shop_name: str = "default"
+    ) -> dict[str, dict]:
+        """获取指定商店所有道具的购买统计
+
+        参数:
+            shop_name: 商店名称，默认为 "default"
+
+        返回:
+            dict[str, dict]: 道具 ID 到购买统计字典的映射
+        """
+        templates = await cls.filter(shop_name=shop_name).all()
+        return {t.get_data().get("id", ""): t.get_stats() for t in templates}
+
     # ==================== 数据库迁移 ====================
 
     @classmethod

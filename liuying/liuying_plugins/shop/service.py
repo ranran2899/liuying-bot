@@ -1,16 +1,22 @@
-"""商店管理服务模块"""
+"""商店管理服务模块
+
+封装用户商店相关的业务逻辑：开店、上架、下架、改价、热销榜、交易日志。
+命令层只负责参数提取与消息构建，业务校验与数据库操作集中于此。
+"""
 
 from dataclasses import dataclass
 
-from liuying.models._bot import ItemTemplate, Shop, ShopItem
+from liuying.models._bot import Shop, ShopItem
 from liuying.models._log.shop_log import ShopTransactionLog
 from liuying.utils.log import logger
 
-from .inventory import ItemInventory, ItemResolver
+from .inventory import ItemInventory
+from .template import TemplateRepository
 
 MAX_SHOP_ITEM_PRICE = 100_000_000
 MAX_SHOP_ITEM_QUANTITY = 99
 MAX_SHOP_ITEM_TYPES = 10
+MAX_SHOP_NAME_LENGTH = 6
 
 
 def calc_discount(price: int, discount: int) -> int:
@@ -28,7 +34,7 @@ def calc_discount(price: int, discount: int) -> int:
 
 @dataclass(slots=True)
 class ListResult:
-    """上架操作结果
+    """上架/下架/改价操作结果
 
     参数:
         error: 错误信息，None 表示成功
@@ -40,12 +46,15 @@ class ListResult:
 
 
 class ShopService:
-    """商店管理服务类"""
+    """商店管理服务
+
+    参数:
+        user_id: 操作用户 ID
+    """
 
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.inventory = ItemInventory(user_id)
-        self.resolver = ItemResolver()
 
     async def create_shop(self, shop_name: str) -> str | None:
         """创建用户商店
@@ -58,8 +67,8 @@ class ShopService:
         """
         if not shop_name:
             return "商店名称不能为空"
-        if len(shop_name) > 6:
-            return "商店名称不能超过6个字符"
+        if len(shop_name) > MAX_SHOP_NAME_LENGTH:
+            return f"商店名称不能超过{MAX_SHOP_NAME_LENGTH}个字符"
         if await Shop.filter(owner_id=self.user_id).exists():
             return "你已经有商店了，每人只能创建一个"
         if await Shop.filter(shop_name=shop_name).exists():
@@ -96,9 +105,7 @@ class ShopService:
         if not shop:
             return ListResult(error="你还没有商店，请先使用'开店'命令创建商店")
 
-        inv_item = await self.resolver.resolve_inventory_item(
-            self.inventory, item_keyword
-        )
+        inv_item = await self.inventory.resolve_inventory_item(item_keyword)
         if not inv_item:
             return ListResult(error=f"背包中没有'{item_keyword}'这个道具")
 
@@ -217,8 +224,7 @@ class ShopService:
         """获取用户自己的商店信息和物品列表
 
         返回:
-            dict | None: 商店信息字典，包含 shop_name、owner_id、
-                created_at 和 items 列表
+            dict | None: 商店信息字典
         """
         shop = await Shop.get_shop_by_owner(self.user_id)
         if not shop:
@@ -226,43 +232,27 @@ class ShopService:
         shop_items = await ShopItem.get_shop_items(shop["shop_name"])
         return {**shop, "items": shop_items}
 
-    @classmethod
-    async def get_hot_items(cls, limit: int = 10) -> list[dict]:
+    @staticmethod
+    async def get_hot_items(limit: int = 10) -> list[dict]:
         """获取热销道具排行榜
 
         参数:
             limit: 返回数量上限
 
         返回:
-            list[dict]: 热销道具列表，每项包含 id、name、total 等信息
+            list[dict]: 热销道具列表
         """
-        templates = await ItemTemplate.get_all_templates()
-        stats_list: list[dict] = []
-        for t in templates:
-            stats = await ItemTemplate.get_purchase_stats(t["id"])
-            if stats and stats.get("total", 0) > 0:
-                stats_list.append(
-                    {
-                        "id": t["id"],
-                        "name": t.get("name", ""),
-                        "total": stats["total"],
-                        "price": t.get("price", 0),
-                        "type": t.get("type", ""),
-                        "image_url": t.get("image_url", ""),
-                    }
-                )
-        stats_list.sort(key=lambda x: x["total"], reverse=True)
-        return stats_list[:limit]
+        return await TemplateRepository.get_hot_items(limit)
 
-    @classmethod
+    @staticmethod
     async def record_purchase_history(
-        cls,
         user_id: str,
         item_id: str,
         item_name: str,
         quantity: int,
         price: int,
         source: str,
+        target_shop: str = "",
     ) -> bool:
         """记录购买历史到交易日志
 
@@ -273,6 +263,7 @@ class ShopService:
             quantity: 购买数量
             price: 单价
             source: 来源(shop/auction)
+            target_shop: 目标商店名称
 
         返回:
             bool: 是否记录成功
@@ -284,7 +275,11 @@ class ShopService:
             quantity=quantity,
             price=price,
             source=source,
+            target_shop=target_shop,
         )
         if not success:
             logger.warning(f"记录交易日志失败: {user_id} {item_id}")
         return success
+
+
+__all__ = ["ListResult", "ShopService", "calc_discount"]

@@ -83,18 +83,28 @@ class ShopTransactionLog(Model):
 
     @classmethod
     async def get_user_history(
-        cls, user_id: str, limit: int = 20
+        cls,
+        user_id: str,
+        limit: int = 20,
+        offset: int = 0,
     ) -> list["ShopTransactionLog"]:
         """获取用户交易历史
 
         参数:
             user_id: 用户id
             limit: 返回记录数量上限
+            offset: 起始偏移量，默认为 0
 
         返回:
             list[ShopTransactionLog]: 交易记录列表
         """
-        return await cls.filter(user_id=user_id).order_by("-id").limit(limit).all()
+        return (
+            await cls.filter(user_id=user_id)
+            .order_by("-id")
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
 
     @classmethod
     def _run_script(cls):

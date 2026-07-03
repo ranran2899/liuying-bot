@@ -4,7 +4,7 @@
 from datetime import datetime
 import json
 
-from liuying.liuying_plugins.shop.inventory import ItemResolver
+from liuying.liuying_plugins.shop.template import TemplateRepository
 from liuying.models._user.user_sign_log import UserSignLog
 from liuying.ui.services import render
 from liuying.utils.calendar import Greeting, TimeSeason
@@ -64,7 +64,7 @@ async def gen_sign_img(
 
     dropped_item_info = None
     if user_info["droppedItem"]:
-        template = await ItemResolver().find_template("double_favor_card")
+        template = await TemplateRepository.find_template("double_favor_card")
         if template:
             dropped_item_info = {
                 "id": template.get("id", ""),

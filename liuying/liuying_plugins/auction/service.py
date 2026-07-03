@@ -7,7 +7,7 @@
 from dataclasses import dataclass
 
 from liuying.configs.config import Config
-from liuying.liuying_plugins.shop.inventory import ItemInventory, ItemResolver
+from liuying.liuying_plugins.shop.inventory import ItemInventory
 from liuying.models._bot import ItemTemplate, ShopItem
 from liuying.models.treasury import Treasury
 from liuying.utils.log import logger
@@ -164,7 +164,6 @@ class AuctionService:
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.inventory = ItemInventory(user_id)
-        self.resolver = ItemResolver()
 
     async def list_item(
         self,
@@ -202,9 +201,7 @@ class AuctionService:
         else:
             expire_days = _get_expire_days()
 
-        inv_item = await self.resolver.resolve_inventory_item(
-            self.inventory, item_keyword
-        )
+        inv_item = await self.inventory.resolve_inventory_item(item_keyword)
         if not inv_item:
             return ListResult(error=f"背包中没有'{item_keyword}'这个道具")
 

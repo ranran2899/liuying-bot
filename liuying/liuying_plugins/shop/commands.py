@@ -1,3 +1,9 @@
+"""商店命令处理器
+
+接收 NoneBot 命令匹配结果，提取参数并调用业务服务，
+构建回复消息。不包含业务校验逻辑，保持命令层轻量。
+"""
+
 from nonebot_plugin_alconna import Match
 from nonebot_plugin_uninfo import Uninfo
 
@@ -8,8 +14,8 @@ from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.user import UserGold
 
-from .handler import HandlerRegistry, UseResult
-from .inventory import ItemInventory, ItemResolver, is_valid_time
+from .inventory import ItemInventory
+from .registry import UseResult, registry
 from .render import (
     render_hot_items,
     render_items,
@@ -17,28 +23,35 @@ from .render import (
     render_store,
     render_user_shop,
 )
-from .shop_service import ShopService, calc_discount
+from .service import ShopService, calc_discount
+from .template import TemplateRepository
+
+_HISTORY_PAGE_SIZE = 20
 
 
-class ShopHandler:
-    """商店命令处理器"""
+def _get_quantity(match: Match[int], default: int = 1) -> int:
+    """从 Match 中获取数量值
 
-    @staticmethod
-    def _get_quantity(match: Match[int], default: int = 1) -> int:
-        """从 Match 中获取数量值
+    参数:
+        match: Alconna Match 对象
+        default: 默认值
 
-        参数:
-            match: Alconna Match 对象
-            default: 默认值
+    返回:
+        int: 数量值，至少为 default
+    """
+    return max(default, match.result if match.available else default)
 
-        返回:
-            int: 数量值
-        """
-        return max(default, match.result if match.available else default)
+
+class ShopCommands:
+    """商店命令处理器
+
+    所有方法均为静态异步方法，接收 Uninfo 与 Match 参数，
+    完成业务调用后通过 MessageUtils 发送回复并结束会话。
+    """
 
     @staticmethod
     async def store(session: Uninfo, shop_name: Match[str]) -> None:
-        """处理商店命令"""
+        """处理商店命令：查看系统商店或指定用户商店"""
         user_id = session.user.id
 
         if shop_name.available and shop_name.result.strip():
@@ -59,26 +72,26 @@ class ShopHandler:
                 user_id, target_shop, shop_items, shop_info["owner_id"]
             )
             await MessageUtils.build_message(image_bytes).finish()
-        else:
-            logger.info("用户查看商店", command="商店", session=session)
-            all_items = await ItemResolver().get_visible_templates()
-            image_bytes = await render_store(user_id, all_items)
-            await MessageUtils.build_message(image_bytes).finish()
+            return
+
+        logger.info("用户查看商店", command="商店", session=session)
+        all_items = await TemplateRepository.get_visible_templates()
+        image_bytes = await render_store(user_id, all_items)
+        await MessageUtils.build_message(image_bytes).finish()
 
     @staticmethod
     async def buy(session: Uninfo, item_id: str, quantity: Match[int]) -> None:
-        """处理购买命令"""
+        """处理购买命令：从系统商店购买道具"""
         user_id = session.user.id
-        buy_quantity = ShopHandler._get_quantity(quantity)
+        buy_quantity = _get_quantity(quantity)
 
-        resolver = ItemResolver()
-        item_info = await resolver.resolve_store_item(item_id)
+        item_info = await TemplateRepository.resolve_store_item(item_id)
         if not item_info:
             await MessageUtils.build_message(
                 f"商店里没有'{item_id}'这个道具"
             ).finish()
 
-        if not is_valid_time(item_info.get("limited_time", -1)):
+        if TemplateRepository.is_expired(item_info.get("limited_time", -1)):
             await MessageUtils.build_message("该道具已过期，无法购买").finish()
 
         inventory = ItemInventory(user_id)
@@ -122,9 +135,9 @@ class ShopHandler:
     async def use(session: Uninfo, item_id: str, quantity: Match[int]) -> None:
         """处理使用道具命令"""
         user_id = session.user.id
-        use_quantity = ShopHandler._get_quantity(quantity)
+        use_quantity = _get_quantity(quantity)
 
-        result = await ShopHandler._use_item(user_id, item_id, use_quantity)
+        result = await ShopCommands._use_item(user_id, item_id, use_quantity)
         if result.success:
             await MessageUtils.build_message(result.message).finish()
         else:
@@ -141,7 +154,7 @@ class ShopHandler:
     @staticmethod
     async def delete(session: Uninfo, item_id: str) -> None:
         """处理删除道具命令"""
-        item_template = await ItemResolver().find_template(item_id)
+        item_template = await TemplateRepository.find_template(item_id)
         if not item_template:
             await MessageUtils.build_message(
                 f"未找到'{item_id}'的道具模板"
@@ -173,7 +186,7 @@ class ShopHandler:
     ) -> None:
         """处理商店上架命令"""
         user_id = session.user.id
-        list_quantity = ShopHandler._get_quantity(quantity)
+        list_quantity = _get_quantity(quantity)
 
         result = await ShopService(user_id).list_item_in_shop(
             item_keyword, price, list_quantity
@@ -190,9 +203,9 @@ class ShopHandler:
     async def buy_shop(
         session: Uninfo, shop_name: str, item_keyword: str, quantity: Match[int]
     ) -> None:
-        """处理商店购买命令"""
+        """处理商店购买命令：从用户商店购买道具"""
         user_id = session.user.id
-        buy_quantity = ShopHandler._get_quantity(quantity)
+        buy_quantity = _get_quantity(quantity)
         shop_name = shop_name.strip()
 
         shop_info = await Shop.get_shop_by_name(shop_name)
@@ -250,9 +263,11 @@ class ShopHandler:
     ) -> None:
         """处理商店下架命令"""
         user_id = session.user.id
-        delist_quantity = ShopHandler._get_quantity(quantity)
+        delist_quantity = _get_quantity(quantity)
 
-        result = await ShopService(user_id).delist_item(item_keyword, delist_quantity)
+        result = await ShopService(user_id).delist_item(
+            item_keyword, delist_quantity
+        )
         if result.error:
             await MessageUtils.build_message(result.error).finish()
 
@@ -314,28 +329,32 @@ class ShopHandler:
     async def shop_history(session: Uninfo, page: Match[int]) -> None:
         """处理商店记录命令"""
         user_id = session.user.id
-        limit = 20
+        current_page = max(1, page.result) if page.available else 1
+        offset = (current_page - 1) * _HISTORY_PAGE_SIZE
 
-        records = await ShopTransactionLog.get_user_history(user_id, limit=limit + 1)
+        records = await ShopTransactionLog.get_user_history(
+            user_id, limit=_HISTORY_PAGE_SIZE + 1, offset=offset
+        )
         if not records:
             await MessageUtils.build_message("暂无购买记录").finish()
 
-        has_next = len(records) > limit
-        display_records = records[:limit]
+        has_next = len(records) > _HISTORY_PAGE_SIZE
+        display_records = records[:_HISTORY_PAGE_SIZE]
         image_bytes = await render_shop_history(user_id, display_records)
 
-        current_page = max(1, page.result) if page.available else 1
         page_info = f"第{current_page}页"
         if has_next:
-            page_info += f"，还有更多记录，使用'商店记录 {current_page + 1}'查看"
+            page_info += (
+                f"，还有更多记录，使用'商店记录 {current_page + 1}'查看"
+            )
 
-        await MessageUtils.build_message(image_bytes).finish()
+        await MessageUtils.build_message([image_bytes, f"\n{page_info}"]).finish()
 
     @staticmethod
     async def _use_item(
         user_id: str, keyword: str, quantity: int = 1
     ) -> UseResult:
-        """使用道具
+        """使用道具内部实现
 
         参数:
             user_id: 用户 ID
@@ -345,7 +364,7 @@ class ShopHandler:
         返回:
             UseResult: 使用结果
         """
-        item_info = await ItemResolver().resolve_store_item(keyword)
+        item_info = await TemplateRepository.resolve_store_item(keyword)
         if not item_info:
             return UseResult(
                 success=False,
@@ -365,15 +384,26 @@ class ShopHandler:
                 message=f"{item_name}数量不足\n当前拥有: {current}",
             )
 
-        handler = HandlerRegistry.get(item_id) or HandlerRegistry.get(item_name)
-        if not handler:
+        entry = registry.get(item_id) or registry.get(item_name)
+        if entry is None:
             return UseResult(
                 success=False,
                 result_type=PropHandle.HANDLER_NOT_REGISTERED,
                 message=f"道具 {item_name} 暂未实现使用功能",
             )
 
-        result = await handler.use(user_id, item_info, quantity)
+        if entry.can_use_func is not None:
+            if not await entry.can_use_func(user_id, item_info):
+                return UseResult(
+                    success=False,
+                    result_type=PropHandle.FAILED,
+                    message=f"道具 {item_name} 当前无法使用",
+                )
+
+        result = await entry.use_func(user_id, item_info, quantity)
         if result.success:
             await inventory.reduce(item_id, quantity)
         return result
+
+
+__all__ = ["ShopCommands"]

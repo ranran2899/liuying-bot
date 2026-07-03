@@ -5,8 +5,19 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.configs.utils import Command, PluginExtraData, RegisterConfig
 from liuying.utils.log import logger
 
-from .data import register_items as register_items
-from .handlers import ShopHandler
+from .api import register_item, register_items
+from .commands import ShopCommands
+from .inventory import ItemInventory
+from .registry import UseResult
+from .template import TemplateRepository
+
+__all__ = [
+    "ItemInventory",
+    "TemplateRepository",
+    "UseResult",
+    "register_item",
+    "register_items",
+]
 
 __plugin_meta__ = PluginMetadata(
     name="商店",
@@ -28,7 +39,7 @@ __plugin_meta__ = PluginMetadata(
     """,
     extra=PluginExtraData(
         author="liuying",
-        version="0.7",
+        version="0.8",
         commands=[
             Command(command="商店"),
             Command(command="购买道具"),
@@ -40,7 +51,7 @@ __plugin_meta__ = PluginMetadata(
             Command(command="商店下架"),
             Command(command="商店改价"),
             Command(command="我的商店"),
-            Command(command="热销榜"),
+            Command(command="商店热销榜"),
             Command(command="商店记录"),
         ],
         configs=[
@@ -145,89 +156,90 @@ shop_history_cmd = on_alconna(
 async def _(session: Uninfo, shop_name: Match[str]):
     """查看商店道具列表"""
     logger.info("用户查看商店请求", command="商店", session=session)
-    await ShopHandler.store(session, shop_name)
+    await ShopCommands.store(session, shop_name)
 
 
 @buy_cmd.handle()
 async def _(session: Uninfo, item_id: str, quantity: Match[int]):
     """购买道具"""
     logger.info("用户购买道具请求", command="购买道具", session=session)
-    await ShopHandler.buy(session, item_id, quantity)
+    await ShopCommands.buy(session, item_id, quantity)
 
 
 @use_cmd.handle()
 async def _(session: Uninfo, item_id: str, quantity: Match[int]):
     """使用道具"""
     logger.info("用户使用道具请求", command="使用道具", session=session)
-    await ShopHandler.use(session, item_id, quantity)
+    await ShopCommands.use(session, item_id, quantity)
 
 
 @my_items_cmd.handle()
 async def _(session: Uninfo):
     """查看自己拥有的道具"""
     logger.info("用户查看道具道具请求", command="我的道具", session=session)
-    await ShopHandler.my_items(session)
+    await ShopCommands.my_items(session)
 
 
 @del_cmd.handle()
 async def _(session: Uninfo, item_id: str):
     """删除道具"""
     logger.info("删除道具请求", command="删除道具", session=session)
-    await ShopHandler.delete(session, item_id)
+    await ShopCommands.delete(session, item_id)
 
 
 @open_shop_cmd.handle()
 async def _(session: Uninfo, shop_name: str):
     """开店"""
     logger.info("用户开店请求", command="开店", session=session)
-    await ShopHandler.open_shop(session, shop_name)
+    await ShopCommands.open_shop(session, shop_name)
 
 
 @list_item_cmd.handle()
 async def _(session: Uninfo, item_keyword: str, price: int, quantity: Match[int]):
     """商店上架道具"""
     logger.info("用户商店上架道具请求", command="商店上架", session=session)
-    await ShopHandler.list_item(session, item_keyword, price, quantity)
+    await ShopCommands.list_item(session, item_keyword, price, quantity)
 
 
 @buy_shop_cmd.handle()
-async def _(session: Uninfo, shop_name: str, item_keyword: str, quantity: Match[int]):
+async def _(
+    session: Uninfo, shop_name: str, item_keyword: str, quantity: Match[int]
+):
     """商店购买道具"""
     logger.info("用户商店购买道具请求", command="商店购买", session=session)
-    await ShopHandler.buy_shop(session, shop_name, item_keyword, quantity)
+    await ShopCommands.buy_shop(session, shop_name, item_keyword, quantity)
 
 
 @delist_cmd.handle()
 async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
     """商店下架道具"""
     logger.info("用户商店下架道具请求", command="商店下架", session=session)
-    await ShopHandler.delist(session, item_keyword, quantity)
+    await ShopCommands.delist(session, item_keyword, quantity)
 
 
 @change_price_cmd.handle()
 async def _(session: Uninfo, item_keyword: str, new_price: int):
     """商店改价"""
     logger.info("用户商店改价道具请求", command="商店改价", session=session)
-    await ShopHandler.change_price(session, item_keyword, new_price)
+    await ShopCommands.change_price(session, item_keyword, new_price)
 
 
 @my_shop_cmd.handle()
 async def _(session: Uninfo):
     """查看自己的商店"""
     logger.info("用户查看商店请求", command="我的商店", session=session)
-    await ShopHandler.my_shop(session)
+    await ShopCommands.my_shop(session)
 
 
 @hot_items_cmd.handle()
 async def _(session: Uninfo):
     """查看热销道具"""
     logger.info("用户查看热销道具请求", command="商店热销榜", session=session)
-    await ShopHandler.hot_items(session)
+    await ShopCommands.hot_items(session)
 
 
 @shop_history_cmd.handle()
 async def _(session: Uninfo, page: Match[int]):
     """查看商店记录"""
     logger.info("用户查看商店记录请求", command="商店记录", session=session)
-    await ShopHandler.shop_history(session, page)
-
+    await ShopCommands.shop_history(session, page)

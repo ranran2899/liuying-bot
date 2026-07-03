@@ -22,18 +22,18 @@
                 <div class="tip-stats">
                     <div class="stat-badge">
                         <span class="stat-label">分类</span>
-                        <span class="stat-number">{{plugin_count}}</span>
+                        <span class="stat-number">{{data.plugin_count}}</span>
                     </div>
                     <div class="stat-badge">
                         <span class="stat-label">道具</span>
-                        <span class="stat-number">{{available_count}}</span>
+                        <span class="stat-number">{{data.available_count}}</span>
                     </div>
                 </div>
             </div>
         </div>
         <div class="menu-grid">
-            {% if plugin_list %}
-            {% for plugin in plugin_list %}
+            {% if data.plugin_list %}
+            {% for plugin in data.plugin_list %}
             <div class="category-card">
                 <div class="category-header">
                     <span class="category-title">{{plugin.name}}</span>
@@ -76,7 +76,7 @@
         </div>
         <div class="footer-section">
             <span>Powered by liuying Bot</span>
-            <span>{{current_time}}</span>
+            <span>{{data.current_time}}</span>
         </div>
     </div>
 </div>
