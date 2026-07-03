@@ -12,6 +12,8 @@ FONT_PATH = Path() / "resources" / "font"
 """字体资源"""
 DATA_PATH = Path() / "data"
 """数据资源"""
+DB_PATH = DATA_PATH / "db"
+"""数据库资源"""
 TEMP_PATH = Path() / "resources" / "temp"
 """临时资源"""
 THEMES_PATH = Path() / "resources" / "themes"
@@ -30,6 +32,7 @@ for p in (
     LOG_PATH,
     FONT_PATH,
     DATA_PATH,
+    DB_PATH,
     TEMP_PATH,
     UI_CACHE_PATH,
     TEMPLATE_PATH,

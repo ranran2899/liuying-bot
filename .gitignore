@@ -2,11 +2,16 @@
 .venv/
 venv/
 
+# 忽略数据目录
+data/
+
 # 忽略日志目录
 log/
 
 # 忽略资源目录(字体/图片等大文件)
-resources/
+resources/temp/
+resources/themes/
+
 
 # 忽略编译后的Python文件
 *.pyc
