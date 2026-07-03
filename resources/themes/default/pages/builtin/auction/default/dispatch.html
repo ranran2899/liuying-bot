@@ -1,0 +1,16 @@
+{% if data.page_type == 'listing' %}
+{% set data = data.payload %}
+{% include './listing.html' %}
+{% elif data.page_type == 'search' %}
+{% set data = data.payload %}
+{% include './listing.html' %}
+{% elif data.page_type == 'my_auctions' %}
+{% set data = data.payload %}
+{% include './my_auctions.html' %}
+{% elif data.page_type == 'transaction_history' %}
+{% set data = data.payload %}
+{% include './transaction_history.html' %}
+{% elif data.page_type == 'price_compare' %}
+{% set data = data.payload %}
+{% include './price_compare.html' %}
+{% endif %}

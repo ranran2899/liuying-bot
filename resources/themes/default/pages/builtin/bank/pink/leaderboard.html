@@ -1,0 +1,80 @@
+<style>
+    {% include './_base.css' %}
+    {% include './leaderboard.css' %}
+</style>
+    <div class="wrapper1">
+        <div class="header">
+            <img src="{{ asset('img/liuying/liuying.png') }}" style="z-index: 1;" class="liuying" />
+            <div class="title" style="color: white;">银行资产</div>
+            <div class="title" style="top: 55px;">排行榜</div>
+            <div class="header-text3" style="left: 1px">Leaderboard</div>
+        </div>
+        <div class="content-border">
+            <img src="{{ asset('./img/hua.png') }}" class="hua" />
+            <div class="top-border" style="height: 20px;">
+            </div>
+            <div class="content">
+                <p style="margin-bottom: 0; font-size: 20px;">银行资产排行榜：</p>
+                <p class="tip">Bank Assets Leaderboard</p>
+
+                {% if leaderboard %}
+                <div class="top-three">
+                    {% for entry in leaderboard[:3] %}
+                    <div class="podium-card rank-{{entry.rank}}">
+                        <div class="podium-rank">{{entry.rank}}</div>
+                        <div class="podium-info">
+                            <div class="podium-user">{{entry.user_id}}</div>
+                            <div class="podium-assets">
+                                <span class="stat-value">{{entry.total_assets}}</span>
+                                <span class="stat-unit">总资产</span>
+                            </div>
+                        </div>
+                        <div class="podium-detail">
+                            <div class="detail-row">
+                                <span class="detail-label">金币</span>
+                                <span class="detail-value gold">{{entry.gold}}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">银币</span>
+                                <span class="detail-value silver">{{entry.silver}}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">铜币</span>
+                                <span class="detail-value copper">{{entry.copper}}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if leaderboard|length > 3 %}
+                <div class="chart-container">
+                    <div class="stat-title">完整排名</div>
+                    <div class="rank-list">
+                        {% for entry in leaderboard[3:] %}
+                        <div class="rank-row">
+                            <div class="rank-num">{{entry.rank}}</div>
+                            <div class="rank-user">{{entry.user_id}}</div>
+                            <div class="rank-assets">{{entry.total_assets}}</div>
+                            <div class="rank-coins">
+                                <span class="coin-tag gold-tag">{{entry.gold}}</span>
+                                <span class="coin-tag silver-tag">{{entry.silver}}</span>
+                                <span class="coin-tag copper-tag">{{entry.copper}}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="chart-container">
+                    <div class="empty-text">暂无排行数据</div>
+                </div>
+                {% endif %}
+
+                <div style="margin-top: 20px; font-size: 14px; color: #888; text-align: center;">
+                    最后更新时间: <span id="full-update-time">{{create_time}}</span>
+                </div>
+            </div>
+        </div>
+    </div>

@@ -1,0 +1,79 @@
+.history-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 6px;
+    border-left: 3px solid var(--color-shop-accent, #eec8e5);
+    position: relative;
+}
+.history-item:last-child {
+    margin-bottom: 0;
+}
+.history-info {
+    flex: 1;
+    min-width: 0;
+}
+.history-name {
+    font-size: 12px;
+    color: #333;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 1px;
+}
+.history-detail {
+    color: #777;
+    font-size: 9px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+.history-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.history-price {
+    font-size: 10px;
+    font-weight: bold;
+    color: #f57c00;
+}
+.history-qty {
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+.history-total {
+    font-size: 10px;
+    font-weight: bold;
+    color: var(--color-accent-red, #e85d75);
+    font-family: "fandolFont";
+}
+.history-source {
+    font-size: 9px;
+    color: var(--color-text-light);
+}
+.history-time {
+    font-size: 9px;
+    color: var(--color-text-light);
+}
+.history-number {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #f8bbd0, #f67186);
+    border-radius: 50%;
+    color: white;
+    font-size: 8px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}

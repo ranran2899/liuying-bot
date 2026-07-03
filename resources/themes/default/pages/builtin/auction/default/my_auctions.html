@@ -1,0 +1,71 @@
+<style>
+    {% include './style.css' %}
+    {% include './my_auctions.css' %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <div class="header-left">
+            <div class="header-icon">
+                <img src="{{ asset('img/liuying/liuying.png') }}" alt="auction">
+            </div>
+            <div>
+                <div class="header-title">我的拍卖</div>
+                <div class="header-subtitle">My Auctions</div>
+            </div>
+        </div>
+        <div class="header-stats">
+            <div class="header-stat">
+                <span class="header-stat-value">{{total_count}}</span>
+                <span class="header-stat-label">物品数</span>
+            </div>
+        </div>
+    </div>
+    <div class="content">
+        <div class="table-header">
+            <span>#</span>
+            <span>物品</span>
+            <span>数量</span>
+            <span>单价</span>
+            <span>到期</span>
+        </div>
+        <div class="item-grid">
+            {% if item_list %}
+            {% for item in item_list %}
+            <div class="item-row">
+                <div class="item-num">{{item.number}}</div>
+                <div class="item-name-cell">
+                    <div class="item-icon-sm">
+                        {% if item.image_url %}
+                        {% if item.image_url.startswith('http') or item.image_url.startswith('file://') %}
+                        <img src="{{item.image_url}}" alt="{{item.name}}">
+                        {% else %}
+                        <img src="file:///{{item.image_url}}" alt="{{item.name}}">
+                        {% endif %}
+                        {% else %}
+                        <div class="gem-sm"></div>
+                        {% endif %}
+                    </div>
+                    <span class="item-name-text" {% if item.name_color %}style="color: {{item.name_color}}"{% endif %}>{{item.name}}</span>
+                </div>
+                <div class="item-qty">{{item.quantity}}</div>
+                <div class="item-price">{{item.price}}</div>
+                <div class="item-expire">{{item.expire_at}}</div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-text">暂无拍卖物品</div>
+                <div class="empty-sub">快去上架一些物品吧</div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="page-bar">
+            <span>我的拍卖列表</span>
+            <span class="page-info">{{current_time}}</span>
+        </div>
+    </div>
+    <div class="footer">
+        <span>Powered by liuying Bot</span>
+        <span>{{current_time}}</span>
+    </div>
+</div>

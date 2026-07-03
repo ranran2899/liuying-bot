@@ -1,0 +1,30 @@
+{% extends 'partials/_base.html' %}
+
+{% block title %}流萤银行{% endblock %}
+
+{% block page_styles %}
+{% endblock %}
+
+{% block body_content %}
+    {% if data.page_type == 'overview' %}
+        {% set data = data.payload %}
+        {% include './overview.html' %}
+    {% elif data.page_type == 'user' %}
+        {% set data = data.payload %}
+        {% include './user.html' %}
+    {% elif data.page_type == 'leaderboard' %}
+        {% set data = data.payload %}
+        {% include './leaderboard.html' %}
+    {% elif data.page_type == 'history' %}
+        {% set data = data.payload %}
+        {% include './history.html' %}
+    {% elif data.page_type == 'loan' %}
+        {% set data = data.payload %}
+        {% include './loan.html' %}
+    {% else %}
+        <h1>渲染错误</h1>
+        <p>提供了无效的页面类型: {{ data.page_type }}</p>
+    {% endif %}
+{% endblock %}
+
+{% block footer %}{% endblock %}

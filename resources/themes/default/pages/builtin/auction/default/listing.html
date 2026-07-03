@@ -1,0 +1,75 @@
+<style>
+    {% include './style.css' %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <div class="header-left">
+            <div>
+                <div class="header-title">拍卖行</div>
+                <div class="header-subtitle">Auction House</div>
+            </div>
+        </div>
+        <div class="header-stats">
+            <div class="header-stat">
+                <span class="header-stat-value">{{data.total_count}}</span>
+                <span class="header-stat-label">物品数</span>
+            </div>
+            <div class="header-stat">
+                <span class="header-stat-value">{{data.total_pages}}</span>
+                <span class="header-stat-label">总页数</span>
+            </div>
+        </div>
+    </div>
+    {% if data.keyword %}
+    <div class="search-bar">搜索: <span class="keyword">{{data.keyword}}</span></div>
+    {% endif %}
+    <div class="content">
+        <div class="table-header">
+            <span>#</span>
+            <span>物品</span>
+            <span>数量</span>
+            <span>单价</span>
+            <span>来源</span>
+        </div>
+        <div class="item-grid">
+            {% if data.item_list %}
+            {% for item in data.item_list %}
+            <div class="item-row">
+                <div class="item-num">{{item.number}}</div>
+                <div class="item-name-cell">
+                    <div class="item-icon-sm">
+                        {% if item.image_url %}
+                        {% if item.image_url.startswith('http') or item.image_url.startswith('file://') %}
+                        <img src="{{item.image_url}}" alt="{{item.name}}">
+                        {% else %}
+                        <img src="file:///{{item.image_url}}" alt="{{item.name}}">
+                        {% endif %}
+                        {% else %}
+                        <div class="gem-sm"></div>
+                        {% endif %}
+                    </div>
+                    <span class="item-name-text" {% if item.name_color %}style="color: {{item.name_color}}"{% endif %}>{{item.name}}</span>
+                </div>
+                <div class="item-qty">{{item.quantity}}</div>
+                <div class="item-price">{{item.price}}</div>
+                <div class="item-source {% if item.source == 'shop' %}source-shop{% else %}source-auction{% endif %}">{{item.source_label}}</div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">🏪</div>
+                <div class="empty-text">拍卖行暂无物品</div>
+                <div class="empty-sub">请稍后再来查看</div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="page-bar">
+            <span>按价格从高到低排列</span>
+            <span class="page-info">第 <span class="page-current">{{data.page}}</span> / {{data.total_pages}} 页</span>
+        </div>
+    </div>
+    <div class="footer">
+        <span>Powered by liuying Bot</span>
+        <span>{{data.current_time}}</span>
+    </div>
+</div>

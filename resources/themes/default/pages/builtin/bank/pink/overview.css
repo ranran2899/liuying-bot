@@ -1,0 +1,70 @@
+.wrapper1 {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  width: 450px;
+}
+
+.stats-grid {
+  gap: 20px;
+}
+
+.stat-card {
+  border-radius: 15px;
+  padding: 15px;
+}
+
+.chart-container {
+  margin-top: 30px;
+}
+
+.logo {
+  position: absolute;
+  left: 109px;
+  top: -6px;
+  width: 146px;
+}
+
+.title {
+  font-family: 'fzrzFont';
+  color: var(--color-text-muted);
+  font-size: 50px;
+  position: absolute;
+  top: -2px;
+  left: 16px;
+  width: 275px;
+}
+
+.chart {
+  height: 200px;
+  width: 360px;
+}
+
+.reserve-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.reserve-item {
+  text-align: center;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  border: 1px solid var(--color-border-light);
+}
+
+.reserve-label {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+
+.reserve-value {
+  display: block;
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--color-accent-red);
+  font-family: "fandolFont";
+}

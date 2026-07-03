@@ -1,0 +1,6 @@
+{
+  "name": "签到卡片",
+  "description": "用户签到信息展示卡片",
+  "feature": "sign",
+  "feature_label": "签到"
+}

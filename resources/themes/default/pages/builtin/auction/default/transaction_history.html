@@ -1,0 +1,62 @@
+<style>
+    {% include './style.css' %}
+    {% include './transaction_history.css' %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <div class="header-left">
+            <div class="header-icon">
+                <img src="{{ asset('img/liuying/liuying.png') }}" alt="auction">
+            </div>
+            <div>
+                <div class="header-title">交易记录</div>
+                <div class="header-subtitle">Transaction History</div>
+            </div>
+        </div>
+        <div class="header-stats">
+            <div class="header-stat">
+                <span class="header-stat-value">{{total_count}}</span>
+                <span class="header-stat-label">记录数</span>
+            </div>
+        </div>
+    </div>
+    <div class="content">
+        <div class="table-header">
+            <span>#</span>
+            <span>物品</span>
+            <span>数量</span>
+            <span>单价</span>
+            <span>总价</span>
+            <span>类型</span>
+        </div>
+        <div class="item-grid">
+            {% if record_list %}
+            {% for record in record_list %}
+            <div class="item-row">
+                <div class="item-num">{{record.number}}</div>
+                <div class="item-name-cell">
+                    <span class="item-name-text">{{record.item_name}}</span>
+                </div>
+                <div class="item-qty">{{record.quantity}}</div>
+                <div class="item-price">{{record.unit_price}}</div>
+                <div class="item-total">{{record.total_price}}</div>
+                <div class="item-type {% if record.type == 'buy' %}type-buy{% else %}type-sell{% endif %}">{{record.type_label}}</div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-text">暂无交易记录</div>
+                <div class="empty-sub">快去拍卖行交易吧</div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="page-bar">
+            <span>交易记录列表</span>
+            <span class="page-info">{{current_time}}</span>
+        </div>
+    </div>
+    <div class="footer">
+        <span>Powered by liuying Bot</span>
+        <span>{{current_time}}</span>
+    </div>
+</div>

@@ -1,0 +1,7 @@
+{
+  "name": "拍卖行",
+  "description": "拍卖行物品展示页面",
+  "feature": "auction",
+  "feature_label": "拍卖行",
+  "variants": ["default"]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "流萤银行 - 粉色主题",
+  "theme": "pink",
+  "label": "粉色",
+  "price": 100,
+  "entrypoint": "dispatch.html",
+  "styles": ["_base.css", "overview.css", "user.css", "leaderboard.css", "history.css"]
+}

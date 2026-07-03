@@ -1,0 +1,95 @@
+<style>
+    {% include './style.css' %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <img src="{{ asset('img/liuying/liuying.png') }}" class="liuying" />
+        <div class="title">用户信息</div>
+        <div class="header-text3" style="left: 1px">User Info</div>
+    </div>
+    <div class="content-border">
+        <img src="{{ asset('img/liuying/5.png') }}" class="deco" />
+        <div class="top-border">
+            <div>
+                <div class="color"></div>
+                <div class="name">{{ nickname }}</div>
+                <div class="greeting">权限等级 Lv.{{ user_level }}</div>
+            </div>
+            <div class="top-border-right">
+                {% if avatar_path %}
+                <img src="{{ avatar_path }}" class="avatar-small" />
+                {% endif %}
+                <div class="uid-info">
+                    <p style="margin:0">No.<span style="font-size:24px; font-weight: bold;">{{ uuid }}</span></p>
+                </div>
+            </div>
+        </div>
+        <div class="content">
+            <p style="margin-bottom: 0; font-size: 14px;">基本信息：</p>
+            <p class="tip">Basic Information</p>
+
+            <div class="stats-grid">
+                <div class="stat-card full-width-card">
+                    <div class="stat-title">用户ID</div>
+                    <div><span class="stat-value small">{{ user_id }}</span></div>
+                </div>
+                <div class="stat-card full-width-card">
+                    <div class="stat-title">注册时间</div>
+                    <div><span class="stat-value small">{{ registration_time }}</span></div>
+                </div>
+            </div>
+
+            <p style="margin-bottom: 0; margin-top: 8px; font-size: 14px;">货币资产：</p>
+            <p class="tip">Currency Assets</p>
+
+            <div class="currency-grid">
+                <div class="currency-item">
+                    <span class="currency-label">金币</span>
+                    <span class="currency-value gold">{{ user_gold }}</span>
+                </div>
+                <div class="currency-item">
+                    <span class="currency-label">银币</span>
+                    <span class="currency-value silver">{{ user_silver }}</span>
+                </div>
+                <div class="currency-item">
+                    <span class="currency-label">铜币</span>
+                    <span class="currency-value copper">{{ user_copper }}</span>
+                </div>
+                <div class="currency-item">
+                    <span class="currency-label">钻石</span>
+                    <span class="currency-value diamond">{{ user_diamond }}</span>
+                </div>
+                <div class="currency-item">
+                    <span class="currency-label">星琼</span>
+                    <span class="currency-value xingqiong">{{ user_xingqiong }}</span>
+                </div>
+                <div class="currency-item">
+                    <span class="currency-label">原石</span>
+                    <span class="currency-value yuanshi">{{ user_yuanshi }}</span>
+                </div>
+                <div class="currency-item">
+                    <span class="currency-label">天赏点</span>
+                    <span class="currency-value tianrew">{{ user_tianrew }}</span>
+                </div>
+            </div>
+
+            <div class="uuid-section">
+                <p style="margin-bottom: 4px; font-size: 14px;">身份令牌：</p>
+                <p class="tip">UUID Token</p>
+                <div class="uuid-card">
+                    <div class="uuid-header">
+                        <div class="uuid-label">UUID</div>
+                        <div class="uuid-value">{{ uuid }}</div>
+                    </div>
+                    <div class="uuid-footer">
+                        <span class="uuid-token">{{ user_token }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 8px; font-size: 10px; color: #888; text-align: center;">
+                更新时间: <span id="full-update-time">{{ current_time }}</span>
+            </div>
+        </div>
+    </div>
+</div>

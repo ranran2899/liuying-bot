@@ -1,0 +1,16 @@
+{% if data.page_type == 'store' %}
+{% set data = data.payload %}
+{% include './store.html' %}
+{% elif data.page_type == 'my_items' %}
+{% set data = data.payload %}
+{% include './my_items.html' %}
+{% elif data.page_type == 'user_shop' %}
+{% set data = data.payload %}
+{% include './user_shop.html' %}
+{% elif data.page_type == 'hot_items' %}
+{% set data = data.payload %}
+{% include './hot_items.html' %}
+{% elif data.page_type == 'shop_history' %}
+{% set data = data.payload %}
+{% include './shop_history.html' %}
+{% endif %}

@@ -1,0 +1,134 @@
+.deposit-records {
+  padding-right: 5px;
+}
+
+.deposit-record {
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-left: 3px solid #f48fb1;
+  position: relative;
+}
+
+.deposit-record.currency-gold {
+  border-left-color: #ffc107;
+}
+
+.deposit-record.currency-silver {
+  border-left-color: #9e9e9e;
+}
+
+.deposit-record.currency-copper {
+  border-left-color: #a1887f;
+}
+
+.record-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.record-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #c2185b;
+  display: flex;
+  align-items: center;
+}
+
+.record-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+}
+
+.record-date {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.record-details {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px 8px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-bottom: 1px;
+}
+
+.detail-value {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--color-text-dark);
+  font-family: "fandolFont";
+}
+
+.detail-value.highlight {
+  color: #e91e63;
+}
+
+.detail-value.no-interest {
+  color: var(--color-text-muted);
+  font-weight: normal;
+  font-size: 11px;
+}
+
+.record-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed #f8bbd0;
+  font-size: 10px;
+}
+
+.status {
+  background-color: #f48fb1;
+  color: var(--color-text-light);
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 10px;
+}
+
+.status.active {
+  background-color: var(--color-accent-green);
+}
+
+.status.expired {
+  background-color: #e0e0e0;
+}
+
+.rate {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.deposit-records::-webkit-scrollbar {
+  width: 3px;
+}
+
+.deposit-records::-webkit-scrollbar-track {
+  background: #fce4ec;
+  border-radius: 2px;
+}
+
+.deposit-records::-webkit-scrollbar-thumb {
+  background: #f48fb1;
+  border-radius: 2px;
+}
+
+.deposit-records::-webkit-scrollbar-thumb:hover {
+  background: #e91e63;
+}

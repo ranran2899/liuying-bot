@@ -1,0 +1,72 @@
+<style>
+    {% include './style.css' %}
+    {% include './price_compare.css' %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <div class="header-left">
+            <div class="header-icon">
+                <img src="{{ asset('img/liuying/liuying.png') }}" alt="auction">
+            </div>
+            <div>
+                <div class="header-title">比价</div>
+                <div class="header-subtitle">Price Compare</div>
+            </div>
+        </div>
+        <div class="header-stats">
+            <div class="header-stat">
+                <span class="header-stat-value">{{total_count}}</span>
+                <span class="header-stat-label">物品数</span>
+            </div>
+        </div>
+    </div>
+    <div class="compare-header">搜索: <span class="keyword">{{keyword}}</span></div>
+    <div class="content">
+        <div class="table-header">
+            <span>#</span>
+            <span>物品</span>
+            <span>数量</span>
+            <span>单价</span>
+            <span>来源</span>
+        </div>
+        <div class="item-grid">
+            {% if item_list %}
+            {% for item in item_list %}
+            <div class="item-row">
+                <div class="item-num">{{item.number}}</div>
+                <div class="item-name-cell">
+                    <div class="item-icon-sm">
+                        {% if item.image_url %}
+                        {% if item.image_url.startswith('http') or item.image_url.startswith('file://') %}
+                        <img src="{{item.image_url}}" alt="{{item.name}}">
+                        {% else %}
+                        <img src="file:///{{item.image_url}}" alt="{{item.name}}">
+                        {% endif %}
+                        {% else %}
+                        <div class="gem-sm"></div>
+                        {% endif %}
+                    </div>
+                    <span class="item-name-text" {% if item.name_color %}style="color: {{item.name_color}}"{% endif %}>{{item.name}}</span>
+                </div>
+                <div class="item-qty">{{item.quantity}}</div>
+                <div class="item-price">{{item.price}}</div>
+                <div class="item-source {% if item.source == 'shop' %}source-shop{% else %}source-auction{% endif %}">{{item.source_label}}</div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-text">未找到相关物品</div>
+                <div class="empty-sub">请尝试其他关键词</div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="page-bar">
+            <span>按价格从低到高排列</span>
+            <span class="page-info">{{current_time}}</span>
+        </div>
+    </div>
+    <div class="footer">
+        <span>Powered by liuying Bot</span>
+        <span>{{current_time}}</span>
+    </div>
+</div>

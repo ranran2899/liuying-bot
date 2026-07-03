@@ -1,0 +1,55 @@
+<style>
+    {% include './style.css' %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <div class="title">塔罗图鉴</div>
+        <div class="header-subtitle">收集进度 {{data.collectedCount}}/{{data.totalCards}}</div>
+        <div class="header-en">Tarot</div>
+    </div>
+    <div class="content-border">
+        <div class="progress-section">
+            <div class="progress-header">
+                <div class="progress-label">总收集进度</div>
+                <div class="progress-count">{{data.progressPercentage}}%</div>
+            </div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: {{data.progressPercentage}}%"></div>
+            </div>
+        </div>
+
+        <div class="type-section">
+            <div class="type-title">分类收集</div>
+            <div class="type-grid">
+                {% for stat in data.typeStats %}
+                <div class="type-card">
+                    <div class="type-name">{{stat.typeName}}</div>
+                    <div class="type-progress">{{stat.collected}}/{{stat.total}}</div>
+                    <div class="type-bar-bg">
+                        <div class="type-bar-fill" style="width: {{stat.percentage}}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="cards-section">
+            <div class="cards-title">已收集卡牌</div>
+            <div class="card-list">
+                {% for card in data.cards %}
+                <div class="card-item">
+                    <div class="card-name">{{card.cardName}}</div>
+                    <div class="card-stats">
+                        <span class="upright-icon">+{{card.uprightCount}}</span>
+                        <span class="reversed-icon">-{{card.reversedCount}}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="footer">
+            塔罗牌图鉴 | 共78张卡牌等你收集
+        </div>
+    </div>
+</div>

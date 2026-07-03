@@ -1,0 +1,216 @@
+<script src="{{ asset('js/chart.min.js') }}"></script>
+<style>
+    {% include './style.css' %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <img src="{{ asset('img/liuying/liuying.png') }}" class="liuying" />
+        <div class="title status-title">{% if data.isDuplicate %}已签到{% else %}签到成功{% endif %}</div>
+        <div class="title" style="top: 55px;">每日打卡</div>
+        <div class="header-text3" style="left: 1px">Sign In</div>
+    </div>
+    <div class="content-border">
+        <img src="{{ asset('img/liuying/5.png') }}" class="deco" />
+        <div class="top-border">
+            <div>
+                <div class="color"></div>
+                <div class="name">{{data.userName}}</div>
+                {% if data.greeting %}
+                <div class="greeting">{{data.greeting}}</div>
+                {% endif %}
+            </div>
+            <div class="top-border-right">
+                {% if data.avatar %}
+                <img src="{{data.avatar}}" class="avatar-small" />
+                {% endif %}
+                <div class="uid-info">
+                    <p style="margin:0">No.<span style="font-size:24px; font-weight: bold;">{{data.uid}}</span></p>
+                    <!-- <div class="rank-text">{{data.userName}}</div> -->
+                </div>
+            </div>
+        </div>
+        <div class="content">
+            <p style="margin-bottom: 0; font-size: 14px;">签到统计：</p>
+            <p class="tip">Sign In Statistics</p>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-title">累计签到</div>
+                    <div><span class="stat-value">{{data.totalSignInDays}}</span><span class="stat-unit">天</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">连续签到</div>
+                    <div><span class="stat-value">{{data.consecutiveDays}}</span><span class="stat-unit">天</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">相遇天数</div>
+                    <div><span class="stat-value">{{data.meetDays}}</span><span class="stat-unit">天</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">好感等级</div>
+                    <div><span class="stat-value">Lv.{{data.favorLevel}}</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">好感进度</div>
+                    <div><span class="stat-value small">{{data.favorExperience}}</span><span class="stat-unit">/{{data.nextLevelExperience}}</span></div>
+                </div>
+                {% if data.lastSignDate %}
+                <div class="stat-card">
+                    <div class="stat-title">上次签到</div>
+                    <div><span class="stat-value small">{{data.lastSignDate}}</span> <span class="stat-time">{{data.lastSignTime}}</span></div>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if not data.isDuplicate %}
+            <div class="reward-section">
+                <p style="margin-bottom: 4px; font-size: 14px;">签到奖励：</p>
+                <p class="tip">Sign In Rewards</p>
+                <div class="stats-grid reward-grid">
+                    <div class="stat-card reward-card">
+                        <div class="stat-title">获得金币</div>
+                        <div><span class="stat-value gold">+{{data.rewardGold}}</span><span class="stat-unit">金币</span></div>
+                    </div>
+                    <div class="stat-card reward-card">
+                        <div class="stat-title">获得好感</div>
+                        <div>
+                            <span class="stat-value favor">+{{data.baseFavor}}</span>
+                            {% if data.usedDoubleCard %}
+                            <span class="favor-multiplier">x2</span>
+                            {% endif %}
+                            <span class="stat-unit">点</span>
+                        </div>
+                    </div>
+                    {% if data.droppedItem and data.droppedItemInfo %}
+                    <div class="stat-card reward-card">
+                        <div class="stat-title">获得道具</div>
+                        <div class="item-reward-content">
+                            {% if data.droppedItemInfo.image_url %}
+                            <div class="item-reward-icon">
+                                {% if data.droppedItemInfo.image_url.startswith('http') %}
+                                <img src="{{data.droppedItemInfo.image_url}}" alt="{{data.droppedItemInfo.name}}">
+                                {% elif data.droppedItemInfo.image_url.startswith('file://') %}
+                                <img src="{{data.droppedItemInfo.image_url}}" alt="{{data.droppedItemInfo.name}}">
+                                {% else %}
+                                <img src="file:///{{data.droppedItemInfo.image_url}}" alt="{{data.droppedItemInfo.name}}">
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <div class="item-reward-icon drop-icon-small"></div>
+                            {% endif %}
+                            <span class="stat-value item-name" {% if data.droppedItemInfo.name_color %}style="color: {{data.droppedItemInfo.name_color}}"{% endif %}>{{data.droppedItemInfo.name}}</span>
+                        </div>
+                    </div>
+                    {% elif data.droppedItem %}
+                    <div class="stat-card reward-card">
+                        <div class="stat-title">获得道具</div>
+                        <div class="item-reward-content">
+                            <div class="item-reward-icon drop-icon-small"></div>
+                            <span class="stat-value item-name">好感度值双倍卡</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if data.firstSignDate %}
+            <div class="meet-section">
+                <p style="margin-bottom: 4px; font-size: 14px;">首次邂逅：</p>
+                <p class="tip">First Meeting</p>
+                <div class="meet-card">
+                    <div class="meet-header">
+                        <div class="meet-date">{{data.firstTimeDescription}}</div>
+                        <div class="meet-time">{{data.firstSignDate}} {{data.firstSignTime}}</div>
+                    </div>
+                    <div class="meet-footer">
+                        <span class="meet-source">签到来源 {{data.platform}}</span>
+                        <span class="meet-days">已相遇 {{data.meetDays}} 天</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="chart-container">
+                <div class="stat-title">近半年签到趋势</div>
+                <div class="chart-wrapper">
+                    <canvas id="signChart"></canvas>
+                </div>
+            </div>
+
+            <div style="margin-top: 10px; font-size: 10px; color: #888; text-align: center;">
+                更新时间: <span id="full-update-time">{{data.current_time}}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const chartMonths = JSON.parse('{{ data.chartMonths|safe }}');
+    const chartCounts = JSON.parse('{{ data.chartCounts|safe }}');
+
+    const ctx = document.getElementById('signChart').getContext('2d');
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, 55);
+    gradient.addColorStop(0, 'rgba(246, 113, 134, 0.4)');
+    gradient.addColorStop(1, 'rgba(246, 113, 134, 0.05)');
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartMonths,
+            datasets: [{
+                label: '签到次数',
+                data: chartCounts,
+                borderColor: '#f67186',
+                backgroundColor: gradient,
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 3,
+                pointBackgroundColor: '#f67186',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 1,
+                pointHoverRadius: 5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(246, 113, 134, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: '#f67186',
+                        stepSize: 1,
+                        font: {
+                            size: 10
+                        }
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false,
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: '#f67186',
+                        font: {
+                            size: 10,
+                            weight: '500'
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>

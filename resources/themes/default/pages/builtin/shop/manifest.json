@@ -1,0 +1,7 @@
+{
+  "name": "道具商店",
+  "description": "道具商店和我的道具展示页面",
+  "feature": "shop",
+  "feature_label": "商店",
+  "variants": ["default", "pink", "white"]
+}

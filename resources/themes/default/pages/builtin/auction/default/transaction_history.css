@@ -1,0 +1,27 @@
+.table-header, .item-row {
+    grid-template-columns: 28px 1fr 50px 60px 60px 60px;
+}
+.item-type {
+    text-align: right;
+    font-size: 8px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: bold;
+    white-space: nowrap;
+    justify-self: end;
+}
+.type-buy {
+    background: rgba(76, 175, 80, 0.1);
+    color: #4caf50;
+}
+.type-sell {
+    background: rgba(244, 67, 54, 0.1);
+    color: #f44336;
+}
+.item-total {
+    text-align: right;
+    font-size: 10px;
+    color: var(--color-accent-dark);
+    font-weight: bold;
+    font-family: "fandolFont";
+}

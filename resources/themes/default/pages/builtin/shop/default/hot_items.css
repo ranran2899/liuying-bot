@@ -1,0 +1,15 @@
+.item-sales {
+    font-size: 10px;
+    font-weight: bold;
+    color: #4caf50;
+    font-family: "fandolFont";
+}
+.item-sales .sales-icon {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: #4caf50;
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-right: 2px;
+}

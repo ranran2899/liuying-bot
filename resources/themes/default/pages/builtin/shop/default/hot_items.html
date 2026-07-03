@@ -1,0 +1,82 @@
+<style>
+    {% include './style.css' %}
+    {% include './hot_items.css' %}
+    {% if data.custom_css %}
+    {{data.custom_css|safe}}
+    {% endif %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <img src="{{ asset('img/liuying/liuying.png') }}" class="liuying" />
+        <div class="title">热销榜</div>
+        <div class="header-text">Hot</div>
+    </div>
+    <div class="content-border">
+        <img src="{{ asset('img/liuying/5.png') }}" class="deco" />
+        <div class="top-border">
+            <div class="tip-section">
+                <div class="tip-text">
+                    热销道具排行<br>
+                    按销量从高到低排列
+                </div>
+                <div class="tip-stats">
+                    <div class="stat-badge">
+                        <span class="stat-label">分类</span>
+                        <span class="stat-number">{{plugin_count}}</span>
+                    </div>
+                    <div class="stat-badge">
+                        <span class="stat-label">道具</span>
+                        <span class="stat-number">{{available_count}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="menu-grid">
+            {% if plugin_list %}
+            {% for plugin in plugin_list %}
+            <div class="category-card">
+                <div class="category-header">
+                    <span class="category-title">{{plugin.name}}</span>
+                    <span class="category-count">{{plugin['items']|length}}</span>
+                </div>
+                <div class="category-content">
+                    {% for item in plugin['items'] %}
+                    <div class="function-item">
+                        {% if item.image_url %}
+                        <div class="item-icon">
+                            {% if item.image_url.startswith('http') or item.image_url.startswith('file://') %}
+                            <img src="{{item.image_url}}" alt="{{item.name}}">
+                            {% else %}
+                            <img src="file:///{{item.image_url}}" alt="{{item.name}}">
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="item-icon"><div class="gem-icon"></div></div>
+                        {% endif %}
+                        <div class="item-info">
+                            <div class="item-name" {% if item.name_color %}style="color: {{item.name_color}}"{% endif %}>{{item.name}}</div>
+                            <div class="item-description" {% if item.description_color %}style="color: {{item.description_color}}"{% endif %}>{{item.description}}</div>
+                            <div class="item-meta">
+                                <span class="item-price"><span class="coin"></span>{{item.price}}</span>
+                                <span class="item-sales"><span class="sales-icon"></span>{{item.total}}</span>
+                            </div>
+                        </div>
+                        <div class="item-number">{{item.number}}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-items">
+                <div class="empty-items-title">暂无热销道具</div>
+                <div class="empty-items-text">请稍后再来查看</div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="footer-section">
+            <span>Powered by liuying Bot</span>
+            <span>{{current_time}}</span>
+        </div>
+    </div>
+</div>

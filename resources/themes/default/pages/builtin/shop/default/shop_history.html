@@ -1,0 +1,75 @@
+<style>
+    {% include './style.css' %}
+    {% include './shop_history.css' %}
+    {% if data.custom_css %}
+    {{data.custom_css|safe}}
+    {% endif %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <img src="{{ asset('img/liuying/liuying.png') }}" class="liuying" />
+        <div class="title">购买记录</div>
+        <div class="header-text">History</div>
+    </div>
+    <div class="content-border">
+        <img src="{{ asset('img/liuying/5.png') }}" class="deco" />
+        <div class="top-border">
+            <div class="tip-section">
+                <div class="tip-text">
+                    查看你的购买历史记录<br>
+                    按时间从近到远排列
+                </div>
+                <div class="tip-stats">
+                    <div class="stat-badge">
+                        <span class="stat-label">分类</span>
+                        <span class="stat-number">{{plugin_count}}</span>
+                    </div>
+                    <div class="stat-badge">
+                        <span class="stat-label">记录</span>
+                        <span class="stat-number">{{available_count}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="menu-grid">
+            {% if plugin_list %}
+            {% for plugin in plugin_list %}
+            <div class="category-card">
+                <div class="category-header">
+                    <span class="category-title">{{plugin.name}}</span>
+                    <span class="category-count">{{plugin['items']|length}}</span>
+                </div>
+                <div class="category-content">
+                    {% for item in plugin['items'] %}
+                    <div class="history-item">
+                        <div class="history-info">
+                            <div class="history-name">{{item.item_name}}</div>
+                            <div class="history-detail">
+                                来源: {{item.source}} {% if item.target_shop %}| 商店: {{item.target_shop}}{% endif %}
+                            </div>
+                            <div class="history-meta">
+                                <span class="history-price"><span class="coin"></span>{{item.price}}</span>
+                                <span class="history-qty">x{{item.quantity}}</span>
+                                <span class="history-total">{{item.total_price}}</span>
+                            </div>
+                            <div class="history-time">{{item.created_at}}</div>
+                        </div>
+                        <div class="history-number">{{item.number}}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-items">
+                <div class="empty-items-title">暂无购买记录</div>
+                <div class="empty-items-text">快去商店购买道具吧</div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="footer-section">
+            <span>Powered by liuying Bot</span>
+            <span>{{current_time}}</span>
+        </div>
+    </div>
+</div>

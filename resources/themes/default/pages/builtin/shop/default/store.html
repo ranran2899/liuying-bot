@@ -1,0 +1,92 @@
+<style>
+    {% include './style.css' %}
+    {% if data.custom_css %}
+    {{data.custom_css|safe}}
+    {% endif %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <img src="{{ asset('img/liuying/liuying.png') }}" class="liuying" />
+        <div class="title">道具商店</div>
+        <div class="header-text">Shop</div>
+    </div>
+    <div class="content-border">
+        <img src="{{ asset('img/liuying/5.png') }}" class="deco" />
+        <div class="top-border">
+            <div class="tip-section">
+                <div class="tip-text">
+                    购买 [道具名称/ID] [数量] 购买道具<br>
+                    我的道具 查看拥有的道具
+                </div>
+                <div class="tip-stats">
+                    <div class="stat-badge">
+                        <span class="stat-label">分类</span>
+                        <span class="stat-number">{{data.plugin_count}}</span>
+                    </div>
+                    <div class="stat-badge">
+                        <span class="stat-label">道具</span>
+                        <span class="stat-number">{{data.available_count}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="menu-grid">
+            {% if data.plugin_list %}
+            {% for plugin in data.plugin_list %}
+            <div class="category-card">
+                <div class="category-header">
+                    <span class="category-title">{{plugin.name}}</span>
+                    <span class="category-count">{{plugin['items']|length}}</span>
+                </div>
+                <div class="category-content">
+                    {% for item in plugin['items'] %}
+                    <div class="function-item {% if item.custom_class %}{{item.custom_class}}{% endif %}" {% if item.inline_style %}style="{{item.inline_style}}"{% endif %}>
+                        {% if item.image_url %}
+                        <div class="item-icon">
+                            {% if item.image_url.startswith('http') or item.image_url.startswith('file://') %}
+                            <img src="{{item.image_url}}" alt="{{item.name}}">
+                            {% else %}
+                            <img src="file:///{{item.image_url}}" alt="{{item.name}}">
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="item-icon"><div class="gem-icon"></div></div>
+                        {% endif %}
+                        <div class="item-info">
+                            <div class="item-name" {% if item.name_color %}style="color: {{item.name_color}}"{% endif %}>{{item.name}}</div>
+                            <div class="item-description" {% if item.description_color %}style="color: {{item.description_color}}"{% endif %}>{{item.description}}</div>
+                            <div class="item-meta">
+                                {% if item.discount != 100 %}
+                                <span class="item-price discounted">
+                                    <span class="coin"></span>{{item.discounted_price}}
+                                    <span class="original-price">{{item.price}}</span>
+                                    <span class="discount-badge">{{item.discount / 10}}折</span>
+                                </span>
+                                {% else %}
+                                <span class="item-price"><span class="coin"></span>{{item.price}}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="item-number">{{item.number}}</div>
+                        {% if item.extra_html %}
+                        {{item.extra_html|safe}}
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-items">
+                <div class="empty-items-icon">🛒</div>
+                <div class="empty-items-title">商店暂无道具</div>
+                <div class="empty-items-text">请稍后再来查看</div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="footer-section">
+            <span>Powered by liuying Bot</span>
+            <span>{{data.current_time}}</span>
+        </div>
+    </div>
+</div>

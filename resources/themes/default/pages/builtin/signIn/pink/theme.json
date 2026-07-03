@@ -1,0 +1,11 @@
+{
+  "name": "签到卡片 - 粉色主题",
+  "theme": "pink",
+  "label": "粉色",
+  "price": 100,
+  "entrypoint": "main.html",
+  "styles": ["style.css"],
+  "render_options": {
+    "viewport": { "width": 450, "height": 10 }
+  }
+}

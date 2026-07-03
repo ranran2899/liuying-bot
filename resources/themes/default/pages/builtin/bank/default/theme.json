@@ -1,0 +1,8 @@
+{
+  "name": "流萤银行 - 默认主题",
+  "theme": "default",
+  "label": "默认",
+  "price": 0,
+  "entrypoint": "dispatch.html",
+  "styles": ["_base.css", "overview.css", "user.css", "leaderboard.css", "history.css"]
+}

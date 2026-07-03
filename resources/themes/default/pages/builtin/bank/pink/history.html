@@ -1,0 +1,90 @@
+<style>
+    {% include './_base.css' %}
+    {% include './user.css' %}
+    {% include './history.css' %}
+</style>
+    <div class="wrapper">
+        <div class="header">
+            <div class="header-text1">流萤<span style="font-size: 30px;">の</span></div>
+            <div class="header-text2">银行</div>
+            <div class="header-text3">Liuying</div>
+            <img src="{{ asset('img/liuying/liuying.png') }}" class="liuying" />
+        </div>
+        <div class="content-border">
+            <img src="{{ asset('./img/hua.png') }}" class="hua" />
+            <div class="top-border">
+                <div>
+                    <div class="color"></div>
+                    <div class="name">操作记录</div>
+                </div>
+                <div class="top-border-right">
+                    <p style="margin:0">共<span style="font-size:30px; font-weight: bold;">{{total}}</span>条</p>
+                    <div class="rank-text">记录总数</div>
+                </div>
+            </div>
+            <div class="content">
+                <p style="margin-bottom: 0; font-size: 18px;">银行操作记录：</p>
+                <p class="tip">Bank Transaction History</p>
+
+                <div class="page-info-bar">
+                    <span>第 {{page}} / {{total_pages}} 页</span>
+                    <span>每页 {{page_size}} 条</span>
+                </div>
+
+                {% if records %}
+                <div class="history-list">
+                    {% for record in records %}
+                    <div class="history-record type-{{record.handle_type|lower}}">
+                        <div class="record-header">
+                            <div class="record-title">
+                                <img src="{{ asset('./img/bank_icon.png') }}" class="record-icon" />
+                                {% if record.handle_type == 'DEPOSIT' %}存款
+                                {% elif record.handle_type == 'WITHDRAW' %}取款
+                                {% elif record.handle_type == 'TRANSFER' %}转账
+                                {% elif record.handle_type == 'INTEREST' %}利息
+                                {% elif record.handle_type == 'LOAN' %}贷款
+                                {% elif record.handle_type == 'REPAYMENT' %}还款
+                                {% elif record.handle_type == 'FIXED_DEPOSIT' %}定期存款
+                                {% else %}{{record.handle_type}}
+                                {% endif %}
+                                #{{record.id}}
+                            </div>
+                            <div class="record-date">{{record.create_time}}</div>
+                        </div>
+                        <div class="record-details">
+                            <div class="detail-item">
+                                <span class="detail-label">金额：</span>
+                                <span class="detail-value">{{record.amount}} <span class="stat-unit">{{record.currency_display}}</span></span>
+                            </div>
+                            {% if record.rate %}
+                            <div class="detail-item">
+                                <span class="detail-label">利率：</span>
+                                <span class="detail-value">{{record.rate}}%</span>
+                            </div>
+                            {% endif %}
+                            <div class="detail-item">
+                                <span class="detail-label">类型：</span>
+                                <span class="detail-value">{{record.currency_display}}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">状态：</span>
+                                <span class="detail-value {% if record.is_completed %}completed{% else %}active-status{% endif %}">
+                                    {% if record.is_completed %}已完成{% else %}进行中{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="chart-container">
+                    <div class="empty-text">暂无操作记录</div>
+                </div>
+                {% endif %}
+
+                <div class="update-info">
+                    更新时间: <span id="full-update-time">{{create_time}}</span>
+                </div>
+            </div>
+        </div>
+    </div>

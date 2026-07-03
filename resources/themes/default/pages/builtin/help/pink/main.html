@@ -1,0 +1,67 @@
+<style>
+    {% include './style.css' %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <img src="{{ asset('img/liuying/liuying.png') }}" class="liuying" />
+        <div class="title">流萤酱</div>
+        <div class="subtitle">{{data.menu_title}}</div>
+        <div class="header-text">Help</div>
+    </div>
+    <div class="content-border">
+        <img src="{{ asset('img/liuying/5.png') }}" class="deco" />
+        <div class="top-border">
+            <div class="tip-section">
+                <div class="tip-text">
+                    @我+帮助 [功能/数字] 查看功能详情<br>
+                    发送 [详细帮助] 查看所有指令详情<br>
+                    群主/群管理使用 [管理员帮助] 查看管理指令
+                </div>
+                <div class="tip-stats">
+                    <div class="stat-badge">
+                        <span class="stat-label">功能</span>
+                        <span class="stat-number">{{data.plugin_count}}</span>
+                    </div>
+                    <div class="stat-badge available">
+                        <span class="stat-label">可用</span>
+                        <span class="stat-number">{{data.available_count}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="menu-grid">
+            {% for plugin in data['plugin_list'] %}
+            <div class="category-card">
+                <div class="category-header">
+                    <span class="category-title">{{plugin.name}}</span>
+                    <span class="category-count">{{plugin['items']|length}}</span>
+                </div>
+                <div class="category-content">
+                    {% for item in plugin['items'] %}
+                    <div class="function-item">
+                        <div class="function-item-header">
+                            <span class="function-id">{{item.id}}</span>
+                            <span class="function-name">{{item.plugin_name}}</span>
+                            {% if item.status %}
+                            <span class="function-status available"></span>
+                            {% endif %}
+                        </div>
+                        {% if data.is_detail and item.commands %}
+                        <div class="function-commands">
+                            {% for cmd in item.commands %}
+                            <span class="command-tag">{{cmd}}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="footer-section">
+            <span>Powered by liuying Bot</span>
+            <span>{{data.current_time}}</span>
+        </div>
+    </div>
+</div>

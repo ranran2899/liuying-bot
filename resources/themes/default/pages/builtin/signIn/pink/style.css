@@ -1,0 +1,396 @@
+@font-face {
+  font-family: freeFont;
+  src: url("{{ asset('fonts/Freestyle Script.ttf') }}");
+}
+
+@font-face {
+  font-family: fandolFont;
+  src: url("{{ asset('fonts/FANDOLSONG-BOLD.OTF') }}");
+}
+
+@font-face {
+  font-family: aliFont;
+  src: url("{{ asset('fonts/ALIBABAPUHUITI-2-65-MEDIUM.TTF') }}");
+}
+
+@font-face {
+  font-family: fzrzFont;
+  src: url("{{ asset('fonts/fzrzExtraBold.ttf') }}");
+}
+
+body {
+  position: absolute;
+  left: -8px;
+  top: -8px;
+  margin: 0;
+  padding: 0;
+  font-family: "aliFont";
+}
+
+.wrapper {
+  width: 450px;
+  box-shadow: 0 4px 8px rgba(255, 107, 157, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.header {
+  height: 206px;
+  background: linear-gradient(
+    to bottom,
+    #ff6b9d,
+    #f48fb1
+  );
+  padding: 5px 10px;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+}
+
+.title {
+  font-family: 'fzrzFont';
+  color: #fce4ec;
+  font-size: 50px;
+  position: absolute;
+  top: -2px;
+  left: 16px;
+  width: 275px;
+}
+
+.status-title {
+  color: white;
+}
+
+.header-text1 {
+  color: #f8bbd0;
+  font-size: 48px;
+  margin-left: 10px;
+  position: absolute;
+  font-family: "fandolFont";
+}
+
+.header-text2 {
+  color: #fce4ec;
+  font-size: 30px;
+  position: absolute;
+  top: 72px;
+  left: 141px;
+  font-family: "fandolFont";
+}
+
+.header-text3 {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 110px;
+  position: absolute;
+  font-family: "freeFont";
+  bottom: -32px;
+  left: 115px;
+  z-index: 2;
+}
+
+.liuying {
+  position: absolute;
+  z-index: 1;
+  height: 262px;
+  right: 0px;
+  top: -51px;
+}
+
+.avatar-small {
+  border-radius: 50%;
+  border: 1px solid rgba(255, 107, 157, 0.3);
+  height: 40px;
+  width: 40px;
+  background-color: #fce4ec;
+  object-fit: cover;
+}
+
+.content-border {
+  padding: 15px 20px;
+  box-sizing: border-box;
+  position: relative;
+  background-color: #fff0f5;
+}
+
+.top-border {
+  border-bottom: 1px solid rgba(255, 107, 157, 0.2);
+  width: 100%;
+  height: 50px;
+  position: relative;
+}
+
+.color {
+  background-color: #ff6b9d;
+  width: 35px;
+  height: 4px;
+  margin-bottom: 4px;
+}
+
+.name {
+  font-size: 18px;
+  width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #c2185b;
+}
+
+.greeting {
+  font-size: 12px;
+  color: #f48fb1;
+  margin-top: 3px;
+}
+
+.top-border-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  right: 0px;
+  top: 0px;
+}
+
+.uid-info {
+  text-align: right;
+  color: #c2185b;
+}
+
+.rank-text {
+  color: #ff6b9d;
+  font-size: 12px;
+  font-weight: bold;
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tip {
+  margin: 0;
+  font-size: 9px;
+  color: #f48fb1;
+}
+
+.deco {
+  position: absolute;
+  right: 0px;
+  bottom: 0px;
+  max-width: 320px;
+  width: auto;
+  height: auto;
+  opacity: 0.4;
+  z-index: 0;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.reward-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 2px 6px rgba(255, 107, 157, 0.1);
+  border: 1px solid rgba(255, 107, 157, 0.15);
+  position: relative;
+  z-index: 1;
+}
+
+.stat-title {
+  font-size: 11px;
+  color: #f48fb1;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed rgba(255, 107, 157, 0.3);
+  padding-bottom: 2px;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #ff6b9d;
+  font-family: "fandolFont";
+}
+
+.stat-value.small {
+  font-size: 14px;
+}
+
+.stat-time {
+  font-size: 11px;
+  color: #f48fb1;
+  margin-top: 2px;
+}
+
+.stat-unit {
+  font-size: 12px;
+  color: #f48fb1;
+  margin-left: 3px;
+}
+
+.reward-section {
+  margin-top: 10px;
+}
+
+.reward-card {
+  border-left: 3px solid #ff6b9d;
+}
+
+.item-reward-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.item-reward-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.item-reward-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.drop-icon-small {
+  background: linear-gradient(135deg, #ff6b9d 0%, #e91e63 100%);
+}
+
+.drop-icon-small::before {
+  content: "🎁";
+  font-size: 12px;
+}
+
+.item-name {
+  font-size: 12px;
+}
+
+.favor-multiplier {
+  font-size: 11px;
+  color: #ff6b9d;
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+.stat-value.gold {
+  color: #ffb700;
+}
+
+.stat-value.favor {
+  color: #e91e63;
+}
+
+.meet-section {
+  margin-top: 10px;
+}
+
+.meet-card {
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 2px 6px rgba(255, 107, 157, 0.1);
+  border: 1px solid rgba(255, 107, 157, 0.15);
+  margin-top: 6px;
+  border-left: 4px solid #ff6b9d;
+  position: relative;
+  z-index: 1;
+}
+
+.meet-header {
+  margin-bottom: 6px;
+}
+
+.meet-date {
+  font-size: 18px;
+  font-weight: bold;
+  color: #ff6b9d;
+  font-family: "fandolFont";
+}
+
+.meet-time {
+  font-size: 12px;
+  color: #f48fb1;
+  margin-top: 3px;
+}
+
+.meet-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 107, 157, 0.3);
+  font-size: 10px;
+}
+
+.meet-source {
+  color: #f48fb1;
+}
+
+.meet-days {
+  color: #ff6b9d;
+  font-weight: bold;
+}
+
+.last-sign-section {
+  margin-top: 15px;
+}
+
+.last-sign-card {
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 2px 6px rgba(255, 107, 157, 0.1);
+  border: 1px solid rgba(255, 107, 157, 0.15);
+  margin-top: 8px;
+  text-align: center;
+}
+
+.last-sign-date {
+  font-size: 20px;
+  font-weight: bold;
+  color: #ff6b9d;
+  font-family: "fandolFont";
+}
+
+.last-sign-time {
+  font-size: 12px;
+  color: #f48fb1;
+  margin-top: 3px;
+}
+
+.chart-container {
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 2px 6px rgba(255, 107, 157, 0.1);
+  border: 1px solid rgba(255, 107, 157, 0.15);
+  position: relative;
+  z-index: 1;
+}
+
+.chart-wrapper {
+  height: 105px;
+  width: 100%;
+}
+
+.update-info {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #f48fb1;
+  text-align: center;
+}

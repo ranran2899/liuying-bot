@@ -1,0 +1,53 @@
+<style>
+    {% include './_base.css' %}
+    {% include './user.css' %}
+</style>
+    <div class="wrapper">
+        <div class="header">
+            <div class="header-text1">流萤<span style="font-size: 30px;">の</span></div>
+            <div class="header-text2">银行</div>
+            <div class="header-text3">Liuying</div>
+            <img src="{{ asset('img/liuying/liuying.png') }}" class="liuying" />
+        </div>
+        <div class="content-border">
+            <img src="{{ asset('./img/hua.png') }}" class="hua" />
+            <div class="top-border">
+                <div>
+                    <div class="color"></div>
+                    <div class="name">贷款信息</div>
+                </div>
+                <div class="top-border-right">
+                    <div class="rank-text">贷款</div>
+                </div>
+            </div>
+            <div class="content">
+                <p style="margin-bottom: 0; font-size: 18px;">贷款详情：</p>
+                <p class="tip">Loan Information</p>
+
+                {% if loan_info %}
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-title">贷款金额</div>
+                        <div><span class="stat-value">{{loan_info.loan_amount}}</span><span class="stat-unit">金币</span></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">贷款利率</div>
+                        <div><span class="stat-value">{{loan_info.loan_rate}}</span><span class="stat-unit">%</span></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">到期日期</div>
+                        <div><span class="stat-value" style="font-size: 14px;">{{loan_info.loan_due_date}}</span></div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="chart-container">
+                    <div class="empty-text">暂无贷款信息</div>
+                </div>
+                {% endif %}
+
+                <div class="update-info">
+                    更新时间: <span id="full-update-time">{{create_time}}</span>
+                </div>
+            </div>
+        </div>
+    </div>

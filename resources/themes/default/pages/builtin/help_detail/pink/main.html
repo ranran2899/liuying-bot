@@ -1,0 +1,60 @@
+<style>
+    {% include './style.css' %}
+</style>
+<div class="wrapper">
+    <div class="header">
+        <img src="{{ asset('img/liuying/liuying.png') }}" class="liuying" />
+        <div class="title">{{title}}</div>
+        <div class="subtitle">功能详情</div>
+        <div class="header-text3">Help Detail</div>
+    </div>
+    <div class="content-border">
+        <img src="{{ asset('img/liuying/5.png') }}" class="deco" />
+        <div class="top-border">
+            <div>
+                <div class="color"></div>
+                <div class="plugin-name">{{title}}</div>
+            </div>
+        </div>
+        <div class="content">
+            <div class="author-section">
+                <p style="margin-bottom: 0; font-size: 14px;">插件信息：</p>
+                <p class="tip">Plugin Information</p>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-title">作者</div>
+                        <div class="info-value">{{author}}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-title">版本</div>
+                        <div class="info-value">v{{version}}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="description-section">
+                <p style="margin-bottom: 4px; font-size: 14px;">功能描述：</p>
+                <p class="tip">Function Description</p>
+                <div class="desc-card">
+                    {% for line in descriptions %}
+                    <p class="desc-line">{{line|safe}}</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="usage-section">
+                <p style="margin-bottom: 4px; font-size: 14px;">使用方法：</p>
+                <p class="tip">Usage Instructions</p>
+                <div class="usage-card">
+                    {% for line in usages %}
+                    <p class="usage-line">{{line|safe}}</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div style="margin-top: 10px; font-size: 10px; color: #888; text-align: center;">
+                更新时间: <span id="update-time">{{data.current_time if data.current_time else '未知'}}</span>
+            </div>
+        </div>
+    </div>
+</div>

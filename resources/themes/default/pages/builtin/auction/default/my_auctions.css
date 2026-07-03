@@ -1,0 +1,9 @@
+.table-header, .item-row {
+    grid-template-columns: 28px 1fr 50px 60px 80px;
+}
+.item-expire {
+    text-align: right;
+    font-size: 9px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}

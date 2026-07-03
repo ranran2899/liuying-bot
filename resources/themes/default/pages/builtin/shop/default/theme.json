@@ -1,0 +1,11 @@
+{
+  "name": "道具商店 - 默认主题",
+  "theme": "default",
+  "label": "默认",
+  "price": 0,
+  "entrypoint": "dispatch.html",
+  "styles": ["style.css"],
+  "render_options": {
+    "viewport": { "width": 637, "height": 10 }
+  }
+}

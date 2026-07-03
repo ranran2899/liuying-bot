@@ -1,0 +1,79 @@
+.page-info-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border-light);
+}
+
+.history-list {
+    margin-top: 10px;
+    padding-right: 5px;
+}
+
+.history-record {
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border-left: 3px solid var(--color-liuying-bank-accent);
+    position: relative;
+}
+
+.history-record.type-deposit {
+    border-left-color: #4caf50;
+}
+
+.history-record.type-withdraw {
+    border-left-color: #f44336;
+}
+
+.history-record.type-transfer {
+    border-left-color: #2196f3;
+}
+
+.history-record.type-interest {
+    border-left-color: #ffc107;
+}
+
+.history-record.type-loan {
+    border-left-color: #ff9800;
+}
+
+.history-record.type-repayment {
+    border-left-color: #9c27b0;
+}
+
+.history-record.type-fixed_deposit {
+    border-left-color: #00bcd4;
+}
+
+.detail-value.completed {
+    color: #4caf50;
+}
+
+.detail-value.active-status {
+    color: #ff9800;
+}
+
+.empty-text {
+    text-align: center;
+    padding: 20px;
+    color: var(--color-text-muted);
+    font-size: 14px;
+}
+
+.top-border-right .count-text {
+    margin: 0;
+}
+
+.top-border-right .count-number {
+    font-size: 30px;
+    font-weight: bold;
+}
