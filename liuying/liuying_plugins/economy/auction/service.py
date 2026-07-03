@@ -1,19 +1,25 @@
 """拍卖行核心服务模块
 
 提供拍卖行的上架、购买、搜索、分页等核心业务逻辑，
-并自动同步个人商店已上架物品至拍卖行展示。
+通过统一交易服务聚合展示拍卖行和个人商店的物品。
 """
 
 from dataclasses import dataclass
 
 from liuying.configs.config import Config
-from liuying.liuying_plugins.shop.inventory import ItemInventory
-from liuying.models._bot import ItemTemplate, ShopItem
+from liuying.liuying_plugins.economy.shop.inventory import ItemInventory
+from liuying.liuying_plugins.economy.trading import (
+    VenueItem,
+    find_venue_items,
+    get_all_venue_items,
+    reduce_venue_quantity,
+)
+from liuying.models._economy import ItemTemplate
 from liuying.models.treasury import Treasury
 from liuying.utils.log import logger
 from liuying.utils.user import UserGold
 
-from .models import AuctionItem, AuctionTransaction
+from liuying.models._economy import AuctionItem, AuctionTransaction
 
 MAX_USER_LISTED_TYPES = 5
 MAX_ITEM_QUANTITY = 99
@@ -158,7 +164,8 @@ class AuctionService:
     """拍卖行核心服务类
 
     处理拍卖行的所有业务逻辑，包括物品上架、购买、搜索和分页浏览。
-    自动同步个人商店中已上架的全部物品至拍卖行展示。
+    通过统一交易服务聚合拍卖行和个人商店的物品展示，
+    不再直接依赖商店模块的数据模型。
     """
 
     def __init__(self, user_id: str):
@@ -255,6 +262,9 @@ class AuctionService:
     async def buy_item(self, item_keyword: str, quantity: int = 1) -> BuyResult:
         """从拍卖行购买物品，自动从价格最低的上架记录开始购买
 
+        跨场所购买：可能同时从拍卖行和个人商店购买同一物品，
+        通过统一交易服务查找所有上架记录，按价格升序分配购买计划。
+
         参数:
             item_keyword: 道具名称或ID
             quantity: 购买数量
@@ -265,21 +275,21 @@ class AuctionService:
         if quantity <= 0:
             return BuyResult(message="购买数量必须大于0")
 
-        listings = await self._find_all_listings(item_keyword)
+        listings = await find_venue_items(item_keyword)
         if not listings:
             return BuyResult(message=f"拍卖行中没有'{item_keyword}'")
 
-        listings.sort(key=lambda x: x["price"])
+        listings.sort(key=lambda x: x.price)
 
         other_listings = [
-            item for item in listings if item["seller_id"] != self.user_id
+            item for item in listings if item.seller_id != self.user_id
         ]
         if not other_listings:
             return BuyResult(message="不能购买自己上架的物品")
 
-        total_available = sum(item["quantity"] for item in other_listings)
+        total_available = sum(item.quantity for item in other_listings)
         if total_available < quantity:
-            item_name = other_listings[0].get("name", item_keyword)
+            item_name = other_listings[0].name
             return BuyResult(
                 message=f"拍卖行中'{item_name}'可购买数量不足，"
                 f"当前可购总量：{total_available}"
@@ -289,7 +299,7 @@ class AuctionService:
         if not purchase_plan:
             return BuyResult(message="可购买数量不足")
 
-        total_cost = sum(listing["price"] * qty for listing, qty in purchase_plan)
+        total_cost = sum(listing.price * qty for listing, qty in purchase_plan)
         fee_rate = _get_fee_rate()
         fee = int(total_cost * fee_rate)
         total_payment = total_cost + fee
@@ -325,8 +335,8 @@ class AuctionService:
 
     @staticmethod
     def _build_purchase_plan(
-        listings: list[dict], quantity: int
-    ) -> list[tuple[dict, int]]:
+        listings: list[VenueItem], quantity: int
+    ) -> list[tuple[VenueItem, int]]:
         """构建购买计划，从最低价开始分配购买数量
 
         参数:
@@ -334,24 +344,27 @@ class AuctionService:
             quantity: 需要购买的总数量
 
         返回:
-            list[tuple[dict, int]]: (上架记录, 购买数量) 的列表
+            list[tuple[VenueItem, int]]: (上架记录, 购买数量) 的列表
         """
-        plan: list[tuple[dict, int]] = []
+        plan: list[tuple[VenueItem, int]] = []
         remaining = quantity
 
         for listing in listings:
             if remaining <= 0:
                 break
-            buy_qty = min(listing["quantity"], remaining)
+            buy_qty = min(listing.quantity, remaining)
             plan.append((listing, buy_qty))
             remaining -= buy_qty
 
         return plan if remaining <= 0 else []
 
     async def _execute_purchase(
-        self, purchase_plan: list[tuple[dict, int]], fee_rate: float = 0.0
+        self, purchase_plan: list[tuple[VenueItem, int]], fee_rate: float = 0.0
     ) -> str:
         """执行购买计划，处理金币转移、库存变动和交易记录
+
+        通过统一交易服务获取对应场所适配器，调用 reduce_quantity 减少上架数量，
+        无需直接依赖商店或拍卖行的数据模型。
 
         参数:
             purchase_plan: 购买计划列表
@@ -362,10 +375,10 @@ class AuctionService:
         """
         item_name = ""
         for listing, buy_qty in purchase_plan:
-            seller_id = listing["seller_id"]
-            unit_price = listing["price"]
-            item_id = listing.get("item_id", listing.get("id", ""))
-            item_name = listing.get("name", item_id)
+            seller_id = listing.seller_id
+            unit_price = listing.price
+            item_id = listing.id
+            item_name = listing.name
             subtotal = unit_price * buy_qty
             fee = int(subtotal * fee_rate)
 
@@ -374,13 +387,7 @@ class AuctionService:
             )
             await self.inventory.add(item_id, buy_qty)
 
-            match listing.get("source"):
-                case "auction":
-                    await AuctionItem.reduce_quantity(seller_id, item_id, buy_qty)
-                case "shop":
-                    shop_name = listing.get("shop_name", "")
-                    if shop_name:
-                        await ShopItem.reduce_quantity(shop_name, item_id, buy_qty)
+            await reduce_venue_quantity(listing, buy_qty)
 
             await AuctionTransaction.record_transaction(
                 buyer_id=self.user_id,
@@ -522,59 +529,29 @@ class AuctionService:
     async def compare_prices(self, item_keyword: str) -> list[dict]:
         """跨店比价，搜索拍卖行和所有个人商店中同一物品的报价
 
+        通过统一交易服务查找所有场所的匹配物品，按价格升序排列。
+
         参数:
             item_keyword: 道具名称或ID
 
         返回:
             list[dict]: 按价格升序排列的物品列表
         """
-        auction_items = await AuctionItem.find_by_keyword(item_keyword)
-        shop_items = await self._get_all_shop_items()
-        matched_shop = [
-            item for item in shop_items if _match_keyword(item, item_keyword)
-        ]
-        all_items = auction_items + matched_shop
+        items = await find_venue_items(item_keyword)
+        all_items = [item.to_dict() for item in items]
         return _sort_by_price_asc(all_items)
-
-    async def _find_all_listings(self, keyword: str) -> list[dict]:
-        """查找拍卖行和商店中所有匹配的物品
-
-        参数:
-            keyword: 搜索关键字（道具ID或名称）
-
-        返回:
-            list[dict]: 匹配的物品列表
-        """
-        auction_items = await AuctionItem.get_all_items()
-        shop_items = await self._get_all_shop_items()
-        all_items = auction_items + shop_items
-        return [item for item in all_items if _match_keyword(item, keyword)]
-
-    async def _get_all_shop_items(self) -> list[dict]:
-        """获取所有个人商店的上架物品，标记来源为shop
-
-        使用ShopItem.get_all_shop_items()批量方法避免N+1查询
-
-        返回:
-            list[dict]: 商店物品列表
-        """
-        all_items = await ShopItem.get_all_shop_items()
-        results: list[dict] = []
-        for item in all_items:
-            item["source"] = "shop"
-            item["item_id"] = item.get("id", "")
-            results.append(item)
-        return results
 
     async def get_all_listings(self) -> list[dict]:
         """获取拍卖行所有物品（含商店同步），按价格降序排列
 
+        通过统一交易服务聚合所有交易场所的物品。
+
         返回:
             list[dict]: 所有上架物品列表
         """
-        auction_items = await AuctionItem.get_all_items()
-        shop_items = await self._get_all_shop_items()
-        return _sort_by_price_desc(auction_items + shop_items)
+        items = await get_all_venue_items()
+        all_items = [item.to_dict() for item in items]
+        return _sort_by_price_desc(all_items)
 
     async def search_items(self, keyword: str) -> list[dict]:
         """搜索拍卖行物品（模糊匹配名称或ID），按价格降序排列
@@ -585,9 +562,10 @@ class AuctionService:
         返回:
             list[dict]: 匹配的物品列表，最多返回MAX_SEARCH_RESULTS条
         """
-        all_items = await self.get_all_listings()
-        results = [item for item in all_items if _match_keyword(item, keyword)]
-        return results[:MAX_SEARCH_RESULTS]
+        items = await find_venue_items(keyword)
+        all_items = [item.to_dict() for item in items]
+        all_items = _sort_by_price_desc(all_items)
+        return all_items[:MAX_SEARCH_RESULTS]
 
     async def get_items_page(
         self, page: int = 1, keyword: str | None = None

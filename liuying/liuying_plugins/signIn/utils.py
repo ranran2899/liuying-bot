@@ -8,8 +8,8 @@ from nonebot import get_driver
 
 from liuying.configs.config import Config
 from liuying.configs.path_config import TEMP_PATH
-from liuying.liuying_plugins.shop.api import register_items
-from liuying.liuying_plugins.shop.inventory import ItemInventory
+from liuying.liuying_plugins.economy.shop.api import register_items
+from liuying.liuying_plugins.economy.shop.inventory import ItemInventory
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.bed_layout import BedLayout
 from liuying.utils.log import logger

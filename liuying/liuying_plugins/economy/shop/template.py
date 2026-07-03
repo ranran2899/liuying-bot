@@ -7,7 +7,7 @@
 
 import time
 
-from liuying.models._bot import ItemTemplate
+from liuying.models._economy import ItemTemplate
 
 _DEFAULT_SHOP = "default"
 

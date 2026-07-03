@@ -5,9 +5,6 @@ from .bot_console import BotConsole
 from .bot_friend import BotFriend
 from .bot_message_store import BotMessageStore
 from .bot_priority import BotPriority
-from .item_template import ItemTemplate, _default_stats
-from .shop_item import ShopItem
-from .shop_user import ShopUser as Shop
 
 __all__ = [
     "BedLayoutImage",
@@ -15,8 +12,4 @@ __all__ = [
     "BotFriend",
     "BotMessageStore",
     "BotPriority",
-    "ItemTemplate",
-    "Shop",
-    "ShopItem",
-    "_default_stats",
 ]

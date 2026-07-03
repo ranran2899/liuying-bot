@@ -6,7 +6,7 @@
 
 from dataclasses import dataclass
 
-from liuying.models._bot import Shop, ShopItem
+from liuying.models._economy import Shop, ShopItem
 from liuying.models._log.shop_log import ShopTransactionLog
 from liuying.utils.log import logger
 

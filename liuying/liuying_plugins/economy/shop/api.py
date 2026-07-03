@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 import random
 from typing import ClassVar, TypeAlias
 
-from liuying.models._bot import ItemTemplate
+from liuying.models._economy import ItemTemplate
 from liuying.utils.enum import PropHandle
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle

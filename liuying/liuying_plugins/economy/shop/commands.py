@@ -7,7 +7,7 @@
 from nonebot_plugin_alconna import Match
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.models._bot import ItemTemplate, Shop, ShopItem
+from liuying.models._economy import ItemTemplate, Shop, ShopItem
 from liuying.models._log.shop_log import ShopTransactionLog
 from liuying.utils.enum import PropHandle
 from liuying.utils.log import logger

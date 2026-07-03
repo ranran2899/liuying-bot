@@ -4,7 +4,7 @@
 from datetime import datetime
 import json
 
-from liuying.liuying_plugins.shop.template import TemplateRepository
+from liuying.liuying_plugins.economy.shop.template import TemplateRepository
 from liuying.models._user.user_sign_log import UserSignLog
 from liuying.ui.services import render
 from liuying.utils.calendar import Greeting, TimeSeason

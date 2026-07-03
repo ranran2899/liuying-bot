@@ -12,7 +12,7 @@
 ## 功能特性
 
 - **AI 对话**：多 LLM Provider、Agent 工具调用、四层记忆系统、用户级人格隔离、多模态视觉、TTS、WebUI 控制台
-- **经济系统**：银行存取/兑换/转账/贷款、商店、拍卖行、签到、每日 wife
+- **经济系统**：银行存取/兑换/转账/贷款、商店、拍卖行、委托求购板、典当行、黑市、签到、每日 wife
 - **娱乐互动**：漂流瓶、今日运势、自动点赞、表情包与贴纸
 - **权限管理**：超级用户、平台超管、群组管理员、用户级 ACL
 - **平台适配**：OneBot V11/V12、QQ 官方、Minecraft 适配器
@@ -100,7 +100,7 @@ liuying_bot0.1.4/
 └── liuying/
     ├── configs/              # 全局配置
     ├── models/               # 数据库模型（按业务域分）
-    │   ├── _bot/ _group/ _llm/ _log/ _user/
+    │   ├── _bot/ _economy/ _group/ _llm/ _log/ _user/
     ├── services/             # 核心服务
     │   ├── cache/            #   统一缓存（内存/Redis）
     │   ├── liuying_db/       #   数据库服务
@@ -110,10 +110,10 @@ liuying_bot0.1.4/
     │   ├── LLM/ apscheduler/ bed_layout/ bot/
     │   ├── http/ image/ manager/ repo_utils/ user/
     ├── liuying_plugins/      # 主插件目录
-    │   ├── AI/ admin/ auction/ bank/ bottle/
+    │   ├── AI/ admin/ bottle/ economy/
     │   ├── fortune/ help/ hooks/ init/ platform/
-    │   ├── plugin_store/ shop/ signIn/ statistics/
-    │   ├── superuser/ ui_manager/ user_info/ wife/
+    │   ├── signIn/ statistics/ superuser/ ui_manager/
+    │   ├── user_info/ wife/
     │   └── withdraw.py record_request.py
     └── plugins/              # 自定义插件
         ├── AI_webui/ qq_bot_config/ qzone/
@@ -124,7 +124,7 @@ liuying_bot0.1.4/
 
 ### 业务插件
 
-流萤 AI、流萤银行、商店、拍卖行、签到、今日运势、每日 wife、漂流瓶、用户信息、UI 管理、统计、自动点赞、消息撤回。
+流萤 AI、流萤银行、商店、拍卖行、委托求购板、典当行、黑市、签到、今日运势、每日 wife、漂流瓶、用户信息、UI 管理、统计、自动点赞、消息撤回。
 
 ### 管理插件
 
@@ -190,6 +190,10 @@ register_external_tool(MyTool())
 
 ### v0.1.4-b
 
+- 重构经济系统架构：银行/商店/拍卖行/交易辅助迁移至 `economy/` 插件目录
+- 新增委托求购板、典当行、黑市三个经济插件
+- 经济模型统一归档至 `models/_economy/`（拍卖行、商店、道具模板、求购单、当票、黑市商品）
+- 精简交易辅助模块（trading）：5 文件 → 1 文件，去除过度设计的抽象层
 - 重构 AI 插件分层：config → models → core → agent → pipeline → handlers → jobs → tts
 - 新增用户级人格隔离、4 层记忆系统（RRF 融合）、Agent 工具调用、多模态、WebUI
 - 重构统一缓存（`liuying/services/cache`）与数据库服务层
