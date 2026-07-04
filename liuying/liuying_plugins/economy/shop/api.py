@@ -140,8 +140,8 @@ def register_item(
         limited_time: 限时销售截止时间戳，-1 表示不限时
         discount: 折扣百分比，100 为原价
         is_visible: 是否在商店可见，0 不可见，1 可见
-        limit_purchase: 每人限购数量，-1 表示不限购
-        shop_name: 所属商店名称
+        limit_purchase: 商店中每人限购数量，-1 表示不限购
+        shop_name: 所属商店名称，默认"default"
         can_use_func: 可选前置检查函数
 
     返回:
