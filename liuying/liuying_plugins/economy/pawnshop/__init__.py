@@ -8,7 +8,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import Alconna, Args, Match, on_alconna
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.configs.utils import Command, PluginExtraData
+from liuying.configs.utils import Command, PluginExtraData, RegisterConfig
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
@@ -33,6 +33,15 @@ __plugin_meta__ = PluginMetadata(
             Command(command="赎回", params=["当票ID"]),
             Command(command="我的当票"),
             Command(command="典当记录"),
+        ],
+        configs=[
+            RegisterConfig(
+                key="PAWN_REDEEM_DAYS",
+                value=7,
+                help="赎回期限天数，默认7天",
+                default_value=7,
+                type=int,
+            ),
         ],
     ).to_dict(),
 )
@@ -67,53 +76,60 @@ _STATUS_LABELS = {
 }
 
 
-def _format_ticket(ticket: dict, index: int) -> str:
-    """格式化单张当票为文本
+class PawnshopRenderer:
+    """当票文本渲染器
 
-    参数:
-        ticket: 当票字典
-        index: 序号
-
-    返回:
-        str: 格式化的当票文本
+    将当票列表格式化为多行文本展示。
     """
-    name = ticket.get("name") or ticket.get("item_id", "未知道具")
-    quantity = ticket.get("quantity", 0)
-    loan_amount = ticket.get("loan_amount", 0)
-    interest_rate = ticket.get("interest_rate", 0)
-    redeem_amount = int(loan_amount * (1 + interest_rate))
-    redeem_due = ticket.get("redeem_due", "未知")
-    status = _STATUS_LABELS.get(ticket.get("status", ""), "未知")
-    ticket_id = ticket.get("id", "?")
-    lines = [
-        f"{index}. 当票#{ticket_id} - {name} x {quantity}",
-        f"   借款: {loan_amount:,}金币 | 赎回: {redeem_amount:,}金币"
-        f"（利息{redeem_amount - loan_amount:,}）",
-        f"   状态: {status} | 截止: {redeem_due}",
-    ]
-    redeemed_at = ticket.get("redeemed_at")
-    if redeemed_at:
-        lines.append(f"   完成时间: {redeemed_at}")
-    return "\n".join(lines)
 
+    @staticmethod
+    def format_ticket(ticket: dict, index: int) -> str:
+        """格式化单张当票为文本
 
-def _format_tickets(tickets: list[dict], title: str) -> str:
-    """格式化当票列表为文本
+        参数:
+            ticket: 当票字典
+            index: 序号
 
-    参数:
-        tickets: 当票字典列表
-        title: 标题
+        返回:
+            str: 格式化的当票文本
+        """
+        name = ticket.get("name") or ticket.get("item_id", "未知道具")
+        quantity = ticket.get("quantity", 0)
+        loan_amount = ticket.get("loan_amount", 0)
+        interest_rate = ticket.get("interest_rate", 0)
+        redeem_amount = int(loan_amount * (1 + interest_rate))
+        redeem_due = ticket.get("redeem_due", "未知")
+        status = _STATUS_LABELS.get(ticket.get("status", ""), "未知")
+        ticket_id = ticket.get("id", "?")
+        lines = [
+            f"{index}. 当票#{ticket_id} - {name} x {quantity}",
+            f"   借款: {loan_amount:,}金币 | 赎回: {redeem_amount:,}金币"
+            f"（利息{redeem_amount - loan_amount:,}）",
+            f"   状态: {status} | 截止: {redeem_due}",
+        ]
+        redeemed_at = ticket.get("redeemed_at")
+        if redeemed_at:
+            lines.append(f"   完成时间: {redeemed_at}")
+        return "\n".join(lines)
 
-    返回:
-        str: 格式化的当票列表文本
-    """
-    if not tickets:
-        return f"{title}\n暂无记录"
-    lines = [title, ""]
-    for i, ticket in enumerate(tickets, 1):
-        lines.append(_format_ticket(ticket, i))
-        lines.append("")
-    return "\n".join(lines).strip()
+    @staticmethod
+    def format_tickets(tickets: list[dict], title: str) -> str:
+        """格式化当票列表为文本
+
+        参数:
+            tickets: 当票字典列表
+            title: 标题
+
+        返回:
+            str: 格式化的当票列表文本
+        """
+        if not tickets:
+            return f"{title}\n暂无记录"
+        lines = [title, ""]
+        for i, ticket in enumerate(tickets, 1):
+            lines.append(PawnshopRenderer.format_ticket(ticket, i))
+            lines.append("")
+        return "\n".join(lines).strip()
 
 
 @pawn_cmd.handle()
@@ -156,7 +172,7 @@ async def _(session: Uninfo):
     service = PawnshopService(user_id)
     tickets = await service.get_my_tickets()
 
-    msg = _format_tickets(tickets, "我的当票")
+    msg = PawnshopRenderer.format_tickets(tickets, "我的当票")
     await MessageUtils.build_message(msg).finish()
 
 
@@ -169,7 +185,7 @@ async def _(session: Uninfo):
     service = PawnshopService(user_id)
     tickets = await service.get_ticket_history()
 
-    msg = _format_tickets(tickets, "典当记录")
+    msg = PawnshopRenderer.format_tickets(tickets, "典当记录")
     await MessageUtils.build_message(msg).finish()
 
 

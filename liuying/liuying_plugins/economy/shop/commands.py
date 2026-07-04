@@ -29,19 +29,6 @@ from .template import TemplateRepository
 _HISTORY_PAGE_SIZE = 20
 
 
-def _get_quantity(match: Match[int], default: int = 1) -> int:
-    """从 Match 中获取数量值
-
-    参数:
-        match: Alconna Match 对象
-        default: 默认值
-
-    返回:
-        int: 数量值，至少为 default
-    """
-    return max(default, match.result if match.available else default)
-
-
 class ShopCommands:
     """商店命令处理器
 
@@ -83,7 +70,7 @@ class ShopCommands:
     async def buy(session: Uninfo, item_id: str, quantity: Match[int]) -> None:
         """处理购买命令：从系统商店购买道具"""
         user_id = session.user.id
-        buy_quantity = _get_quantity(quantity)
+        buy_quantity = quantity.result
 
         item_info = await TemplateRepository.resolve_store_item(item_id)
         if not item_info:
@@ -135,7 +122,7 @@ class ShopCommands:
     async def use(session: Uninfo, item_id: str, quantity: Match[int]) -> None:
         """处理使用道具命令"""
         user_id = session.user.id
-        use_quantity = _get_quantity(quantity)
+        use_quantity = quantity.result
 
         result = await ShopCommands._use_item(user_id, item_id, use_quantity)
         if result.success:
@@ -186,7 +173,7 @@ class ShopCommands:
     ) -> None:
         """处理商店上架命令"""
         user_id = session.user.id
-        list_quantity = _get_quantity(quantity)
+        list_quantity = quantity.result
 
         result = await ShopService(user_id).list_item_in_shop(
             item_keyword, price, list_quantity
@@ -205,7 +192,7 @@ class ShopCommands:
     ) -> None:
         """处理商店购买命令：从用户商店购买道具"""
         user_id = session.user.id
-        buy_quantity = _get_quantity(quantity)
+        buy_quantity = quantity.result
         shop_name = shop_name.strip()
 
         shop_info = await Shop.get_shop_by_name(shop_name)
@@ -263,7 +250,7 @@ class ShopCommands:
     ) -> None:
         """处理商店下架命令"""
         user_id = session.user.id
-        delist_quantity = _get_quantity(quantity)
+        delist_quantity = quantity.result
 
         result = await ShopService(user_id).delist_item(
             item_keyword, delist_quantity
@@ -329,7 +316,7 @@ class ShopCommands:
     async def shop_history(session: Uninfo, page: Match[int]) -> None:
         """处理商店记录命令"""
         user_id = session.user.id
-        current_page = max(1, page.result) if page.available else 1
+        current_page = page.result
         offset = (current_page - 1) * _HISTORY_PAGE_SIZE
 
         records = await ShopTransactionLog.get_user_history(

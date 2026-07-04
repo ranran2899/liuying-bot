@@ -31,7 +31,7 @@ PRICE_FLOAT_MAX = 1.5
 # 单个商品最大库存
 MAX_STOCK_PER_ITEM = 5
 
-# 国库名称
+# 金币库名称
 _TREASURY_NAME = "gold_treasury"
 
 

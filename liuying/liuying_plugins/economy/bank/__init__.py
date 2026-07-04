@@ -15,7 +15,7 @@ from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 
 from .handlers import BankHandler
-from .settlement import settlement
+from .settlement import SettlementService
 
 __plugin_meta__ = PluginMetadata(
     name=f"{NICKNAME}银行",
@@ -395,5 +395,5 @@ async def _(
 @task_manager.cron_task("bank_settlement", hour=0, minute=0)
 async def _bank_settlement():
     """每日0点结算利息"""
-    await settlement()
+    await SettlementService.settle_daily_interest()
     logger.info("银行结算", "定时任务")

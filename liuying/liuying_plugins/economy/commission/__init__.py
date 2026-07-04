@@ -9,7 +9,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import Alconna, Args, Match, on_alconna
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.configs.utils import Command, PluginExtraData
+from liuying.configs.utils import Command, PluginExtraData, RegisterConfig
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
@@ -42,6 +42,15 @@ __plugin_meta__ = PluginMetadata(
                 command="求购取消", params=["物品名称", "数量"]
             ),
             Command(command="我的求购"),
+        ],
+        configs=[
+            RegisterConfig(
+                key="COMMISSION_EXPIRE_DAYS",
+                value=3,
+                help="求购单到期天数，默认3天",
+                default_value=3,
+                type=int,
+            ),
         ],
     ).to_dict(),
 )
@@ -86,68 +95,66 @@ my_orders_cmd = on_alconna(
 )
 
 
-def _resolve_quantity(match: Match[int]) -> int:
-    """从Match中解析数量，未提供时默认为1
+class CommissionRenderer:
+    """求购单文本渲染器
 
-    参数:
-        match: Alconna Match对象
-
-    返回:
-        int: 有效数量（最小为1）
+    将求购单列表格式化为多行文本展示。
     """
-    return max(1, match.result) if match.available else 1
 
+    @staticmethod
+    def _format_order(order: dict, index: int) -> str:
+        """格式化单条求购单
 
-def _format_my_orders(orders: list[dict]) -> str:
-    """格式化我的求购单列表
+        参数:
+            order: 求购单字典
+            index: 序号
 
-    参数:
-        orders: 求购单字典列表
-
-    返回:
-        str: 格式化后的文本
-    """
-    if not orders:
-        return "你没有任何求购单"
-
-    lines = ["=== 我的求购单 ==="]
-    for i, order in enumerate(orders, 1):
+        返回:
+            str: 格式化后的文本
+        """
         name = order.get("name", "未知道具")
         qty = order.get("quantity", 0)
         fulfilled = order.get("fulfilled_quantity", 0)
         price = order.get("unit_price", 0)
         expire = order.get("expire_at", "无")
-        lines.append(
-            f"{i}. {name} x{qty} (已满足{fulfilled})\n"
+        return (
+            f"{index}. {name} x{qty} (已满足{fulfilled})\n"
             f"   单价: {price:,}金币  到期: {expire}"
         )
-    return "\n".join(lines)
 
+    @staticmethod
+    def format_my_orders(orders: list[dict]) -> str:
+        """格式化我的求购单列表
 
-def _format_all_orders(orders: list[dict]) -> str:
-    """格式化所有求购单列表
+        参数:
+            orders: 求购单字典列表
 
-    参数:
-        orders: 求购单字典列表
+        返回:
+            str: 格式化后的文本
+        """
+        if not orders:
+            return "你没有任何求购单"
+        lines = ["=== 我的求购单 ==="]
+        for i, order in enumerate(orders, 1):
+            lines.append(CommissionRenderer._format_order(order, i))
+        return "\n".join(lines)
 
-    返回:
-        str: 格式化后的文本
-    """
-    if not orders:
-        return "求购板暂无求购单"
+    @staticmethod
+    def format_all_orders(orders: list[dict]) -> str:
+        """格式化所有求购单列表
 
-    lines = ["=== 求购列表 ==="]
-    for i, order in enumerate(orders, 1):
-        name = order.get("name", "未知道具")
-        qty = order.get("quantity", 0)
-        fulfilled = order.get("fulfilled_quantity", 0)
-        price = order.get("unit_price", 0)
-        expire = order.get("expire_at", "无")
-        lines.append(
-            f"{i}. {name} x{qty} (已满足{fulfilled})\n"
-            f"   单价: {price:,}金币  到期: {expire}"
-        )
-    return "\n".join(lines)
+        参数:
+            orders: 求购单字典列表
+
+        返回:
+            str: 格式化后的文本
+        """
+        if not orders:
+            return "求购板暂无求购单"
+        lines = ["=== 求购列表 ==="]
+        for i, order in enumerate(orders, 1):
+            lines.append(CommissionRenderer._format_order(order, i))
+        return "\n".join(lines)
 
 
 @place_cmd.handle()
@@ -159,7 +166,7 @@ async def _(
 ):
     """发布求购单"""
     user_id = session.user.id
-    place_qty = _resolve_quantity(quantity)
+    place_qty = quantity.result
 
     logger.info(
         f"求购: {item_keyword}, 单价: {unit_price}, 数量: {place_qty}",
@@ -180,14 +187,16 @@ async def _(session: Uninfo):
 
     service = CommissionService(user_id)
     orders = await service.get_all_orders()
-    await MessageUtils.build_message(_format_all_orders(orders)).finish()
+    await MessageUtils.build_message(
+        CommissionRenderer.format_all_orders(orders)
+    ).finish()
 
 
 @sell_cmd.handle()
 async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
     """向求购单出售道具"""
     user_id = session.user.id
-    sell_qty = _resolve_quantity(quantity)
+    sell_qty = quantity.result
 
     logger.info(
         f"求购出售: {item_keyword} x {sell_qty}",
@@ -204,7 +213,7 @@ async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
 async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
     """取消求购单"""
     user_id = session.user.id
-    cancel_qty = _resolve_quantity(quantity)
+    cancel_qty = quantity.result
 
     logger.info(
         f"求购取消: {item_keyword} x {cancel_qty}",
@@ -225,7 +234,9 @@ async def _(session: Uninfo):
 
     service = CommissionService(user_id)
     orders = await service.get_my_orders()
-    await MessageUtils.build_message(_format_my_orders(orders)).finish()
+    await MessageUtils.build_message(
+        CommissionRenderer.format_my_orders(orders)
+    ).finish()
 
 
 @task_manager.cron_task(

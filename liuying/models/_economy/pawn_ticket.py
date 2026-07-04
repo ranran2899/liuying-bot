@@ -32,11 +32,8 @@ class PawnTicket(Model):
     user_id: Mapped[str] = mapped_column(
         String(255), nullable=False, index=True, comment="当铺用户ID"
     )
-    item_id: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True, comment="道具ID"
-    )
     item_data: Mapped[str] = mapped_column(
-        Text, default="{}", comment="道具信息JSON"
+        Text, default="{}", comment="道具信息JSON（含id字段）"
     )
     quantity: Mapped[int] = mapped_column(Integer, default=1, comment="当入数量")
     loan_amount: Mapped[int] = mapped_column(
@@ -58,6 +55,11 @@ class PawnTicket(Model):
         DateTime, nullable=True, default=None, comment="赎回时间"
     )
 
+    @property
+    def item_id(self) -> str:
+        """道具ID（从item_data JSON的id字段读取）"""
+        return self.get_data().get("id", "")
+
     def get_data(self) -> dict:
         """解析道具信息JSON
 
@@ -70,7 +72,7 @@ class PawnTicket(Model):
         except (json.JSONDecodeError, TypeError):
             return {}
 
-    def set_data(self, data: dict):
+    def set_data(self, data: dict) -> None:
         """设置道具信息JSON
 
         参数:
@@ -97,7 +99,7 @@ class PawnTicket(Model):
                 str(self.redeemed_at) if self.redeemed_at else None
             ),
             "user_id": self.user_id,
-            "item_id": self.item_id,
+            "item_id": data.get("id", ""),
         }
 
     @classmethod
@@ -129,7 +131,6 @@ class PawnTicket(Model):
         redeem_due = now + timedelta(days=redeem_days)
         return await cls.create(
             user_id=user_id,
-            item_id=item_id,
             quantity=quantity,
             loan_amount=loan_amount,
             interest_rate=interest_rate,
@@ -152,14 +153,16 @@ class PawnTicket(Model):
         返回:
             list[dict]: 当票字典列表
         """
-        tickets = await cls.filter(user_id=user_id).all()
-        result = [
-            ticket
-            for ticket in tickets
-            if status == "all" or ticket.status == status
-        ]
-        result.sort(key=lambda t: t.pawn_at, reverse=True)
-        return [ticket.to_dict() for ticket in result]
+        if status == "all":
+            tickets = await cls.filter(user_id=user_id).all()
+        else:
+            tickets = await cls.filter(
+                user_id=user_id, status=status
+            ).all()
+        tickets = sorted(
+            tickets, key=lambda t: t.pawn_at, reverse=True
+        )
+        return [ticket.to_dict() for ticket in tickets]
 
     @classmethod
     async def get_ticket(cls, ticket_id: int) -> "PawnTicket | None":
@@ -212,8 +215,9 @@ class PawnTicket(Model):
             list[PawnTicket]: 已逾期的活跃当票列表
         """
         now = datetime.now()
-        tickets = await cls.filter(status="active").all()
-        return [ticket for ticket in tickets if ticket.redeem_due <= now]
+        return await cls.filter(
+            cls.status == "active", cls.redeem_due <= now
+        ).all()
 
     @classmethod
     def _run_script(cls):
@@ -222,7 +226,6 @@ class PawnTicket(Model):
             "CREATE TABLE IF NOT EXISTS pawn_ticket ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
             "user_id VARCHAR(255), "
-            "item_id VARCHAR(255), "
             "item_data TEXT DEFAULT '{}', "
             "quantity INTEGER DEFAULT 1, "
             "loan_amount INTEGER DEFAULT 0, "
@@ -233,8 +236,6 @@ class PawnTicket(Model):
             "redeemed_at DATETIME DEFAULT NULL);",
             "CREATE INDEX IF NOT EXISTS ix_pawn_ticket_user_id "
             "ON pawn_ticket (user_id);",
-            "CREATE INDEX IF NOT EXISTS ix_pawn_ticket_item_id "
-            "ON pawn_ticket (item_id);",
             "ALTER TABLE pawn_ticket ADD COLUMN redeemed_at DATETIME "
             "DEFAULT NULL;",
         ]

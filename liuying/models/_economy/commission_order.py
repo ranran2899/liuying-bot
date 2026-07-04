@@ -35,11 +35,8 @@ class CommissionOrder(Model):
     buyer_id: Mapped[str] = mapped_column(
         String(255), nullable=False, index=True, comment="求购者用户ID"
     )
-    item_id: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True, comment="道具ID"
-    )
     item_data: Mapped[str] = mapped_column(
-        Text, default="{}", comment="道具信息JSON"
+        Text, default="{}", comment="道具信息JSON（含id字段）"
     )
     quantity: Mapped[int] = mapped_column(
         Integer, default=1, comment="求购数量"
@@ -56,6 +53,11 @@ class CommissionOrder(Model):
     expire_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, default=None, comment="到期时间"
     )
+
+    @property
+    def item_id(self) -> str:
+        """道具ID（从item_data JSON的id字段读取）"""
+        return self.get_data().get("id", "")
 
     def get_data(self) -> dict:
         """解析道具信息JSON
@@ -90,7 +92,7 @@ class CommissionOrder(Model):
             "fulfilled_quantity": self.fulfilled_quantity,
             "unit_price": self.unit_price,
             "buyer_id": self.buyer_id,
-            "item_id": self.item_id,
+            "item_id": data.get("id", ""),
             "expire_at": str(self.expire_at) if self.expire_at else None,
         }
 
@@ -126,7 +128,7 @@ class CommissionOrder(Model):
         if existing:
             existing.quantity += quantity
             existing.unit_price = unit_price
-            existing.set_data(item_data)
+            existing.set_data({"id": item_id, **item_data})
             existing.expire_at = expire_at
             await existing.save(
                 update_fields=[
@@ -140,7 +142,6 @@ class CommissionOrder(Model):
 
         await cls.create(
             buyer_id=buyer_id,
-            item_id=item_id,
             quantity=quantity,
             unit_price=unit_price,
             item_data=json.dumps({"id": item_id, **item_data}).decode(),
@@ -154,8 +155,6 @@ class CommissionOrder(Model):
     ) -> "CommissionOrder | None":
         """通过买家ID和道具ID查找求购单
 
-        先按buyer_id在数据库层过滤，再在Python中匹配item_id
-
         参数:
             buyer_id: 求购者用户ID
             item_id: 道具ID
@@ -164,10 +163,7 @@ class CommissionOrder(Model):
             CommissionOrder | None: 求购单实例
         """
         orders = await cls.filter(buyer_id=buyer_id).all()
-        return next(
-            (order for order in orders if order.item_id == item_id),
-            None,
-        )
+        return next((o for o in orders if o.item_id == item_id), None)
 
     @classmethod
     async def get_user_orders(cls, buyer_id: str) -> list[dict]:
@@ -190,12 +186,13 @@ class CommissionOrder(Model):
             list[dict]: 活跃求购单字典列表
         """
         now = datetime.now()
-        orders = await cls.filter().all()
+        orders = await cls.filter(
+            cls.fulfilled_quantity < cls.quantity
+        ).all()
         return [
             order.to_dict()
             for order in orders
-            if (not order.expire_at or order.expire_at > now)
-            and order.fulfilled_quantity < order.quantity
+            if not order.expire_at or order.expire_at > now
         ]
 
     @classmethod
@@ -293,12 +290,7 @@ class CommissionOrder(Model):
             list[CommissionOrder]: 已过期的求购单列表
         """
         now = datetime.now()
-        all_orders = await cls.filter().all()
-        return [
-            order
-            for order in all_orders
-            if order.expire_at and order.expire_at <= now
-        ]
+        return await cls.filter(cls.expire_at <= now).all()
 
     @classmethod
     def _run_script(cls):
@@ -307,7 +299,6 @@ class CommissionOrder(Model):
             "CREATE TABLE IF NOT EXISTS commission_order ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
             "buyer_id VARCHAR(255), "
-            "item_id VARCHAR(255), "
             "item_data TEXT DEFAULT '{}', "
             "quantity INTEGER DEFAULT 1, "
             "fulfilled_quantity INTEGER DEFAULT 0, "
@@ -316,8 +307,6 @@ class CommissionOrder(Model):
             "expire_at DATETIME DEFAULT NULL);",
             "CREATE INDEX IF NOT EXISTS ix_commission_order_buyer_id "
             "ON commission_order (buyer_id);",
-            "CREATE INDEX IF NOT EXISTS ix_commission_order_item_id "
-            "ON commission_order (item_id);",
             "ALTER TABLE commission_order ADD COLUMN fulfilled_quantity "
             "INTEGER DEFAULT 0;",
             "ALTER TABLE commission_order ADD COLUMN expire_at DATETIME "

@@ -6,6 +6,7 @@
 
 from datetime import datetime
 
+from liuying.configs.config import Config
 from liuying.liuying_plugins.economy.shop.inventory import ItemInventory
 from liuying.models._economy import ItemTemplate, PawnTicket
 from liuying.utils.log import logger
@@ -15,15 +16,13 @@ from liuying.utils.user import UserGold
 PAWN_DISCOUNT_RATE = 0.6
 # 默认利率（10%）
 DEFAULT_INTEREST_RATE = 0.1
-# 默认赎回期限天数
-REDEEM_DAYS = 7
 # 道具默认估价基准（无price字段时使用）
 DEFAULT_ITEM_PRICE = 100
 # 单次最大典当数量
 MAX_PAWN_QUANTITY = 99
 
-# 道具信息保留字段
-_ITEM_DATA_KEYS = (
+# 道具信息保留字段（从道具字典/背包数据中提取的元数据键）
+_ITEM_DATA_KEYS: tuple[str, ...] = (
     "name",
     "description",
     "type",
@@ -32,6 +31,8 @@ _ITEM_DATA_KEYS = (
     "description_color",
 )
 
+_PLUGIN_MODULE = "pawnshop"
+
 # 当票状态
 _STATUS_ACTIVE = "active"
 _STATUS_REDEEMED = "redeemed"
@@ -39,6 +40,15 @@ _STATUS_FORECLOSED = "foreclosed"
 
 # 历史当票状态集合
 _HISTORY_STATUSES = (_STATUS_REDEEMED, _STATUS_FORECLOSED)
+
+
+def _get_redeem_days() -> int:
+    """获取赎回期限天数
+
+    返回:
+        int: 赎回期限天数
+    """
+    return Config.get_config(_PLUGIN_MODULE, "PAWN_REDEEM_DAYS", 7)
 
 
 class PawnshopService:
@@ -111,7 +121,7 @@ class PawnshopService:
                 loan_amount=total_loan,
                 interest_rate=DEFAULT_INTEREST_RATE,
                 item_data=item_data,
-                redeem_days=REDEEM_DAYS,
+                redeem_days=_get_redeem_days(),
             )
         except Exception as e:
             await self.inventory.add(item_id, quantity)
@@ -136,7 +146,7 @@ class PawnshopService:
             f"借得金币: {total_loan:,}\n"
             f"赎回需支付: {redeem_amount:,}金币"
             f"（含利息{redeem_amount - total_loan:,}）\n"
-            f"赎回期限: {REDEEM_DAYS}天"
+            f"赎回期限: {_get_redeem_days()}天"
         )
 
     async def redeem_item(self, ticket_id: int) -> str:
@@ -211,12 +221,14 @@ class PawnshopService:
         返回:
             list[dict]: 历史当票字典列表
         """
-        tickets = await PawnTicket.filter(user_id=self.user_id).all()
-        history = [
-            t for t in tickets if t.status in _HISTORY_STATUSES
-        ]
-        history.sort(key=lambda t: t.pawn_at, reverse=True)
-        return [t.to_dict() for t in history]
+        tickets = await PawnTicket.filter(
+            PawnTicket.user_id == self.user_id,
+            PawnTicket.status.in_(_HISTORY_STATUSES),
+        ).all()
+        tickets = sorted(
+            tickets, key=lambda t: t.pawn_at, reverse=True
+        )
+        return [t.to_dict() for t in tickets]
 
     @classmethod
     async def process_expired(cls) -> int:

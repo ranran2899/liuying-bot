@@ -529,7 +529,7 @@ class BankHandler:
     ) -> None:
         """处理银行记录命令"""
         user_id = session.user.id
-        page_num = page.result if page.available else 1
+        page_num = page.result
 
         history_data = await InfoService.get_history(user_id, page_num)
 

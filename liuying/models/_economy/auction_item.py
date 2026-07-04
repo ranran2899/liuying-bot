@@ -32,18 +32,26 @@ class AuctionItem(Model):
     seller_id: Mapped[str] = mapped_column(
         String(255), nullable=False, index=True, comment="卖家用户ID"
     )
-    item_id: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True, comment="道具ID"
+    item_data: Mapped[str] = mapped_column(
+        Text, default="{}", comment="道具信息JSON（含id字段）"
     )
-    item_data: Mapped[str] = mapped_column(Text, default="{}", comment="道具信息JSON")
-    quantity: Mapped[int] = mapped_column(Integer, default=1, comment="上架数量")
-    price: Mapped[int] = mapped_column(Integer, default=0, comment="单价")
+    quantity: Mapped[int] = mapped_column(
+        Integer, default=1, comment="上架数量"
+    )
+    price: Mapped[int] = mapped_column(
+        Integer, default=0, comment="单价"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, comment="上架时间"
     )
     expire_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, default=None, comment="到期时间"
     )
+
+    @property
+    def item_id(self) -> str:
+        """道具ID（从item_data JSON的id字段读取）"""
+        return self.get_data().get("id", "")
 
     def get_data(self) -> dict:
         """解析道具信息JSON
@@ -57,7 +65,7 @@ class AuctionItem(Model):
         except (json.JSONDecodeError, TypeError):
             return {}
 
-    def set_data(self, data: dict):
+    def set_data(self, data: dict) -> None:
         """设置道具信息JSON
 
         参数:
@@ -77,7 +85,7 @@ class AuctionItem(Model):
             "quantity": self.quantity,
             "price": self.price,
             "seller_id": self.seller_id,
-            "item_id": self.item_id,
+            "item_id": data.get("id", ""),
             "source": "auction",
             "source_id": self.id,
             "expire_at": str(self.expire_at) if self.expire_at else None,
@@ -115,7 +123,7 @@ class AuctionItem(Model):
         if existing:
             existing.quantity += quantity
             existing.price = price
-            existing.set_data(item_data)
+            existing.set_data({"id": item_id, **item_data})
             existing.expire_at = expire_at
             await existing.save(
                 update_fields=["quantity", "price", "item_data", "expire_at"]
@@ -124,7 +132,6 @@ class AuctionItem(Model):
 
         await cls.create(
             seller_id=seller_id,
-            item_id=item_id,
             quantity=quantity,
             price=price,
             item_data=json.dumps({"id": item_id, **item_data}).decode(),
@@ -138,8 +145,6 @@ class AuctionItem(Model):
     ) -> "AuctionItem | None":
         """通过卖家ID和道具ID查找上架记录
 
-        先按seller_id在数据库层过滤，再在Python中匹配item_id
-
         参数:
             seller_id: 卖家用户ID
             item_id: 道具ID
@@ -148,7 +153,7 @@ class AuctionItem(Model):
             AuctionItem | None: 上架物品实例
         """
         items = await cls.filter(seller_id=seller_id).all()
-        return next((item for item in items if item.item_id == item_id), None)
+        return next((it for it in items if it.item_id == item_id), None)
 
     @classmethod
     async def get_user_items(cls, seller_id: str) -> list[dict]:
@@ -176,7 +181,9 @@ class AuctionItem(Model):
         return await cls.filter(seller_id=seller_id).count()
 
     @classmethod
-    async def reduce_quantity(cls, seller_id: str, item_id: str, quantity: int) -> bool:
+    async def reduce_quantity(
+        cls, seller_id: str, item_id: str, quantity: int
+    ) -> bool:
         """减少拍卖行物品数量，数量归零时自动删除记录
 
         参数:
@@ -260,8 +267,7 @@ class AuctionItem(Model):
             list[AuctionItem]: 已过期的物品列表
         """
         now = datetime.now()
-        all_items = await cls.filter().all()
-        return [item for item in all_items if item.expire_at and item.expire_at <= now]
+        return await cls.filter(cls.expire_at <= now).all()
 
     @classmethod
     async def get_all_items(cls) -> list[dict]:
@@ -305,7 +311,6 @@ class AuctionItem(Model):
             "CREATE TABLE IF NOT EXISTS auction_item ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
             "seller_id VARCHAR(255), "
-            "item_id VARCHAR(255), "
             "item_data TEXT DEFAULT '{}', "
             "quantity INTEGER DEFAULT 1, "
             "price INTEGER DEFAULT 0, "
@@ -313,8 +318,6 @@ class AuctionItem(Model):
             "expire_at DATETIME DEFAULT NULL);",
             "CREATE INDEX IF NOT EXISTS ix_auction_item_seller_id "
             "ON auction_item (seller_id);",
-            "CREATE INDEX IF NOT EXISTS ix_auction_item_item_id "
-            "ON auction_item (item_id);",
             "ALTER TABLE auction_item ADD COLUMN expire_at DATETIME "
             "DEFAULT NULL;",
         ]

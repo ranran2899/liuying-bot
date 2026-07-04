@@ -1,7 +1,7 @@
 """黑市插件 - 系统商店，定时刷新随机道具，匿名交易
 
 黑市商品由系统定时刷新，价格在原价基础上浮动，
-采用随机化名进行匿名交易，所有收入进入国库。
+采用随机化名进行匿名交易，所有收入进入金币库。
 """
 
 from nonebot.permission import SUPERUSER
@@ -50,39 +50,34 @@ refresh_cmd = on_alconna(
 )
 
 
-def _resolve_quantity(match: Match[int]) -> int:
-    """从Match中解析数量，未提供时默认为1
+class BlackMarketRenderer:
+    """黑市商品文本渲染器
 
-    参数:
-        match: Alconna Match对象
-
-    返回:
-        int: 有效数量（最小为1）
+    将黑市商品列表格式化为多行文本展示。
     """
-    return max(1, match.result) if match.available else 1
 
+    @staticmethod
+    def format_items(items: list[dict]) -> str:
+        """格式化黑市商品列表为多行文本
 
-def _format_items(items: list[dict]) -> str:
-    """格式化黑市商品列表为多行文本
+        参数:
+            items: 黑市商品字典列表
 
-    参数:
-        items: 黑市商品字典列表
-
-    返回:
-        str: 多行文本展示
-    """
-    if not items:
-        return "黑市暂无商品上架"
-    lines = ["===== 黑市商品列表 ====="]
-    for idx, item in enumerate(items, start=1):
-        name = item.get("name", "未知道具")
-        quantity = item.get("quantity", 0)
-        price = item.get("price", 0)
-        seller = item.get("seller_name", "神秘商人")
-        lines.append(
-            f"{idx}. {name} x{quantity} - {price:,}金币 [{seller}]"
-        )
-    return "\n".join(lines)
+        返回:
+            str: 多行文本展示
+        """
+        if not items:
+            return "黑市暂无商品上架"
+        lines = ["===== 黑市商品列表 ====="]
+        for idx, item in enumerate(items, start=1):
+            name = item.get("name", "未知道具")
+            quantity = item.get("quantity", 0)
+            price = item.get("price", 0)
+            seller = item.get("seller_name", "神秘商人")
+            lines.append(
+                f"{idx}. {name} x{quantity} - {price:,}金币 [{seller}]"
+            )
+        return "\n".join(lines)
 
 
 @blackmarket_cmd.handle()
@@ -94,14 +89,16 @@ async def _(session: Uninfo):
     service = BlackMarketService(user_id)
     items = await service.get_all_items()
 
-    await MessageUtils.build_message(_format_items(items)).finish()
+    await MessageUtils.build_message(
+        BlackMarketRenderer.format_items(items)
+    ).finish()
 
 
 @buy_cmd.handle()
 async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
     """购买黑市商品"""
     user_id = session.user.id
-    buy_qty = _resolve_quantity(quantity)
+    buy_qty = quantity.result
 
     logger.info(
         f"黑市购买: {item_keyword} x {buy_qty}", "黑市购买", session=session

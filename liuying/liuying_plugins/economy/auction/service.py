@@ -8,24 +8,27 @@ from dataclasses import dataclass
 
 from liuying.configs.config import Config
 from liuying.liuying_plugins.economy.shop.inventory import ItemInventory
-from liuying.liuying_plugins.economy.trading import (
-    VenueItem,
-    find_venue_items,
-    get_all_venue_items,
-    reduce_venue_quantity,
-)
-from liuying.models._economy import ItemTemplate
+from liuying.liuying_plugins.economy.trading import VenueAggregator, VenueItem
+from liuying.models._economy import AuctionItem, AuctionTransaction, ItemTemplate
 from liuying.models.treasury import Treasury
 from liuying.utils.log import logger
 from liuying.utils.user import UserGold
-
-from liuying.models._economy import AuctionItem, AuctionTransaction
 
 MAX_USER_LISTED_TYPES = 5
 MAX_ITEM_QUANTITY = 99
 MAX_ITEM_PRICE = 1_000_000
 PAGE_SIZE = 20
 MAX_SEARCH_RESULTS = 20
+
+# 道具信息保留字段（从道具字典/背包数据中提取的元数据键）
+_ITEM_DATA_KEYS: tuple[str, ...] = (
+    "name",
+    "description",
+    "type",
+    "image_url",
+    "name_color",
+    "description_color",
+)
 
 _PLUGIN_MODULE = "auction"
 
@@ -55,16 +58,6 @@ def _get_max_expire_days() -> int:
         int: 最大到期天数
     """
     return Config.get_config(_PLUGIN_MODULE, "AUCTION_MAX_EXPIRE_DAYS", 30)
-
-
-_ITEM_DATA_KEYS = (
-    "name",
-    "description",
-    "type",
-    "image_url",
-    "name_color",
-    "description_color",
-)
 
 
 @dataclass(slots=True)
@@ -119,21 +112,6 @@ class ChangePriceResult:
     message: str = ""
 
 
-def _match_keyword(item: dict, keyword: str) -> bool:
-    """检查物品是否匹配关键字（精确ID/名称或模糊名称匹配）
-
-    参数:
-        item: 物品信息字典
-        keyword: 搜索关键字
-
-    返回:
-        bool: 是否匹配
-    """
-    item_id = item.get("id", "")
-    item_name = item.get("name", "")
-    return keyword == item_id or keyword == item_name or keyword in item_name
-
-
 def _sort_by_price_desc(items: list[dict]) -> list[dict]:
     """按价格降序排列物品列表
 
@@ -171,6 +149,27 @@ class AuctionService:
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.inventory = ItemInventory(user_id)
+
+    @staticmethod
+    def _match_keyword(item: dict, keyword: str) -> bool:
+        """检查物品是否匹配关键字（精确 ID/名称或模糊名称匹配）
+
+        兼容 id 与 item_id 两种字段命名。
+
+        参数:
+            item: 物品信息字典
+            keyword: 搜索关键字
+
+        返回:
+            bool: 是否匹配
+        """
+        item_id = item.get("id", "") or item.get("item_id", "")
+        item_name = item.get("name", "")
+        return (
+            keyword == item_id
+            or keyword == item_name
+            or keyword in item_name
+        )
 
     async def list_item(
         self,
@@ -275,7 +274,7 @@ class AuctionService:
         if quantity <= 0:
             return BuyResult(message="购买数量必须大于0")
 
-        listings = await find_venue_items(item_keyword)
+        listings = await VenueAggregator.find_venue_items(item_keyword)
         if not listings:
             return BuyResult(message=f"拍卖行中没有'{item_keyword}'")
 
@@ -313,7 +312,16 @@ class AuctionService:
 
         await UserGold.reduce_user_gold(self.user_id, total_payment)
 
-        item_name = await self._execute_purchase(purchase_plan, fee_rate)
+        try:
+            item_name = await self._execute_purchase(
+                purchase_plan, fee_rate
+            )
+        except Exception as e:
+            await UserGold.add_user_gold(
+                self.user_id, total_payment, source="拍卖行购买失败退还"
+            )
+            logger.error(f"拍卖行购买执行失败，已退还金币: {e}", "拍卖行购买")
+            return BuyResult(message="购买过程中发生错误，金币已退还")
 
         await Treasury.increase_treasury_money(fee, "gold_treasury")
 
@@ -387,7 +395,7 @@ class AuctionService:
             )
             await self.inventory.add(item_id, buy_qty)
 
-            await reduce_venue_quantity(listing, buy_qty)
+            await VenueAggregator.reduce_venue_quantity(listing, buy_qty)
 
             await AuctionTransaction.record_transaction(
                 buyer_id=self.user_id,
@@ -418,7 +426,7 @@ class AuctionService:
 
         auction_items = await AuctionItem.get_user_items(self.user_id)
         matched = [
-            item for item in auction_items if _match_keyword(item, item_keyword)
+            item for item in auction_items if self._match_keyword(item, item_keyword)
         ]
         if not matched:
             return DelistResult(message=f"你在拍卖行没有上架'{item_keyword}'")
@@ -466,7 +474,7 @@ class AuctionService:
 
         auction_items = await AuctionItem.get_user_items(self.user_id)
         matched = [
-            item for item in auction_items if _match_keyword(item, item_keyword)
+            item for item in auction_items if self._match_keyword(item, item_keyword)
         ]
         if not matched:
             return ChangePriceResult(
@@ -537,7 +545,7 @@ class AuctionService:
         返回:
             list[dict]: 按价格升序排列的物品列表
         """
-        items = await find_venue_items(item_keyword)
+        items = await VenueAggregator.find_venue_items(item_keyword)
         all_items = [item.to_dict() for item in items]
         return _sort_by_price_asc(all_items)
 
@@ -549,7 +557,7 @@ class AuctionService:
         返回:
             list[dict]: 所有上架物品列表
         """
-        items = await get_all_venue_items()
+        items = await VenueAggregator.get_all_venue_items()
         all_items = [item.to_dict() for item in items]
         return _sort_by_price_desc(all_items)
 
@@ -562,7 +570,7 @@ class AuctionService:
         返回:
             list[dict]: 匹配的物品列表，最多返回MAX_SEARCH_RESULTS条
         """
-        items = await find_venue_items(keyword)
+        items = await VenueAggregator.find_venue_items(keyword)
         all_items = [item.to_dict() for item in items]
         all_items = _sort_by_price_desc(all_items)
         return all_items[:MAX_SEARCH_RESULTS]

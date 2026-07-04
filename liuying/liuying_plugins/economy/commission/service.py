@@ -4,6 +4,7 @@
 求购单创建时预扣金币，取消或过期时退还冻结金币。
 """
 
+from liuying.configs.config import Config
 from liuying.liuying_plugins.economy.shop.inventory import ItemInventory
 from liuying.models._economy import CommissionOrder, ItemTemplate
 from liuying.utils.log import logger
@@ -12,9 +13,9 @@ from liuying.utils.user import UserGold
 MAX_USER_ORDER_TYPES = 5
 MAX_ITEM_QUANTITY = 99
 MAX_ITEM_PRICE = 1_000_000
-COMMISSION_EXPIRE_DAYS = 3
 
-_ITEM_DATA_KEYS = (
+# 道具信息保留字段（从道具字典/背包数据中提取的元数据键）
+_ITEM_DATA_KEYS: tuple[str, ...] = (
     "name",
     "description",
     "type",
@@ -23,24 +24,16 @@ _ITEM_DATA_KEYS = (
     "description_color",
 )
 
+_PLUGIN_MODULE = "commission"
 
-def _match_keyword(item: dict, keyword: str) -> bool:
-    """检查物品是否匹配关键字（精确ID/名称或模糊名称匹配）
 
-    参数:
-        item: 物品信息字典
-        keyword: 搜索关键字
+def _get_expire_days() -> int:
+    """获取求购单到期天数
 
     返回:
-        bool: 是否匹配
+        int: 到期天数
     """
-    item_id = item.get("id", "") or item.get("item_id", "")
-    item_name = item.get("name", "")
-    return (
-        keyword == item_id
-        or keyword == item_name
-        or keyword in item_name
-    )
+    return Config.get_config(_PLUGIN_MODULE, "COMMISSION_EXPIRE_DAYS", 3)
 
 
 class CommissionService:
@@ -54,6 +47,27 @@ class CommissionService:
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.inventory = ItemInventory(user_id)
+
+    @staticmethod
+    def _match_keyword(item: dict, keyword: str) -> bool:
+        """检查物品是否匹配关键字（精确 ID/名称或模糊名称匹配）
+
+        兼容 id 与 item_id 两种字段命名。
+
+        参数:
+            item: 物品信息字典
+            keyword: 搜索关键字
+
+        返回:
+            bool: 是否匹配
+        """
+        item_id = item.get("id", "") or item.get("item_id", "")
+        item_name = item.get("name", "")
+        return (
+            keyword == item_id
+            or keyword == item_name
+            or keyword in item_name
+        )
 
     async def place_order(
         self, item_keyword: str, unit_price: int, quantity: int
@@ -133,7 +147,7 @@ class CommissionService:
             quantity=quantity,
             unit_price=unit_price,
             item_data=item_data,
-            expire_days=COMMISSION_EXPIRE_DAYS,
+            expire_days=_get_expire_days(),
         )
 
         if not success:
@@ -245,15 +259,25 @@ class CommissionService:
 
         await self.inventory.reduce(item_id, total_sold)
 
-        for order, qty in plan:
-            buyer_id = order.get("buyer_id", "")
-            unit_price = order.get("unit_price", 0)
-            await UserGold.add_user_gold(
-                self.user_id,
-                unit_price * qty,
-                source="求购出售",
-            )
-            await CommissionOrder.fulfill(buyer_id, item_id, qty)
+        sold_count = 0
+        try:
+            for order, qty in plan:
+                buyer_id = order.get("buyer_id", "")
+                unit_price = order.get("unit_price", 0)
+                await UserGold.add_user_gold(
+                    self.user_id,
+                    unit_price * qty,
+                    source="求购出售",
+                )
+                await CommissionOrder.fulfill(buyer_id, item_id, qty)
+                sold_count += qty
+        except Exception as e:
+            if sold_count < total_sold:
+                await self.inventory.add(
+                    item_id, total_sold - sold_count
+                )
+            logger.error(f"求购出售执行失败，已退还剩余道具: {e}", "求购出售")
+            return "出售过程中发生错误，剩余道具已退还"
 
         logger.info(
             f"求购出售: {item_name} x {total_sold}, "
@@ -320,7 +344,7 @@ class CommissionService:
             self.user_id
         )
         matched = [
-            o for o in user_orders if _match_keyword(o, item_keyword)
+            o for o in user_orders if self._match_keyword(o, item_keyword)
         ]
         if not matched:
             return f"你没有发布'{item_keyword}'的求购单"

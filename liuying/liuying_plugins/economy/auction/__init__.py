@@ -13,12 +13,7 @@ from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
-from .render import (
-    render_auction,
-    render_my_auctions,
-    render_price_compare,
-    render_transaction_history,
-)
+from .render import AuctionRenderer
 from .service import AuctionService
 
 __plugin_meta__ = PluginMetadata(
@@ -139,18 +134,6 @@ compare_price_cmd = on_alconna(
 )
 
 
-def _resolve_quantity(match: Match[int]) -> int:
-    """从Match中解析数量，未提供时默认为1
-
-    参数:
-        match: Alconna Match对象
-
-    返回:
-        int: 有效数量（最小为1）
-    """
-    return max(1, match.result) if match.available else 1
-
-
 @auction_cmd.handle()
 async def _(session: Uninfo):
     """查看拍卖行第一页"""
@@ -163,7 +146,7 @@ async def _(session: Uninfo):
     if not items:
         await MessageUtils.build_message("拍卖行暂无物品上架").finish()
 
-    image = await render_auction(user_id, items, page, total_pages)
+    image = await AuctionRenderer.render_auction(user_id, items, page, total_pages)
     await MessageUtils.build_message(image).finish()
 
 
@@ -171,7 +154,7 @@ async def _(session: Uninfo):
 async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
     """从拍卖行购买物品"""
     user_id = session.user.id
-    buy_qty = _resolve_quantity(quantity)
+    buy_qty = quantity.result
 
     logger.info(
         f"拍卖行购买: {item_keyword} x {buy_qty}", "拍卖行购买", session=session
@@ -188,7 +171,7 @@ async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
 async def _(session: Uninfo, item_keyword: str, price: int, quantity: Match[int]):
     """在拍卖行上架物品"""
     user_id = session.user.id
-    list_qty = _resolve_quantity(quantity)
+    list_qty = quantity.result
 
     logger.info(
         f"拍卖行上架: {item_keyword}, 价格: {price}, 数量: {list_qty}",
@@ -238,7 +221,9 @@ async def _(session: Uninfo, page: int, item_name: Match[str]):
             f"页码超出范围，当前共{total_pages}页"
         ).finish()
 
-    image = await render_auction(user_id, items, current_page, total_pages, keyword)
+    image = await AuctionRenderer.render_auction(
+        user_id, items, current_page, total_pages, keyword
+    )
     await MessageUtils.build_message(image).finish()
 
 
@@ -259,7 +244,9 @@ async def _(session: Uninfo, item_name: str):
         ).finish()
 
     total_pages = max(1, (len(results) + 19) // 20)
-    image = await render_auction(user_id, results, 1, total_pages, keyword)
+    image = await AuctionRenderer.render_auction(
+        user_id, results, 1, total_pages, keyword
+    )
     await MessageUtils.build_message(image).finish()
 
 
@@ -267,7 +254,7 @@ async def _(session: Uninfo, item_name: str):
 async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
     """下架拍卖行物品"""
     user_id = session.user.id
-    delist_qty = _resolve_quantity(quantity)
+    delist_qty = quantity.result
 
     logger.info(
         f"拍卖行下架: {item_keyword} x {delist_qty}",
@@ -312,7 +299,7 @@ async def _(session: Uninfo):
     if not items:
         await MessageUtils.build_message("你在拍卖行没有上架物品").finish()
 
-    image = await render_my_auctions(user_id, items)
+    image = await AuctionRenderer.render_my_auctions(user_id, items)
     await MessageUtils.build_message(image).finish()
 
 
@@ -320,7 +307,7 @@ async def _(session: Uninfo):
 async def _(session: Uninfo, page: Match[int]):
     """查看交易记录"""
     user_id = session.user.id
-    page_num = _resolve_quantity(page)
+    page_num = page.result
 
     logger.info(
         f"拍卖行记录: 第{page_num}页", "拍卖行记录", session=session
@@ -332,7 +319,7 @@ async def _(session: Uninfo, page: Match[int]):
     if not records:
         await MessageUtils.build_message("暂无交易记录").finish()
 
-    image = await render_transaction_history(user_id, records)
+    image = await AuctionRenderer.render_transaction_history(user_id, records)
     await MessageUtils.build_message(image).finish()
 
 
@@ -354,7 +341,7 @@ async def _(session: Uninfo, item_keyword: str):
             f"没有找到与'{keyword}'相关的物品"
         ).finish()
 
-    image = await render_price_compare(user_id, items, keyword)
+    image = await AuctionRenderer.render_price_compare(user_id, items, keyword)
     await MessageUtils.build_message(image).finish()
 
 

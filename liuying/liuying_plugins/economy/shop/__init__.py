@@ -72,12 +72,12 @@ store_cmd = on_alconna(
     block=True,
 )
 buy_cmd = on_alconna(
-    Alconna("购买道具", Args["item_id", str], Args["quantity?", int]),
+    Alconna("购买道具", Args["item_id", str], Args["quantity?", int, 1]),
     priority=500,
     block=True,
 )
 use_cmd = on_alconna(
-    Alconna("使用道具", Args["item_id", str], Args["quantity?", int]),
+    Alconna("使用道具", Args["item_id", str], Args["quantity?", int, 1]),
     priority=500,
     block=True,
 )
@@ -102,7 +102,7 @@ list_item_cmd = on_alconna(
         "商店上架",
         Args["item_keyword", str],
         Args["price", int],
-        Args["quantity?", int],
+        Args["quantity?", int, 1],
     ),
     priority=500,
     block=True,
@@ -112,7 +112,7 @@ buy_shop_cmd = on_alconna(
         "商店购买",
         Args["shop_name", str],
         Args["item_keyword", str],
-        Args["quantity?", int],
+        Args["quantity?", int, 1],
     ),
     priority=500,
     block=True,
@@ -121,7 +121,7 @@ delist_cmd = on_alconna(
     Alconna(
         "商店下架",
         Args["item_keyword", str],
-        Args["quantity?", int],
+        Args["quantity?", int, 1],
     ),
     priority=500,
     block=True,

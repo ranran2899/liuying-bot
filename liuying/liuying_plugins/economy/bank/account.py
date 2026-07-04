@@ -1,7 +1,8 @@
 import asyncio
 from datetime import datetime, timedelta
-import json
 import random
+
+import orjson as json
 
 from liuying.models._log.bank_log import BankLog
 from liuying.models._user.bank_user import BankUser
@@ -277,7 +278,7 @@ class AccountService:
             "period_days": period_days,
         }
 
-        bank_user.fixed_deposits = json.dumps(deposits)
+        bank_user.fixed_deposits = json.dumps(deposits).decode()
         bank_user.update_time = datetime.now()
         await bank_user.save()
 
@@ -354,7 +355,7 @@ class AccountService:
             if matured_ids:
                 for dep_id in matured_ids:
                     del deposits[dep_id]
-                bank_user.fixed_deposits = json.dumps(deposits)
+                bank_user.fixed_deposits = json.dumps(deposits).decode()
                 bank_user.update_time = datetime.now()
                 await bank_user.save()
 

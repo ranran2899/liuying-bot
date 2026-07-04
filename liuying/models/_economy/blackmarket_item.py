@@ -29,11 +29,8 @@ class BlackMarketItem(Model):
     id: Mapped[int] = mapped_column(
         primary_key=True, autoincrement=True, comment="自增id"
     )
-    item_id: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True, comment="道具ID"
-    )
     item_data: Mapped[str] = mapped_column(
-        Text, default="{}", comment="道具信息JSON"
+        Text, default="{}", comment="道具信息JSON（含id字段）"
     )
     quantity: Mapped[int] = mapped_column(
         Integer, default=1, comment="库存数量"
@@ -50,6 +47,11 @@ class BlackMarketItem(Model):
     seller_name: Mapped[str] = mapped_column(
         String(255), default="神秘商人", comment="卖家化名"
     )
+
+    @property
+    def item_id(self) -> str:
+        """道具ID（从item_data JSON的id字段读取）"""
+        return self.get_data().get("id", "")
 
     def get_data(self) -> dict:
         """解析道具信息JSON
@@ -87,7 +89,7 @@ class BlackMarketItem(Model):
                 str(self.refreshed_at) if self.refreshed_at else None
             ),
             "seller_name": self.seller_name,
-            "item_id": self.item_id,
+            "item_id": data.get("id", ""),
             "source": "blackmarket",
             "source_id": self.id,
         }
@@ -135,17 +137,15 @@ class BlackMarketItem(Model):
         返回:
             bool: 是否减少成功
         """
-        items = await cls.filter(item_id=item_id).all()
-        if not items:
+        items = await cls.filter().all()
+        target = next((it for it in items if it.item_id == item_id), None)
+        if not target or target.quantity < quantity:
             return False
-        item = items[0]
-        if item.quantity < quantity:
-            return False
-        item.quantity -= quantity
-        if item.quantity <= 0:
-            await item.delete()
+        target.quantity -= quantity
+        if target.quantity <= 0:
+            await target.delete()
         else:
-            await item.save(update_fields=["quantity"])
+            await target.save(update_fields=["quantity"])
         return True
 
     @classmethod
@@ -184,7 +184,6 @@ class BlackMarketItem(Model):
         """
         base_price = int(item_data.get("price", price))
         return await cls.create(
-            item_id=item_id,
             item_data=json.dumps({"id": item_id, **item_data}).decode(),
             quantity=quantity,
             price=price,
@@ -198,15 +197,12 @@ class BlackMarketItem(Model):
         return [
             "CREATE TABLE IF NOT EXISTS blackmarket_item ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "item_id VARCHAR(255), "
             "item_data TEXT DEFAULT '{}', "
             "quantity INTEGER DEFAULT 1, "
             "price INTEGER DEFAULT 0, "
             "base_price INTEGER DEFAULT 0, "
             "refreshed_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
             "seller_name VARCHAR(255) DEFAULT '神秘商人');",
-            "CREATE INDEX IF NOT EXISTS ix_blackmarket_item_item_id "
-            "ON blackmarket_item (item_id);",
             "ALTER TABLE blackmarket_item ADD COLUMN base_price "
             "INTEGER DEFAULT 0;",
             "ALTER TABLE blackmarket_item ADD COLUMN seller_name "

@@ -92,8 +92,8 @@ class ShopService:
         返回:
             ListResult: 上架结果
         """
-        if price < 0:
-            return ListResult(error="上架价格不能为负数")
+        if price <= 0:
+            return ListResult(error="上架价格必须大于0")
         if price > MAX_SHOP_ITEM_PRICE:
             return ListResult(error=f"上架价格不能超过{MAX_SHOP_ITEM_PRICE:,}金币")
         if quantity <= 0:
@@ -196,8 +196,8 @@ class ShopService:
         返回:
             ListResult: 修改结果
         """
-        if new_price < 0:
-            return ListResult(error="价格不能为负数")
+        if new_price <= 0:
+            return ListResult(error="价格必须大于0")
         if new_price > MAX_SHOP_ITEM_PRICE:
             return ListResult(error=f"价格不能超过{MAX_SHOP_ITEM_PRICE:,}金币")
 
