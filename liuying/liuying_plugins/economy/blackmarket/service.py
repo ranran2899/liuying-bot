@@ -8,7 +8,8 @@
 import random
 
 from liuying.liuying_plugins.economy.shop.inventory import ItemInventory
-from liuying.models._economy import BlackMarketItem, ItemTemplate
+from liuying.liuying_plugins.economy.shop.template import TemplateRepository
+from liuying.models._economy import BlackMarketItem
 from liuying.models.treasury import Treasury
 from liuying.utils.log import logger
 from liuying.utils.user import UserGold
@@ -39,21 +40,15 @@ class BlackMarketService:
     """黑市系统商店服务类
 
     处理黑市商品的购买、查询和定时刷新逻辑。
-    黑市商品由系统随机刷新，价格在原价基础上浮动，
-    匿名交易，收入进入国库。
-
-    参数:
-        user_id: 用户ID
+    所有业务方法均为静态方法，直接接收 user_id 参数。
     """
 
-    def __init__(self, user_id: str):
-        self.user_id = user_id
-        self.inventory = ItemInventory(user_id)
-
-    async def buy_item(self, item_keyword: str, quantity: int) -> str:
+    @staticmethod
+    async def buy_item(user_id: str, item_keyword: str, quantity: int) -> str:
         """购买黑市商品
 
         参数:
+            user_id: 用户 ID
             item_keyword: 道具名称或ID
             quantity: 购买数量
 
@@ -77,33 +72,33 @@ class BlackMarketService:
             return f"黑市中'{item_name}'库存不足，当前库存：{stock}"
 
         total_cost = unit_price * quantity
-        current_gold = await UserGold.get_user_gold(self.user_id)
+        current_gold = await UserGold.get_user_gold(user_id)
         if current_gold < total_cost:
             return (
                 f"金币不足! 需要{total_cost:,}金币，"
                 f"当前有{current_gold:,}金币"
             )
 
-        reduced = await UserGold.reduce_user_gold(self.user_id, total_cost)
+        reduced = await UserGold.reduce_user_gold(user_id, total_cost)
         if not reduced:
             return f"金币不足! 需要{total_cost:,}金币"
 
-        add_ok = await self.inventory.add(item_id, quantity)
+        add_ok = await ItemInventory.add(user_id, item_id, quantity)
         if not add_ok:
-            await UserGold.add_user_gold(self.user_id, total_cost)
+            await UserGold.add_user_gold(user_id, total_cost)
             return "购买失败，道具入背包失败，金币已返还"
 
         ok = await BlackMarketItem.reduce_quantity(item_id, quantity)
         if not ok:
-            await UserGold.add_user_gold(self.user_id, total_cost)
+            await UserGold.add_user_gold(user_id, total_cost)
             return "购买失败，库存减少失败，金币已返还"
 
         await Treasury.increase_treasury_money(total_cost, _TREASURY_NAME)
 
-        updated_gold = await UserGold.get_user_gold(self.user_id)
+        updated_gold = await UserGold.get_user_gold(user_id)
         logger.info(
             f"黑市购买: {item_name} x {quantity}, "
-            f"花费: {total_cost}, 买家: {self.user_id}",
+            f"花费: {total_cost}, 买家: {user_id}",
             "黑市购买",
         )
         return (
@@ -111,7 +106,8 @@ class BlackMarketService:
             f"花费{total_cost:,}金币\n剩余金币: {updated_gold:,}"
         )
 
-    async def get_all_items(self) -> list[dict]:
+    @staticmethod
+    async def get_all_items() -> list[dict]:
         """获取所有黑市商品
 
         返回:
@@ -119,7 +115,8 @@ class BlackMarketService:
         """
         return await BlackMarketItem.get_all_items()
 
-    async def search_items(self, keyword: str) -> list[dict]:
+    @staticmethod
+    async def search_items(keyword: str) -> list[dict]:
         """搜索黑市商品
 
         参数:
@@ -143,7 +140,7 @@ class BlackMarketService:
         """
         cleared = await BlackMarketItem.clear_all()
 
-        templates = await ItemTemplate.filter().all()
+        templates = await TemplateRepository.get_all()
         if not templates:
             logger.warning("黑市刷新失败: 没有可用的道具模板", "黑市刷新")
             return "黑市刷新失败，系统中没有可用的道具模板"
@@ -155,8 +152,7 @@ class BlackMarketService:
         chosen = random.sample(list(templates), target)
 
         added = 0
-        for template in chosen:
-            data = template.get_data()
+        for data in chosen:
             item_id = data.get("id", "")
             if not item_id:
                 continue
@@ -172,9 +168,8 @@ class BlackMarketService:
                 "name": data.get("name", ""),
                 "description": data.get("description", ""),
                 "type": data.get("type", ""),
+                "rarity": data.get("rarity", 1),
                 "image_url": data.get("image_url", ""),
-                "name_color": data.get("name_color", ""),
-                "description_color": data.get("description_color", ""),
                 "price": base_price,
             }
             await BlackMarketItem.add_item(

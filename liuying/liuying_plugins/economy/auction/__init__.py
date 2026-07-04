@@ -140,8 +140,7 @@ async def _(session: Uninfo):
     user_id = session.user.id
     logger.info("查看拍卖行", "拍卖行", session=session)
 
-    service = AuctionService(user_id)
-    items, total_pages, page = await service.get_items_page(page=1)
+    items, total_pages, page = await AuctionService.get_items_page(page=1)
 
     if not items:
         await MessageUtils.build_message("拍卖行暂无物品上架").finish()
@@ -160,8 +159,7 @@ async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
         f"拍卖行购买: {item_keyword} x {buy_qty}", "拍卖行购买", session=session
     )
 
-    service = AuctionService(user_id)
-    result = await service.buy_item(item_keyword, buy_qty)
+    result = await AuctionService.buy_item(user_id, item_keyword, buy_qty)
 
     msg = result.message if result.success else f"购买失败: {result.message}"
     await MessageUtils.build_message(msg).finish()
@@ -179,8 +177,9 @@ async def _(session: Uninfo, item_keyword: str, price: int, quantity: Match[int]
         session=session,
     )
 
-    service = AuctionService(user_id)
-    result = await service.list_item(item_keyword, price, list_qty)
+    result = await AuctionService.list_item(
+        user_id, item_keyword, price, list_qty
+    )
 
     if result.error:
         await MessageUtils.build_message(f"上架失败: {result.error}").finish()
@@ -203,8 +202,7 @@ async def _(session: Uninfo, page: int, item_name: Match[str]):
         session=session,
     )
 
-    service = AuctionService(user_id)
-    items, total_pages, current_page = await service.get_items_page(
+    items, total_pages, current_page = await AuctionService.get_items_page(
         page=page, keyword=keyword
     )
 
@@ -235,8 +233,7 @@ async def _(session: Uninfo, item_name: str):
 
     logger.info(f"拍卖行搜索: {keyword}", "拍卖行搜索", session=session)
 
-    service = AuctionService(user_id)
-    results = await service.search_items(keyword)
+    results = await AuctionService.search_items(keyword)
 
     if not results:
         await MessageUtils.build_message(
@@ -262,8 +259,9 @@ async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
         session=session,
     )
 
-    service = AuctionService(user_id)
-    result = await service.delist_item(item_keyword, delist_qty)
+    result = await AuctionService.delist_item(
+        user_id, item_keyword, delist_qty
+    )
 
     msg = result.message if result.success else f"下架失败: {result.message}"
     await MessageUtils.build_message(msg).finish()
@@ -280,8 +278,9 @@ async def _(session: Uninfo, item_keyword: str, new_price: int):
         session=session,
     )
 
-    service = AuctionService(user_id)
-    result = await service.change_price(item_keyword, new_price)
+    result = await AuctionService.change_price(
+        user_id, item_keyword, new_price
+    )
 
     msg = result.message if result.success else f"改价失败: {result.message}"
     await MessageUtils.build_message(msg).finish()
@@ -293,8 +292,7 @@ async def _(session: Uninfo):
     user_id = session.user.id
     logger.info("我的拍卖", "我的拍卖", session=session)
 
-    service = AuctionService(user_id)
-    items = await service.get_my_auctions()
+    items = await AuctionService.get_my_auctions(user_id)
 
     if not items:
         await MessageUtils.build_message("你在拍卖行没有上架物品").finish()
@@ -313,8 +311,9 @@ async def _(session: Uninfo, page: Match[int]):
         f"拍卖行记录: 第{page_num}页", "拍卖行记录", session=session
     )
 
-    service = AuctionService(user_id)
-    records = await service.get_transaction_history(limit=20)
+    records = await AuctionService.get_transaction_history(
+        user_id, limit=20
+    )
 
     if not records:
         await MessageUtils.build_message("暂无交易记录").finish()
@@ -333,8 +332,7 @@ async def _(session: Uninfo, item_keyword: str):
         f"拍卖行比价: {keyword}", "拍卖行比价", session=session
     )
 
-    service = AuctionService(user_id)
-    items = await service.compare_prices(keyword)
+    items = await AuctionService.compare_prices(keyword)
 
     if not items:
         await MessageUtils.build_message(

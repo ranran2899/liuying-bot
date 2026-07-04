@@ -40,7 +40,7 @@
                 </div>
                 <div class="category-content">
                     {% for item in plugin['items'] %}
-                    <div class="function-item {% if item.custom_class %}{{item.custom_class}}{% endif %}" {% if item.inline_style %}style="{{item.inline_style}}"{% endif %}>
+                    <div class="function-item rarity-{{item.rarity}} {% if item.custom_class %}{{item.custom_class}}{% endif %}" style="border-left-color: {{item.rarity_border}}; {% if item.rarity >= 4 %}box-shadow: 0 0 6px {{item.rarity_glow}};{% endif %} {% if item.inline_style %}{{item.inline_style}}{% endif %}">
                         {% if item.image_url %}
                         <div class="item-icon">
                             {% if item.image_url.startswith('http') or item.image_url.startswith('file://') %}
@@ -53,8 +53,13 @@
                         <div class="item-icon"><div class="gem-icon"></div></div>
                         {% endif %}
                         <div class="item-info">
-                            <div class="item-name" {% if item.name_color %}style="color: {{item.name_color}}"{% endif %}>{{item.name}}</div>
-                            <div class="item-description" {% if item.description_color %}style="color: {{item.description_color}}"{% endif %}>{{item.description}}</div>
+                            <div class="item-name-row">
+                                <span class="item-name" style="color: {{item.name_color}}">{{item.name}}</span>
+                                {% if item.rarity_label and item.rarity > 1 %}
+                                <span class="rarity-badge" style="background: {{item.rarity_border}}">{{item.rarity_label}}</span>
+                                {% endif %}
+                            </div>
+                            <div class="item-description" style="color: {{item.description_color}}">{{item.description}}</div>
                             <div class="item-meta">
                                 {% if item.discount != 100 %}
                                 <span class="item-price discounted">

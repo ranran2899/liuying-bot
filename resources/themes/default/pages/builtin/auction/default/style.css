@@ -158,6 +158,8 @@ body {
   border-radius: 4px;
   font-size: 11px;
   border-bottom: 1px solid rgba(224, 216, 240, 0.4);
+  border-left: 3px solid transparent;
+  transition: border-left-color 0.2s;
 }
 
 .item-row:nth-child(odd) {
@@ -166,6 +168,42 @@ body {
 
 .item-row:nth-child(even) {
   background: var(--color-row-even);
+}
+
+/* 稀有度等级样式：rarity-2 至 rarity-5 对应稀有至稀世 */
+.item-row.rarity-2 {
+  background: rgba(76, 175, 80, 0.06);
+}
+
+.item-row.rarity-3 {
+  background: rgba(156, 39, 176, 0.06);
+}
+
+.item-row.rarity-4 {
+  background: rgba(255, 152, 0, 0.08);
+}
+
+.item-row.rarity-5 {
+  background: rgba(244, 67, 54, 0.10);
+}
+
+.item-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rarity-badge {
+  display: inline-block;
+  color: white;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: bold;
+  line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .item-num {

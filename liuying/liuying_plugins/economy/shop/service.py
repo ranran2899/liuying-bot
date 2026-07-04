@@ -48,18 +48,15 @@ class ListResult:
 class ShopService:
     """商店管理服务
 
-    参数:
-        user_id: 操作用户 ID
+    所有方法均为静态方法，直接接收 user_id 参数。
     """
 
-    def __init__(self, user_id: str):
-        self.user_id = user_id
-        self.inventory = ItemInventory(user_id)
-
-    async def create_shop(self, shop_name: str) -> str | None:
+    @staticmethod
+    async def create_shop(user_id: str, shop_name: str) -> str | None:
         """创建用户商店
 
         参数:
+            user_id: 用户 ID
             shop_name: 商店名称
 
         返回:
@@ -69,22 +66,24 @@ class ShopService:
             return "商店名称不能为空"
         if len(shop_name) > MAX_SHOP_NAME_LENGTH:
             return f"商店名称不能超过{MAX_SHOP_NAME_LENGTH}个字符"
-        if await Shop.filter(owner_id=self.user_id).exists():
+        if await Shop.filter(owner_id=user_id).exists():
             return "你已经有商店了，每人只能创建一个"
         if await Shop.filter(shop_name=shop_name).exists():
             return f"商店名称'{shop_name}'已被使用"
 
-        success = await Shop.create_shop(shop_name, self.user_id)
+        success = await Shop.create_shop(shop_name, user_id)
         if not success:
             return "创建商店失败"
         return None
 
+    @staticmethod
     async def list_item_in_shop(
-        self, item_keyword: str, price: int, quantity: int = 1
+        user_id: str, item_keyword: str, price: int, quantity: int = 1
     ) -> ListResult:
         """在用户商店上架物品
 
         参数:
+            user_id: 用户 ID
             item_keyword: 道具名称或 ID
             price: 出售价格
             quantity: 上架数量
@@ -101,11 +100,11 @@ class ShopService:
         if quantity > MAX_SHOP_ITEM_QUANTITY:
             return ListResult(error=f"单次上架数量不能超过{MAX_SHOP_ITEM_QUANTITY}")
 
-        shop = await Shop.get_shop_by_owner(self.user_id)
+        shop = await Shop.get_shop_by_owner(user_id)
         if not shop:
             return ListResult(error="你还没有商店，请先使用'开店'命令创建商店")
 
-        inv_item = await self.inventory.resolve_inventory_item(item_keyword)
+        inv_item = await ItemInventory.resolve_item(user_id, item_keyword)
         if not inv_item:
             return ListResult(error=f"背包中没有'{item_keyword}'这个道具")
 
@@ -124,18 +123,14 @@ class ShopService:
             )
 
         item_name = inv_item.get("name", item_keyword)
-        await self.inventory.reduce(item_id, quantity)
+        await ItemInventory.reduce(user_id, item_id, quantity)
 
         item_data = {
-            key: inv_item.get(key, "")
-            for key in (
-                "name",
-                "description",
-                "type",
-                "image_url",
-                "name_color",
-                "description_color",
-            )
+            "name": inv_item.get("name", ""),
+            "description": inv_item.get("description", ""),
+            "type": inv_item.get("type", ""),
+            "rarity": inv_item.get("rarity", 1),
+            "image_url": inv_item.get("image_url", ""),
         }
 
         success = await ShopItem.add_item(
@@ -143,19 +138,23 @@ class ShopService:
             item_id=item_id,
             quantity=quantity,
             price=price,
-            seller_id=self.user_id,
+            seller_id=user_id,
             item_data=item_data,
         )
         if not success:
-            await self.inventory.add(item_id, quantity)
+            await ItemInventory.add(user_id, item_id, quantity)
             return ListResult(error="上架失败，物品已返还背包")
 
         return ListResult(item_name=item_name)
 
-    async def delist_item(self, item_keyword: str, quantity: int = 1) -> ListResult:
+    @staticmethod
+    async def delist_item(
+        user_id: str, item_keyword: str, quantity: int = 1
+    ) -> ListResult:
         """从商店下架物品，归还背包
 
         参数:
+            user_id: 用户 ID
             item_keyword: 道具名称或 ID
             quantity: 下架数量
 
@@ -165,7 +164,7 @@ class ShopService:
         if quantity <= 0:
             return ListResult(error="下架数量必须大于0")
 
-        shop = await Shop.get_shop_by_owner(self.user_id)
+        shop = await Shop.get_shop_by_owner(user_id)
         if not shop:
             return ListResult(error="你还没有商店")
 
@@ -183,13 +182,17 @@ class ShopService:
         if delisted <= 0:
             return ListResult(error="下架失败")
 
-        await self.inventory.add(item_id, delisted)
+        await ItemInventory.add(user_id, item_id, delisted)
         return ListResult(item_name=item_name)
 
-    async def change_price(self, item_keyword: str, new_price: int) -> ListResult:
+    @staticmethod
+    async def change_price(
+        user_id: str, item_keyword: str, new_price: int
+    ) -> ListResult:
         """修改商店物品价格
 
         参数:
+            user_id: 用户 ID
             item_keyword: 道具名称或 ID
             new_price: 新价格
 
@@ -201,7 +204,7 @@ class ShopService:
         if new_price > MAX_SHOP_ITEM_PRICE:
             return ListResult(error=f"价格不能超过{MAX_SHOP_ITEM_PRICE:,}金币")
 
-        shop = await Shop.get_shop_by_owner(self.user_id)
+        shop = await Shop.get_shop_by_owner(user_id)
         if not shop:
             return ListResult(error="你还没有商店")
 
@@ -220,13 +223,17 @@ class ShopService:
 
         return ListResult(item_name=item_name)
 
-    async def get_my_shop(self) -> dict | None:
+    @staticmethod
+    async def get_my_shop(user_id: str) -> dict | None:
         """获取用户自己的商店信息和物品列表
+
+        参数:
+            user_id: 用户 ID
 
         返回:
             dict | None: 商店信息字典
         """
-        shop = await Shop.get_shop_by_owner(self.user_id)
+        shop = await Shop.get_shop_by_owner(user_id)
         if not shop:
             return None
         shop_items = await ShopItem.get_shop_items(shop["shop_name"])

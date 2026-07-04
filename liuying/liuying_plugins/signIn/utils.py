@@ -8,7 +8,7 @@ from nonebot import get_driver
 
 from liuying.configs.config import Config
 from liuying.configs.path_config import TEMP_PATH
-from liuying.liuying_plugins.economy.shop.api import register_items
+from liuying.liuying_plugins.economy.shop import register_items
 from liuying.liuying_plugins.economy.shop.inventory import ItemInventory
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.bed_layout import BedLayout
@@ -20,14 +20,17 @@ driver = get_driver()
 
 SIGNIN_ITEMS = [
     {
-        "id": "double_favor_card",
         "name": "好感度值双倍卡",
+        "id": "double_favor_card",
         "description": "使用后当天签到获得的好感度值翻倍",
-        "price": 50,
         "type": "增益道具",
+        "rarity": 3,
         "image_url": "https://gitee.com/shiranranran/tuku/raw/master/tu/signIn/hgdx2.png",
-        "name_color": "#FF79B4",
-        "description_color": "#FF99B9",
+        "is_visible": 1,
+        "price": 50,
+        "discount": 100,
+        "limit_purchase": -1,
+        "limited_time": -1,
     }
 ]
 
@@ -137,7 +140,7 @@ class SignInUtils:
         返回:
             bool: 是否成功使用双倍卡
         """
-        user_items = await ItemInventory(user_id).get_items()
+        user_items = await ItemInventory.get_items(user_id)
 
         if not any(
             item["id"] == "double_favor_card" and item["count"] > 0
@@ -145,7 +148,7 @@ class SignInUtils:
         ):
             return False
 
-        if await ItemInventory(user_id).reduce("double_favor_card"):
+        if await ItemInventory.reduce(user_id, "double_favor_card"):
             logger.info(f"用户 {user_id} 成功使用了好感度值双倍卡")
             return True
 
@@ -167,7 +170,7 @@ class SignInUtils:
         if random.randint(1, 100) > drop_rate:
             return False
 
-        if await ItemInventory(user_id).add("double_favor_card"):
+        if await ItemInventory.add(user_id, "double_favor_card"):
             logger.info(f"用户 {user_id} 签到掉落了好感度值双倍卡")
             return True
 

@@ -2,8 +2,7 @@
 
 基于 NoneBot2 v2.5.0 构建的多适配器聊天机器人项目，集成完整的 AI 对话核心、经济系统、管理员体系与 WebUI 控制台。
 
-- 当前版本：`v0.1.4-b`（开发版）
-- 框架：NoneBot2 `>=2.5.0,<2.6.0`
+- 框架：NoneBot2 `2.5.0`
 - 数据库：SQLAlchemy `2.0.49`（支持 SQLite / MySQL / PostgreSQL）
 - 包管理：Poetry（`package-mode = false`）
 - Python：`>=3.11`
@@ -12,7 +11,7 @@
 ## 功能特性
 
 - **AI 对话**：多 LLM Provider、Agent 工具调用、四层记忆系统、用户级人格隔离、多模态视觉、TTS、WebUI 控制台
-- **经济系统**：银行存取/兑换/转账/贷款、商店、拍卖行、委托求购板、典当行、黑市、签到、每日 wife
+- **经济系统**：银行存取/兑换/转账/贷款、商店、拍卖行、黑市、签到、每日 wife
 - **娱乐互动**：漂流瓶、今日运势、自动点赞、表情包与贴纸
 - **权限管理**：超级用户、平台超管、群组管理员、用户级 ACL
 - **平台适配**：OneBot V11/V12、QQ 官方、Minecraft 适配器
@@ -187,6 +186,11 @@ register_external_tool(MyTool())
 - 反馈：[Issues](https://gitee.com/shiranranran/liuying-bot/issues)
 
 ## 更新记录
+
+
+### v0.1.5
+
+
 
 ### v0.1.4-b
 

@@ -4,6 +4,7 @@
 from datetime import datetime
 import json
 
+from liuying.liuying_plugins.economy.shop.rarity import RaritySystem
 from liuying.liuying_plugins.economy.shop.template import TemplateRepository
 from liuying.models._user.user_sign_log import UserSignLog
 from liuying.ui.services import render
@@ -64,16 +65,21 @@ async def gen_sign_img(
 
     dropped_item_info = None
     if user_info["droppedItem"]:
-        template = await TemplateRepository.find_template("double_favor_card")
+        template = await TemplateRepository.find("double_favor_card")
         if template:
+            rarity = template.get("rarity", 1)
             dropped_item_info = {
                 "id": template.get("id", ""),
                 "name": template.get("name", ""),
-                "description": template.get("description", ""),
+                "description": RaritySystem.get_tier_description(
+                    rarity, template.get("description", "")
+                ),
                 "type": template.get("type", "普通"),
+                "rarity": rarity,
+                "rarity_label": RaritySystem.get_label(rarity),
                 "image_url": format_image_url(template.get("image_url", "")),
-                "name_color": template.get("name_color", ""),
-                "description_color": template.get("description_color", ""),
+                "name_color": RaritySystem.get_name_color(rarity),
+                "description_color": RaritySystem.get_description_color(rarity),
             }
 
     template_data = {

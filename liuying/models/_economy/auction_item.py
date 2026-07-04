@@ -14,9 +14,8 @@ _TO_DICT_FIELDS = (
     "name",
     "description",
     "type",
+    "rarity",
     "image_url",
-    "name_color",
-    "description_color",
 )
 
 

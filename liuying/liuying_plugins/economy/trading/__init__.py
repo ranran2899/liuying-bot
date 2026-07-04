@@ -22,10 +22,9 @@ class VenueItem:
         venue_name: 场所名称（商店名或"拍卖行"）
         description: 道具描述
         type: 道具类型
+        rarity: 道具稀有等级（1-5）
         image_url: 道具图片 URL
-        name_color: 名称颜色
-        description_color: 描述颜色
-        expire_at: 到期时间字符串（拍卖行物品可能有）
+        expire_at: 到期时间字符串（拍卖行物品可能会有）
     """
 
     id: str
@@ -37,9 +36,8 @@ class VenueItem:
     venue_name: str = ""
     description: str = ""
     type: str = ""
+    rarity: int = 1
     image_url: str = ""
-    name_color: str = ""
-    description_color: str = ""
     expire_at: str | None = None
 
     def to_dict(self) -> dict:
@@ -53,9 +51,8 @@ class VenueItem:
             "name": self.name,
             "description": self.description,
             "type": self.type,
+            "rarity": self.rarity,
             "image_url": self.image_url,
-            "name_color": self.name_color,
-            "description_color": self.description_color,
             "quantity": self.quantity,
             "price": self.price,
             "seller_id": self.seller_id,
@@ -111,9 +108,8 @@ class VenueAggregator:
             venue_name="拍卖行",
             description=item.get("description", ""),
             type=item.get("type", ""),
+            rarity=item.get("rarity", 1),
             image_url=item.get("image_url", ""),
-            name_color=item.get("name_color", ""),
-            description_color=item.get("description_color", ""),
             expire_at=item.get("expire_at"),
         )
 
@@ -137,9 +133,8 @@ class VenueAggregator:
             venue_name=item.get("shop_name", ""),
             description=item.get("description", ""),
             type=item.get("type", ""),
+            rarity=item.get("rarity", 1),
             image_url=item.get("image_url", ""),
-            name_color=item.get("name_color", ""),
-            description_color=item.get("description_color", ""),
         )
 
     @staticmethod

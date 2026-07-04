@@ -1,23 +1,45 @@
+"""商店插件
+
+提供道具注册、购买、使用、个人商店管理等命令。
+其他插件通过 register_items 注册道具模板。
+"""
+
+import random
+
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import Alconna, Args, Match, on_alconna
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.utils import Command, PluginExtraData, RegisterConfig
+from liuying.utils.enum import PropHandle
 from liuying.utils.log import logger
+from liuying.utils.manager.priority_manager import PriorityLifecycle
+from liuying.utils.user import UserGold
 
-from .api import register_item, register_items
 from .commands import ShopCommands
+from .defaults import DEFAULT_ITEMS
 from .inventory import ItemInventory
-from .registry import UseResult
+from .rarity import RaritySystem
+from .registry import (
+    UseResult,
+    flush_templates,
+    item_use,
+    register,
+    register_items,
+)
 from .template import TemplateRepository
 
 __all__ = [
     "ItemInventory",
+    "RaritySystem",
     "TemplateRepository",
     "UseResult",
-    "register_item",
+    "flush_templates",
+    "item_use",
+    "register",
     "register_items",
 ]
+
 
 __plugin_meta__ = PluginMetadata(
     name="商店",
@@ -243,3 +265,37 @@ async def _(session: Uninfo, page: Match[int]):
     """查看商店记录"""
     logger.info("用户查看商店记录请求", command="商店记录", session=session)
     await ShopCommands.shop_history(session, page)
+
+
+@item_use("item_gold_coin", "金币袋")
+async def _use_gold_coin(
+    user_id: str, item_info: dict, quantity: int = 1
+) -> UseResult:
+    """使用金币袋
+
+    参数:
+        user_id: 用户 ID
+        item_info: 道具信息字典
+        quantity: 使用数量
+
+    返回:
+        UseResult: 使用结果
+    """
+    gold_amount = random.randint(10, 50000) * quantity
+    await UserGold.add_user_gold(user_id, gold_amount)
+    return UseResult(
+        success=True,
+        result_type=PropHandle.USE,
+        message=f"打开金币袋 x {quantity}，获得 {gold_amount} 金币!",
+    )
+
+
+@PriorityLifecycle.on_startup(priority=2)
+async def _init_store_data() -> None:
+    """插件启动时初始化商店数据
+
+    先写入装饰器注册的道具模板，再注册默认道具列表。
+    """
+    await flush_templates()
+    await register_items(DEFAULT_ITEMS)
+    logger.info("商店道具初始化完成")

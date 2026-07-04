@@ -34,7 +34,7 @@
         <div class="item-grid">
             {% if data.item_list %}
             {% for item in data.item_list %}
-            <div class="item-row">
+            <div class="item-row rarity-{{item.rarity}}" style="border-left-color: {{item.rarity_border}};">
                 <div class="item-num">{{item.number}}</div>
                 <div class="item-name-cell">
                     <div class="item-icon-sm">
@@ -48,7 +48,12 @@
                         <div class="gem-sm"></div>
                         {% endif %}
                     </div>
-                    <span class="item-name-text" {% if item.name_color %}style="color: {{item.name_color}}"{% endif %}>{{item.name}}</span>
+                    <div class="item-name-row">
+                        <span class="item-name-text" style="color: {{item.name_color}}">{{item.name}}</span>
+                        {% if item.rarity_label and item.rarity > 1 %}
+                        <span class="rarity-badge" style="background: {{item.rarity_border}}">{{item.rarity_label}}</span>
+                        {% endif %}
+                    </div>
                 </div>
                 <div class="item-qty">{{item.quantity}}</div>
                 <div class="item-price">{{item.price}}</div>

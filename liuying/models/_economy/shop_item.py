@@ -36,7 +36,11 @@ class ShopItem(Model):
         self.item_data = json.dumps(data).decode()
 
     def to_dict(self) -> dict:
-        """将上架物品转换为字典"""
+        """将上架物品转换为字典
+
+        返回:
+            dict: 包含上架信息与道具数据的字典
+        """
         data = self.get_data()
         data["shop_name"] = self.shop_name
         data["quantity"] = self.quantity

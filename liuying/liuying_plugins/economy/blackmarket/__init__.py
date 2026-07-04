@@ -83,11 +83,9 @@ class BlackMarketRenderer:
 @blackmarket_cmd.handle()
 async def _(session: Uninfo):
     """查看黑市商品列表"""
-    user_id = session.user.id
     logger.info("查看黑市", "黑市", session=session)
 
-    service = BlackMarketService(user_id)
-    items = await service.get_all_items()
+    items = await BlackMarketService.get_all_items()
 
     await MessageUtils.build_message(
         BlackMarketRenderer.format_items(items)
@@ -104,8 +102,7 @@ async def _(session: Uninfo, item_keyword: str, quantity: Match[int]):
         f"黑市购买: {item_keyword} x {buy_qty}", "黑市购买", session=session
     )
 
-    service = BlackMarketService(user_id)
-    result = await service.buy_item(item_keyword, buy_qty)
+    result = await BlackMarketService.buy_item(user_id, item_keyword, buy_qty)
 
     await MessageUtils.build_message(result).finish()
 

@@ -2,12 +2,15 @@
 
 基于项目UI渲染系统，将拍卖行物品列表渲染为图片。
 统一扁平列表展示，按价格降序排列，来源内联显示。
+所有显示颜色通过稀有度模块动态获取，禁止硬编码颜色值。
 """
 
 from datetime import datetime
 
 from liuying.ui import render
 from liuying.utils.user import UserMedia
+
+from ..shop.rarity import RaritySystem
 
 _TEMPLATE_PATH = "pages/builtin/auction"
 
@@ -16,9 +19,8 @@ _RENDER_FIELDS = (
     "name",
     "description",
     "type",
+    "rarity",
     "image_url",
-    "name_color",
-    "description_color",
 )
 
 
@@ -196,6 +198,9 @@ class AuctionRenderer:
     def _extract(item: dict, index: int) -> dict:
         """提取物品渲染数据
 
+        通过 apply_to_dict 注入稀有度颜色与分级描述，
+        禁止硬编码颜色值。
+
         参数:
             item: 原始物品数据
             index: 物品序号
@@ -204,8 +209,10 @@ class AuctionRenderer:
             dict: 渲染用物品数据字典
         """
         source = item.get("source", "auction")
+        base_data = {key: item.get(key, "") for key in _RENDER_FIELDS}
+        base_data = RaritySystem.apply_to_dict(base_data)
         return {
-            **{key: item.get(key, "") for key in _RENDER_FIELDS},
+            **base_data,
             "price": item.get("price", 0),
             "quantity": item.get("quantity", 0),
             "source": source,
