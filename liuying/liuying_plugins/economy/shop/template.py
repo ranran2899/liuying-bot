@@ -86,6 +86,7 @@ class TemplateRepository:
             return 0, 0
 
         added = 0
+        skipped = 0
         for item_data in items_list:
             if not isinstance(item_data, dict):
                 continue
@@ -94,6 +95,7 @@ class TemplateRepository:
                 continue
             item_id = item_data["id"]
             if await cls._find_orm_by_id(item_id, shop_name):
+                skipped += 1
                 continue
             store_data = _build_store_data(item_data)
             await ItemTemplate.create(
@@ -103,11 +105,14 @@ class TemplateRepository:
             )
             added += 1
 
+        total = len(items_list)
         if added > 0:
-            logger.info(f"道具批量注册完成: {added}/{len(items_list)}")
+            logger.info(f"道具批量注册完成: {added}/{total}", "商店")
+        elif skipped == total:
+            logger.debug(f"道具模板均已存在，跳过注册: {skipped}/{total}", "商店")
         else:
-            logger.warning("道具批量注册失败，未能注册任何道具")
-        return added, len(items_list)
+            logger.warning("道具批量注册失败，未能注册任何道具", "商店")
+        return added, total
 
     @classmethod
     async def get_all(

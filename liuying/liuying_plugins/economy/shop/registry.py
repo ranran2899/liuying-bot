@@ -171,10 +171,6 @@ def register(
     """注册道具的装饰器
 
     同时注册道具模板和使用处理器。道具模板延迟到启动时写入数据库
-    （通过 flush_templates 函数），使用处理器立即注册。
-
-    参数顺序严格遵循：name-id-description-type-rarity-image_url-
-    is_visible-price-discount-limit_purchase-limited_time-can_use_func
 
     参数:
         name: 道具名称

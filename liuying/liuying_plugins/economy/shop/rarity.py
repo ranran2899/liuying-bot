@@ -22,36 +22,46 @@ class RaritySystem:
     """
 
     # 稀有度档位配置表（按等级升序）
-    # 字段：label 名称色 描述色 分级前缀
+    # 字段：label 名称色 描述色 边框色 光效色 分级前缀
     _PROFILES: ClassVar[dict[int, dict[str, str]]] = {
         1: {
             "label": "普通",
             "name_color": "#888888",
             "description_color": "#9e9e9e",
+            "rarity_border": "#9e9e9e",
+            "rarity_glow": "",
             "tier_prefix": "",
         },
         2: {
             "label": "稀有",
             "name_color": "#4CAF50",
             "description_color": "#66BB6A",
+            "rarity_border": "#4CAF50",
+            "rarity_glow": "",
             "tier_prefix": "[稀有] ",
         },
         3: {
             "label": "史诗",
             "name_color": "#9C27B0",
             "description_color": "#AB47BC",
+            "rarity_border": "#9C27B0",
+            "rarity_glow": "",
             "tier_prefix": "[史诗] ",
         },
         4: {
             "label": "传说",
             "name_color": "#FF9800",
             "description_color": "#FFA726",
+            "rarity_border": "#FF9800",
+            "rarity_glow": "rgba(255, 152, 0, 0.35)",
             "tier_prefix": "[传说] ",
         },
         5: {
             "label": "稀世",
             "name_color": "#F44336",
             "description_color": "#EF5350",
+            "rarity_border": "#F44336",
+            "rarity_glow": "rgba(244, 67, 54, 0.45)",
             "tier_prefix": "[稀世] ",
         },
     }
@@ -145,7 +155,8 @@ class RaritySystem:
         """将稀有度属性注入道具字典
 
         根据道具字典中的 rarity 字段，动态计算并注入 name_color、
-        description_color、rarity_label 以及分级描述字段，
+        description_color、rarity_border、rarity_glow、rarity_label
+        以及分级描述字段，
         供渲染层直接读取。
 
         参数:
@@ -161,6 +172,8 @@ class RaritySystem:
         result["rarity_label"] = profile["label"]
         result["name_color"] = profile["name_color"]
         result["description_color"] = profile["description_color"]
+        result["rarity_border"] = profile["rarity_border"]
+        result["rarity_glow"] = profile["rarity_glow"]
         result["description"] = cls.get_tier_description(
             level, data.get("description", "")
         )
