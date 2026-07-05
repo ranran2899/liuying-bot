@@ -166,10 +166,10 @@ class WebFetchService:
         返回:
             WebPageContent: 网页内容
         """
-        if not _is_valid_url(url):
+        if not WebFetcher._is_valid_url(url):
             return WebPageContent(url=url, error="无效的URL")
 
-        status, html, error = await _http_get(url)
+        status, html, error = await WebFetcher._http_get(url)
         if error:
             return WebPageContent(url=url, error=error)
         if status != 200:
@@ -179,8 +179,8 @@ class WebFetchService:
                 error=f"HTTP {status}",
             )
 
-        title = _extract_title(html)
-        text = _strip_html_tags(html)
+        title = WebFetcher._extract_title(html)
+        text = WebFetcher._strip_html_tags(html)
         if len(text) > max_length:
             text = text[:max_length] + "..."
 
@@ -223,10 +223,3 @@ class WebFetchService:
 
 web_fetch = WebFetchService()
 """网页抓取服务单例"""
-
-
-# 向后兼容别名：保持模块级函数引用以兼容旧调用方
-_is_valid_url = WebFetcher._is_valid_url
-_strip_html_tags = WebFetcher._strip_html_tags
-_extract_title = WebFetcher._extract_title
-_http_get = WebFetcher._http_get

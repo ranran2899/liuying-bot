@@ -24,31 +24,11 @@ from typing import Any
 
 import nonebot
 
-from liuying.models.ban_console import BanConsole
 from liuying.models._user import UserLevel
+from liuying.models.ban_console import BanConsole
 from liuying.utils.log import logger
 
-__all__ = [
-    "ADMIN_LEVEL_BASIC",
-    "ADMIN_LEVEL_HIGH",
-    "ADMIN_LEVEL_SUPER",
-    "PermissionResult",
-    "check_admin",
-    "check_blacklist",
-    "check_permission",
-    "check_superuser",
-    "get_user_level",
-]
-
-
-ADMIN_LEVEL_BASIC = 5
-"""基础管理员等级（可执行开关/查询命令）"""
-
-ADMIN_LEVEL_HIGH = 7
-"""高级管理员等级（可执行黑名单管理/重置命令）"""
-
-ADMIN_LEVEL_SUPER = 10
-"""超级管理员等级（仅超级用户可达）"""
+__all__ = ["AclChecker", "PermissionResult", "acl_checker"]
 
 
 @dataclass(slots=True)
@@ -70,171 +50,204 @@ class PermissionResult:
     is_blacklisted: bool = False
 
 
-async def check_superuser(
-    user_id: str,
-    bot: Any = None,
-) -> bool:
-    """检查用户是否超级用户
+class AclChecker:
+    """AI ACL 检查器
 
-    参数:
-        user_id: 用户ID
-        bot: Bot对象，None时尝试获取
-
-    返回:
-        bool: 是否超级用户
+    封装超级用户/管理员等级/黑名单三类只读权限检查能力，
+    通过类变量共享管理员等级常量，所有方法均为静态方法。
     """
-    try:
-        if bot is None:
-            bot = nonebot.get_bot()
-        superusers = getattr(
-            bot.config, "superusers", set()
-        ) or set()
-        return str(user_id) in {str(s) for s in superusers}
-    except Exception as e:
-        logger.debug(
-            f"超级用户检查失败: {e}", command="AI", e=e
-        )
-        return False
 
+    ADMIN_LEVEL_BASIC: int = 5
+    """基础管理员等级（可执行开关/查询命令）"""
 
-async def get_user_level(
-    user_id: str,
-    bot_id: str | None = None,
-    group_id: str | None = None,
-) -> int:
-    """获取用户权限等级
+    ADMIN_LEVEL_HIGH: int = 7
+    """高级管理员等级（可执行黑名单管理/重置命令）"""
 
-    参数:
-        user_id: 用户ID
-        bot_id: 机器人ID
-        group_id: 群组ID
+    ADMIN_LEVEL_SUPER: int = 10
+    """超级管理员等级（仅超级用户可达）"""
 
-    返回:
-        int: 权限等级（0为普通用户）
-    """
-    try:
-        return await UserLevel.get_level(user_id, bot_id, group_id)
-    except Exception as e:
-        logger.debug(
-            f"获取用户等级失败: {e}", command="AI", e=e
-        )
-        return 0
+    @staticmethod
+    async def check_superuser(
+        user_id: str,
+        bot: Any = None,
+    ) -> bool:
+        """检查用户是否超级用户
 
+        参数:
+            user_id: 用户ID
+            bot: Bot对象，None时尝试获取
 
-async def check_admin(
-    user_id: str,
-    level: int = ADMIN_LEVEL_BASIC,
-    *,
-    bot: Any = None,
-    bot_id: str | None = None,
-    group_id: str | None = None,
-) -> bool:
-    """检查用户是否具有指定管理员等级
+        返回:
+            bool: 是否超级用户
+        """
+        try:
+            if bot is None:
+                bot = nonebot.get_bot()
+            superusers = getattr(
+                bot.config, "superusers", set()
+            ) or set()
+            return str(user_id) in {str(s) for s in superusers}
+        except Exception as e:
+            logger.debug(
+                f"超级用户检查失败: {e}", command="AI", e=e
+            )
+            return False
 
-    超级用户直接通过。
+    @staticmethod
+    async def get_user_level(
+        user_id: str,
+        bot_id: str | None = None,
+        group_id: str | None = None,
+    ) -> int:
+        """获取用户权限等级
 
-    参数:
-        user_id: 用户ID
-        level: 需要的管理员等级
-        bot: Bot对象
-        bot_id: 机器人ID
-        group_id: 群组ID
+        参数:
+            user_id: 用户ID
+            bot_id: 机器人ID
+            group_id: 群组ID
 
-    返回:
-        bool: 是否通过
-    """
-    if await check_superuser(user_id, bot):
-        return True
-    user_level = await get_user_level(user_id, bot_id, group_id)
-    return user_level >= level
+        返回:
+            int: 权限等级（0为普通用户）
+        """
+        try:
+            return await UserLevel.get_level(
+                user_id, bot_id, group_id
+            )
+        except Exception as e:
+            logger.debug(
+                f"获取用户等级失败: {e}", command="AI", e=e
+            )
+            return 0
 
+    @staticmethod
+    async def check_admin(
+        user_id: str,
+        level: int | None = None,
+        *,
+        bot: Any = None,
+        bot_id: str | None = None,
+        group_id: str | None = None,
+    ) -> bool:
+        """检查用户是否具有指定管理员等级
 
-async def check_blacklist(
-    user_id: str,
-    group_id: str | None = None,
-) -> bool:
-    """检查用户/群组是否在黑名单
+        超级用户直接通过。
 
-    参数:
-        user_id: 用户ID
-        group_id: 群组ID
+        参数:
+            user_id: 用户ID
+            level: 需要的管理员等级，None时用基础管理员等级
+            bot: Bot对象
+            bot_id: 机器人ID
+            group_id: 群组ID
 
-    返回:
-        bool: 是否在黑名单（True表示被拉黑）
-    """
-    try:
-        if await BanConsole.is_ban(user_id, group_id):
+        返回:
+            bool: 是否通过
+        """
+        if level is None:
+            level = AclChecker.ADMIN_LEVEL_BASIC
+        if await AclChecker.check_superuser(user_id, bot):
             return True
-        if group_id and await BanConsole.is_ban(None, group_id):
-            return True
-        return False
-    except Exception as e:
-        logger.debug(
-            f"黑名单检查失败: {e}", command="AI", e=e
+        user_level = await AclChecker.get_user_level(
+            user_id, bot_id, group_id
         )
-        return False
+        return user_level >= level
 
+    @staticmethod
+    async def check_blacklist(
+        user_id: str,
+        group_id: str | None = None,
+    ) -> bool:
+        """检查用户/群组是否在黑名单
 
-async def check_permission(
-    user_id: str,
-    level: int = ADMIN_LEVEL_BASIC,
-    *,
-    bot: Any = None,
-    bot_id: str | None = None,
-    group_id: str | None = None,
-    check_blacklist_flag: bool = True,
-) -> PermissionResult:
-    """综合权限检查
+        参数:
+            user_id: 用户ID
+            group_id: 群组ID
 
-    依次检查：黑名单 → 超级用户 → 管理员等级。
+        返回:
+            bool: 是否在黑名单（True表示被拉黑）
+        """
+        try:
+            if await BanConsole.is_ban(user_id, group_id):
+                return True
+            if group_id and await BanConsole.is_ban(None, group_id):
+                return True
+            return False
+        except Exception as e:
+            logger.debug(
+                f"黑名单检查失败: {e}", command="AI", e=e
+            )
+            return False
 
-    参数:
-        user_id: 用户ID
-        level: 需要的管理员等级
-        bot: Bot对象
-        bot_id: 机器人ID
-        group_id: 群组ID
-        check_blacklist_flag: 是否检查黑名单
+    @staticmethod
+    async def check_permission(
+        user_id: str,
+        level: int | None = None,
+        *,
+        bot: Any = None,
+        bot_id: str | None = None,
+        group_id: str | None = None,
+        check_blacklist_flag: bool = True,
+    ) -> PermissionResult:
+        """综合权限检查
 
-    返回:
-        PermissionResult: 权限检查结果
-    """
-    is_blacklisted = False
-    if check_blacklist_flag:
-        is_blacklisted = await check_blacklist(user_id, group_id)
-        if is_blacklisted:
+        依次检查：黑名单 → 超级用户 → 管理员等级。
+
+        参数:
+            user_id: 用户ID
+            level: 需要的管理员等级，None时用基础管理员等级
+            bot: Bot对象
+            bot_id: 机器人ID
+            group_id: 群组ID
+            check_blacklist_flag: 是否检查黑名单
+
+        返回:
+            PermissionResult: 权限检查结果
+        """
+        if level is None:
+            level = AclChecker.ADMIN_LEVEL_BASIC
+        is_blacklisted = False
+        if check_blacklist_flag:
+            is_blacklisted = await AclChecker.check_blacklist(
+                user_id, group_id
+            )
+            if is_blacklisted:
+                return PermissionResult(
+                    allowed=False,
+                    reason="用户/群组在黑名单中",
+                    user_level=0,
+                    is_superuser=False,
+                    is_blacklisted=True,
+                )
+
+        is_super = await AclChecker.check_superuser(user_id, bot)
+        if is_super:
             return PermissionResult(
-                allowed=False,
-                reason="用户/群组在黑名单中",
-                user_level=0,
-                is_superuser=False,
-                is_blacklisted=True,
+                allowed=True,
+                reason="",
+                user_level=AclChecker.ADMIN_LEVEL_SUPER,
+                is_superuser=True,
+                is_blacklisted=False,
             )
 
-    is_super = await check_superuser(user_id, bot)
-    if is_super:
-        return PermissionResult(
-            allowed=True,
-            reason="",
-            user_level=ADMIN_LEVEL_SUPER,
-            is_superuser=True,
-            is_blacklisted=False,
+        user_level = await AclChecker.get_user_level(
+            user_id, bot_id, group_id
         )
+        if user_level >= level:
+            return PermissionResult(
+                allowed=True,
+                reason="",
+                user_level=user_level,
+                is_superuser=False,
+                is_blacklisted=False,
+            )
 
-    user_level = await get_user_level(user_id, bot_id, group_id)
-    if user_level >= level:
         return PermissionResult(
-            allowed=True,
-            reason="",
+            allowed=False,
+            reason=f"权限不足，需要等级{level}，当前{user_level}",
             user_level=user_level,
             is_superuser=False,
             is_blacklisted=False,
         )
 
-    return PermissionResult(
-        allowed=False,
-        reason=f"权限不足，需要等级{level}，当前{user_level}",
-        user_level=user_level,
-        is_superuser=False,
-        is_blacklisted=False,
-    )
+
+acl_checker = AclChecker()
+"""AI ACL 检查器单例"""

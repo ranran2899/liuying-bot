@@ -1,6 +1,7 @@
 """JSON解析工具
 
 提供LLM响应JSON提取与修复能力，支持四重兜底解析。
+作为 core 层公共工具，供 agent 与 core 子包共用，避免 core 反向依赖 agent。
 """
 
 import json

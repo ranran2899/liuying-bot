@@ -1,24 +1,16 @@
 """群组智能
 
 提供群组成员管理、社交分析、群风格画像、禁言状态、
-同伴感知、复读跟随、热聊保护与画像服务。
+复读跟随与画像服务。
 """
 
-from .hot_chat import HotChatProtector, hot_chat_protector
 from .members import (
     GroupMemberInfo,
     GroupMemberService,
     GroupMemberSnapshot,
     group_member_service,
 )
-from .mute import (
-    get_group_mute_until,
-    is_group_muted,
-    refresh_bot_group_mute_state,
-    set_group_mute_until,
-    update_group_mute_from_notice,
-)
-from .peer_awareness import PeerAwareness, peer_awareness
+from .mute import GroupMuteTracker, group_mute_tracker
 from .profile import (
     build_group_style_prompt_block,
     extract_group_knowledge,
@@ -35,13 +27,23 @@ from .repeat_follow import (
 )
 from .social import GroupSocialService, group_social
 
+# 向后兼容别名：将散落函数名指向 GroupMuteTracker 静态方法
+get_group_mute_until = GroupMuteTracker.get_group_mute_until
+is_group_muted = GroupMuteTracker.is_group_muted
+refresh_bot_group_mute_state = (
+    GroupMuteTracker.refresh_bot_group_mute_state
+)
+set_group_mute_until = GroupMuteTracker.set_group_mute_until
+update_group_mute_from_notice = (
+    GroupMuteTracker.update_group_mute_from_notice
+)
+
 __all__ = [
     "GroupMemberInfo",
     "GroupMemberService",
     "GroupMemberSnapshot",
+    "GroupMuteTracker",
     "GroupSocialService",
-    "HotChatProtector",
-    "PeerAwareness",
     "ProfileService",
     "RepeatContext",
     "RepeatFollow",
@@ -51,11 +53,10 @@ __all__ = [
     "extract_group_style",
     "get_group_mute_until",
     "group_member_service",
+    "group_mute_tracker",
     "group_profile",
     "group_social",
-    "hot_chat_protector",
     "is_group_muted",
-    "peer_awareness",
     "profile_service",
     "refresh_bot_group_mute_state",
     "repeat_follow",

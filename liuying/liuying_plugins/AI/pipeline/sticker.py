@@ -166,40 +166,6 @@ class StickerManager:
             )
             return None
 
-    async def maybe_choose_reply_sticker(
-        self,
-        text: str,
-        persona_mood: str = "neutral",
-        mood_hint: str = "",
-        group_id: str | None = None,
-        is_private: bool = False,
-        user_id: str = "",
-    ) -> Image | None:
-        """决策并选择回复贴纸
-
-        综合判断是否发送贴纸，发送则选择一张。
-
-        参数:
-            text: 回复文本
-            persona_mood: 人格情绪倾向
-            mood_hint: 表情包情绪提示（来自PersonaResponder）
-            group_id: 群组ID
-            is_private: 是否私聊
-            user_id: 用户ID
-
-        返回:
-            Image | None: 贴纸图片对象，不发时返回None
-        """
-        item = await self.choose_reply_sticker_item(
-            text=text,
-            persona_mood=persona_mood,
-            mood_hint=mood_hint,
-            group_id=group_id,
-            is_private=is_private,
-            user_id=user_id,
-        )
-        return await self.item_to_image(item)
-
     async def item_to_image(
         self, item: StickerItem | None
     ) -> Image | None:

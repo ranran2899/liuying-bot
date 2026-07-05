@@ -12,14 +12,7 @@ from typing import Any
 from liuying.services.cache import CacheDict
 from liuying.utils.log import logger
 
-__all__ = [
-    "Flavor",
-    "ProtocolHelper",
-    "detect_flavor",
-    "emoji_react",
-    "poke",
-    "set_typing",
-]
+__all__ = ["Flavor", "ProtocolHelper"]
 
 
 class Flavor(StrEnum):
@@ -312,17 +305,3 @@ class ProtocolHelper:
         return await ProtocolHelper._try_api(
             bot, "set_input_status", user_id=uid, event_type=1
         )
-
-
-# 向后兼容别名：保持原有模块级函数可直接导入使用
-detect_flavor = ProtocolHelper.detect_flavor
-emoji_react = ProtocolHelper.emoji_react
-poke = ProtocolHelper.poke
-set_typing = ProtocolHelper.set_typing
-
-# 私有函数别名（可能被同模块或其他模块内部调用）
-_self_id = ProtocolHelper._self_id
-_config_mode = ProtocolHelper._config_mode
-_is_unsupported = ProtocolHelper._is_unsupported
-_mark_unsupported = ProtocolHelper._mark_unsupported
-_try_api = ProtocolHelper._try_api

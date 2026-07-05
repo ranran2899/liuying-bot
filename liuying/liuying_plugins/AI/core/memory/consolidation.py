@@ -11,6 +11,7 @@ from liuying.utils.log import logger
 
 from ...models.conversation_record import ConversationRecord
 from ...models.memory_item import MemoryItem
+from ..llm import llm_helper
 from ._common import (
     _CONSOLIDATE_PROMPT,
     _DEFAULT_PERSONA,
@@ -24,7 +25,7 @@ class ConsolidationMixin:
     """巩固与衰减 Mixin
 
     提供记忆强化、晋升、衰减与摘要巩固能力。
-    依赖宿主类的 `_db`、`_get_llm`、`add` 等成员。
+    依赖宿主类的 `_db`、`add` 等成员，以及模块级 `llm_helper`。
     """
 
     # 类型提示，由宿主类 MemoryManager 初始化
@@ -149,7 +150,7 @@ class ConsolidationMixin:
         )
         prompt = _CONSOLIDATE_PROMPT.format(history=history)
         try:
-            summary = await self._get_llm().chat_text(
+            summary = await llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
                 options={"temperature": 0.3},
             )

@@ -16,8 +16,8 @@ from liuying.utils.message import MessageUtils
 from ...config import get_config
 from ...core.group import group_social
 from ...core.runtime import runtime_switch
-from ...core.safety import check_blacklist
-from ...core.tools import extract_message_text
+from ...core.safety import AclChecker
+from ...core.tools import MessageExtractor
 from ...pipeline.processor import ReplyResult, reply_processor
 from ..chat_helpers import ChatMatchersHelper, _ai_user_states
 
@@ -62,7 +62,7 @@ def setup_chat_commands() -> None:
             return
 
         is_private = not session.scene.is_group
-        text = extract_message_text(event)
+        text = MessageExtractor.extract_message_text(event)
 
         image_descs: list[str] = []
         if get_config("VISION_ENABLED", True):
@@ -121,7 +121,7 @@ def setup_chat_commands() -> None:
         result: ReplyResult | None = None
         try:
             # ACL黑名单检查（拉黑用户/群组不响应）
-            if await check_blacklist(user_id, group_id):
+            if await AclChecker.check_blacklist(user_id, group_id):
                 logger.debug(
                     f"用户/群组在黑名单，跳过回复: "
                     f"user={user_id} group={group_id}",

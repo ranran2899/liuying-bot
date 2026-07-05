@@ -12,7 +12,6 @@ from liuying.services.liuying_db import search_manager
 from liuying.utils.log import logger
 
 from ...models.memory_item import MemoryItem
-from ..llm import llm_helper
 from ._common import (
     _DEFAULT_PERSONA,
     _EMBEDDING_DIM,
@@ -30,22 +29,14 @@ class MemoryManager(RecallMixin, ConsolidationMixin):
     所有记忆绑定 persona_name，实现人设间数据隔离。
     """
 
-    def __init__(self, db=None, llm_helper=None) -> None:
+    def __init__(self, db=None) -> None:
         """初始化记忆管理器
 
         参数:
             db: SearchManager实例，None时用单例
-            llm_helper: LLM助手，None时延迟导入
         """
         self._db = db or search_manager
-        self._llm = llm_helper
         self._embedding_dim = _EMBEDDING_DIM
-
-    def _get_llm(self):
-        """延迟获取LLM助手"""
-        if self._llm is None:
-            self._llm = llm_helper
-        return self._llm
 
     async def add(
         self,

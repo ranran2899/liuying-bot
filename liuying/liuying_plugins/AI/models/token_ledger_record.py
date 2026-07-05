@@ -267,7 +267,7 @@ class TokenLedgerRecord(Model):
 
     @classmethod
     async def prune_old_records(cls, days: int = 90) -> int:
-        """清理过期记录
+        """清理过期记录（批量DELETE）
 
         参数:
             days: 保留天数
@@ -276,11 +276,7 @@ class TokenLedgerRecord(Model):
             int: 删除的记录数
         """
         cutoff = datetime.now() - timedelta(days=days)
-        records = await cls.filter(create_time__lt=cutoff).all()
-        count = 0
-        for r in records:
-            await r.delete()
-            count += 1
+        count = await cls.filter(create_time__lt=cutoff).delete()
         if count > 0:
             logger.info(
                 f"清理过期Token记录{count}条",

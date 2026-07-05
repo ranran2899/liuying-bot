@@ -14,7 +14,7 @@ from ..core.context import context_manager
 from ..core.llm import llm_helper
 from ..core.memory import memory_manager
 
-__all__ = ["generate_diary", "setup_diary_job"]
+__all__ = ["DiaryHelper", "setup_diary_job"]
 
 
 _DIARY_PROMPT = """你是流萤，请根据今天的互动写一篇日记。
@@ -119,11 +119,6 @@ class DiaryHelper:
         await DiaryHelper.generate_diary()
 
 
-# 向后兼容别名
-generate_diary = DiaryHelper.generate_diary
-_diary_job = DiaryHelper._diary_job
-
-
 async def setup_diary_job() -> None:
     """注册日记定时任务（每晚23:00）"""
     if not get_config("DIARY_ENABLED", True):
@@ -135,7 +130,7 @@ async def setup_diary_job() -> None:
 
     await task_manager.add_cron_task(
         task_id="ai_diary",
-        func=_diary_job,
+        func=DiaryHelper._diary_job,
         hour=23,
         minute=0,
     )

@@ -41,12 +41,6 @@ class MemoryCurationHelper:
             )
 
 
-# 向后兼容别名
-_memory_curation_task = (
-    MemoryCurationHelper._memory_curation_task
-)
-
-
 async def setup_memory_curation_job() -> None:
     """注册记忆策展定时任务
 
@@ -55,7 +49,7 @@ async def setup_memory_curation_job() -> None:
     try:
         await task_manager.add_interval_task(
             task_id=_CURATION_TASK_ID,
-            func=_memory_curation_task,
+            func=MemoryCurationHelper._memory_curation_task,
             hours=_CURATION_INTERVAL_HOURS,
             name="AI记忆策展",
             group="ai_plugin",

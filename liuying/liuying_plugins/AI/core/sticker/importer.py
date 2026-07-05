@@ -83,25 +83,16 @@ class StickerImporter:
     def __init__(
         self,
         root_dir: Path | None = None,
-        llm_helper=None,
     ) -> None:
         """初始化表情包导入器
 
         参数:
             root_dir: 表情包根目录，None时用默认
-            llm_helper: LLM助手，None时延迟导入
         """
         self.root_dir = root_dir or _DEFAULT_STICKER_ROOT
-        self._llm = llm_helper
         self._supported_ext = {
             ".png", ".jpg", ".jpeg", ".gif", ".webp",
         }
-
-    def _get_llm(self):
-        """延迟获取LLM助手"""
-        if self._llm is None:
-            self._llm = llm_helper
-        return self._llm
 
     async def _upload_to_bed_layout(
         self,
@@ -359,8 +350,7 @@ class StickerImporter:
             if not summary.success or not summary.description:
                 return
 
-            llm = self._get_llm()
-            response = await llm.chat_text(
+            response = await llm_helper.chat_text(
                 [
                     {
                         "role": "system",

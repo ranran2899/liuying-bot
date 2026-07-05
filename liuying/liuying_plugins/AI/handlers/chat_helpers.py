@@ -16,11 +16,8 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
-from ..core.group import update_group_mute_from_notice
-from ..core.tools import (
-    extract_image_segments,
-    fetch_image_bytes,
-)
+from ..core.group import GroupMuteTracker
+from ..core.tools import MessageExtractor
 from ..core.vision import summarize_image
 
 __all__ = [
@@ -94,7 +91,7 @@ class ChatMatchersHelper:
         返回:
             str: 描述文本，失败返回空串
         """
-        image_data = await fetch_image_bytes(
+        image_data = await MessageExtractor.fetch_image_bytes(
             url=img.get("url", ""),
             path=img.get("path", ""),
             raw=img.get("raw"),
@@ -125,7 +122,7 @@ class ChatMatchersHelper:
         返回:
             list[str]: 图片描述列表（与图片顺序对齐）
         """
-        images = extract_image_segments(event)
+        images = MessageExtractor.extract_image_segments(event)
         if not images:
             return []
 
@@ -222,8 +219,10 @@ class ChatMatchersHelper:
                 self_id = str(
                     getattr(bot, "self_id", "") or ""
                 )
-                updated = update_group_mute_from_notice(
-                    event, bot_self_id=self_id
+                updated = (
+                    GroupMuteTracker.update_group_mute_from_notice(
+                        event, bot_self_id=self_id
+                    )
                 )
                 if updated:
                     group_id = str(

@@ -17,19 +17,13 @@ from liuying.utils.log import logger
 
 from ..agent.runner import AgentResult, run_agent
 from ..config import get_config
-from ..core.context import (
-    build_anti_loop_hint,
-    compress_context_if_needed,
-    context_manager,
-    has_silence_control_marker,
-)
+from ..core.context import ContextPolicy, context_manager
 from ..core.emotion import emotion_manager
 from ..core.group import (
+    GroupMuteTracker,
     build_group_style_prompt_block,
     group_profile,
     group_social,
-    is_group_muted,
-    refresh_bot_group_mute_state,
 )
 from ..core.llm import (
     llm_helper,
@@ -39,20 +33,13 @@ from ..core.llm import (
 from ..core.memory import memory_manager
 from ..core.persona import persona_manager
 from ..core.safety import (
+    SafetyFilter,
     SafetyRefusalError,
-    build_prompt_injection_guard,
-    sanitize_or_retry,
     token_quota_service,
 )
 from ..core.vision import summarize_image, vision_router
 from ..models.conversation_record import ConversationRecord
-from .helpers import (
-    build_messages,
-    build_segments,
-    build_vision_messages,
-    humanize_reply,
-    persist_conversation,
-)
+from .helpers import ReplyPipeline
 from .humanize import build_group_chat_style_prompt
 from .sticker import sticker_manager
 from .types import ReplyContext, ReplyResult
@@ -107,7 +94,7 @@ class ReplyProcessor:
             )
 
         if ctx.group_id and get_config("GROUP_MUTE_AWARE", True):
-            if is_group_muted(ctx.group_id):
+            if GroupMuteTracker.is_group_muted(ctx.group_id):
                 logger.info(
                     f"群 {ctx.group_id} bot处于禁言期，本轮跳过回复",
                     command="AI",
@@ -131,7 +118,9 @@ class ReplyProcessor:
         if not get_config("GROUP_MUTE_AWARE", True):
             return
         try:
-            await refresh_bot_group_mute_state(bot, ctx.group_id)
+            await GroupMuteTracker.refresh_bot_group_mute_state(
+                bot, ctx.group_id
+            )
         except Exception as e:
             logger.debug(
                 f"刷新群禁言状态失败: {e}",
@@ -221,7 +210,7 @@ class ReplyProcessor:
                     )
 
         if get_config("SAFETY_FILTER_ENABLED", True):
-            parts.append(build_prompt_injection_guard())
+            parts.append(SafetyFilter.build_prompt_injection_guard())
 
         if (
             ctx.group_id
@@ -229,7 +218,7 @@ class ReplyProcessor:
         ):
             parts.append(build_group_chat_style_prompt())
 
-        anti_loop = build_anti_loop_hint(history)
+        anti_loop = ContextPolicy.build_anti_loop_hint(history)
         if anti_loop:
             parts.append(anti_loop)
 
@@ -285,7 +274,7 @@ class ReplyProcessor:
                 """
                 return await llm_helper.chat_text(msgs)
 
-            compressed_chunks = await compress_context_if_needed(
+            compressed_chunks = await ContextPolicy.compress_context_if_needed(
                 chunks,
                 max_tokens=max_tokens,
                 keep_recent=keep_recent,
@@ -408,7 +397,7 @@ class ReplyProcessor:
                 if use_mm:
                     vision_provider = vp
                     vision_model = vm
-                    use_messages = build_vision_messages(
+                    use_messages = ReplyPipeline.build_vision_messages(
                         messages[0].get("content", "") if messages else "",
                         [
                             m for m in messages
@@ -425,7 +414,7 @@ class ReplyProcessor:
                             if ctx_text
                             else f"[用户发了一张图片: {desc}]"
                         )
-                        use_messages = build_messages(
+                        use_messages = ReplyPipeline.build_messages(
                             messages[0].get("content", "") if messages else "",
                             [
                                 m for m in messages
@@ -515,7 +504,7 @@ class ReplyProcessor:
                     provider_name=vision_provider,
                 )
 
-            reply_text = await sanitize_or_retry(
+            reply_text = await SafetyFilter.sanitize_or_retry(
                 call=_first_call,
                 retry_call=_retry_call,
                 extract=lambda r: r or "",
@@ -699,7 +688,9 @@ class ReplyProcessor:
 
         history = await self._load_history(ctx)
         system_prompt = await self._build_system_prompt(ctx, history)
-        messages = build_messages(system_prompt, history, ctx)
+        messages = ReplyPipeline.build_messages(
+            system_prompt, history, ctx
+        )
 
         # 开启会话级 token 用量追踪，统计本轮所有 LLM 调用消耗
         track_token = start_conversation_tracking()
@@ -722,7 +713,7 @@ class ReplyProcessor:
                 e=e,
             )
 
-        if has_silence_control_marker(reply_text):
+        if ContextPolicy.has_silence_control_marker(reply_text):
             logger.info(
                 f"AI决定SILENCE，跳过回复: user={ctx.user_id} "
                 f"group={ctx.group_id}",
@@ -738,7 +729,7 @@ class ReplyProcessor:
             )
 
         elapsed = time.time() - start_time
-        humanized_text, typing_delay = humanize_reply(
+        humanized_text, typing_delay = ReplyPipeline.humanize_reply(
             reply_text, elapsed, ctx
         )
 
@@ -752,7 +743,7 @@ class ReplyProcessor:
                 },
             )
 
-        segments, gap_delays = build_segments(
+        segments, gap_delays = ReplyPipeline.build_segments(
             humanized_text, ctx
         )
 
@@ -763,7 +754,7 @@ class ReplyProcessor:
             self._decide_tts(humanized_text, ctx)
         )
         persist_task = asyncio.create_task(
-            persist_conversation(
+            ReplyPipeline.persist_conversation(
                 ctx, ctx.text, humanized_text, agent_result, elapsed
             )
         )

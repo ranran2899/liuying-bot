@@ -309,25 +309,6 @@ class ProactiveHelper:
             )
 
 
-# 向后兼容别名
-_check_group_idle_and_send = (
-    ProactiveHelper._check_group_idle_and_send
-)
-_decide_proactive_message = (
-    ProactiveHelper._decide_proactive_message
-)
-_send_proactive_message = (
-    ProactiveHelper._send_proactive_message
-)
-_proactive_private_greeting = (
-    ProactiveHelper._proactive_private_greeting
-)
-_generate_greeting = ProactiveHelper._generate_greeting
-_send_private_greeting = (
-    ProactiveHelper._send_private_greeting
-)
-
-
 _PROACTIVE_PRIVATE_TASK_ID = "ai_proactive_private_greeting"
 """私聊问候任务ID"""
 
@@ -357,7 +338,7 @@ async def setup_proactive_jobs() -> None:
     try:
         await task_manager.add_interval_task(
             task_id=_PROACTIVE_TASK_ID,
-            func=_check_group_idle_and_send,
+            func=ProactiveHelper._check_group_idle_and_send,
             minutes=interval_minutes,
             name="AI群主动发话",
             group="ai_plugin",
@@ -379,7 +360,7 @@ async def setup_proactive_jobs() -> None:
     try:
         await task_manager.add_cron_task(
             task_id=_PROACTIVE_PRIVATE_TASK_ID,
-            func=_proactive_private_greeting,
+            func=ProactiveHelper._proactive_private_greeting,
             hour="8,22",
             minute=0,
             name="AI私聊问候",

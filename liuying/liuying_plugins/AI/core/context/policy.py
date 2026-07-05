@@ -8,13 +8,7 @@ from collections.abc import Awaitable, Callable
 import re
 from typing import Any
 
-__all__ = [
-    "build_anti_loop_hint",
-    "compress_context_if_needed",
-    "estimate_chunk_tokens",
-    "has_silence_control_marker",
-    "strip_response_control_markers",
-]
+__all__ = ["ContextPolicy"]
 
 
 _SILENCE_MARKERS: tuple[str, ...] = (
@@ -314,13 +308,3 @@ class ContextPolicy:
             "- 优先关注最新用户输入，避免重复旧观点。\n"
             "- 若无新信息可说，回复不超过12个中文字符或输出 [SILENCE]。\n"
         )
-
-
-# 向后兼容别名：保留模块级函数引用，便于外部 `from .policy import xxx` 调用
-has_silence_control_marker = ContextPolicy.has_silence_control_marker
-strip_response_control_markers = ContextPolicy.strip_response_control_markers
-estimate_chunk_tokens = ContextPolicy.estimate_chunk_tokens
-_estimate_chunks_tokens = ContextPolicy._estimate_chunks_tokens
-compress_context_if_needed = ContextPolicy.compress_context_if_needed
-_token_similarity = ContextPolicy._token_similarity
-build_anti_loop_hint = ContextPolicy.build_anti_loop_hint

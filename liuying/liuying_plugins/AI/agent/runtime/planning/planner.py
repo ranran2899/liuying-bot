@@ -8,6 +8,7 @@
 from liuying.utils.log import logger
 
 from ....config import get_config
+from ....core.json_utils import extract_json_payload
 from ....core.llm import llm_helper
 from ....core.vision import vision_router
 from ..catalog.tool_catalog import ToolCatalog, tool_catalog
@@ -23,11 +24,9 @@ from ..constants import (
     TURN_ACTION_SILENCE,
 )
 from .intent_rules import IntentRuleManager, _get_agent_max_steps
-from .json_utils import extract_json_payload
 from .types import TurnPlan
 
-# 向后兼容：外部模块通过 planner.TurnPlan / planner.extract_json_payload 访问
-__all__ = ["TurnPlan", "TurnPlanner", "extract_json_payload"]
+__all__ = ["TurnPlan", "TurnPlanner"]
 
 _PLAN_SYSTEM_PROMPT = """你是ai回合规划器。
 分析用户消息和上下文，决策本回合的最佳行为。

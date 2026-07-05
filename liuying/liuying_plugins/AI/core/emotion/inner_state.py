@@ -8,10 +8,7 @@ from datetime import datetime
 import time
 from typing import Any
 
-__all__ = [
-    "clip_relation_warmth",
-    "merge_state_with_decay",
-]
+__all__ = ["InnerStateHelper"]
 
 
 _MAX_PENDING_THOUGHTS = 8
@@ -177,10 +174,3 @@ class InnerStateHelper:
             float: 截断后的分数
         """
         return max(-1.0, min(1.0, float(score or 0.0)))
-
-
-# 模块级别名，保持向后兼容
-_hours_since = InnerStateHelper._hours_since
-_normalize_energy_label = InnerStateHelper._normalize_energy_label
-merge_state_with_decay = InnerStateHelper.merge_state_with_decay
-clip_relation_warmth = InnerStateHelper.clip_relation_warmth

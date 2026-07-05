@@ -13,6 +13,7 @@ from typing import Any
 
 from liuying.utils.log import logger
 
+from ....core.json_utils import extract_json_payload
 from ....core.llm import llm_helper
 from ....core.persona import persona_manager
 from ..constants import (
@@ -23,7 +24,6 @@ from ..constants import (
     OUTPUT_MODE_STRUCTURED_HELP,
 )
 from ..execution.evidence import EvidenceComposer
-from ..planning.json_utils import extract_json_payload
 from ..planning.types import TurnPlan
 
 _RESPONDER_SYSTEM_PROMPT = """你是扮演角色化的响应器。

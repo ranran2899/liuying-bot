@@ -14,7 +14,7 @@ from liuying.utils.log import logger
 from ...models.emotion_state import EmotionState
 from ..context import context_manager
 from ..llm import llm_helper as _default_llm_helper
-from .inner_state import merge_state_with_decay
+from .inner_state import InnerStateHelper
 
 _DEFAULT_PERSONA = "default"
 """默认人格名（未指定时回退）"""
@@ -117,7 +117,7 @@ class EmotionManager:
             )
             new_state = self._parse_state_response(result)
             current_state = self._state_to_dict(state, user_id, thoughts)
-            merged = merge_state_with_decay(current_state, new_state)
+            merged = InnerStateHelper.merge_state_with_decay(current_state, new_state)
             merged = self._merge_state(merged, self._get_time_period())
             return await self._persist_merged_state(
                 merged, user_id, group_id, persona_name

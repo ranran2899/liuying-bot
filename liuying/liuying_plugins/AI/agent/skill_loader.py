@@ -49,7 +49,7 @@ _GITHUB_RAW_PREFIX = "https://raw.githubusercontent.com/"
 """GitHub raw URL前缀"""
 
 
-class SkillLoader:
+class RemoteSkillLoader:
     """技能包扩展加载器
 
     提供远程加载、隔离执行、安全审查、运行时覆盖能力。
@@ -406,5 +406,5 @@ class SkillLoader:
             return ""
 
 
-skill_loader = SkillLoader()
+remote_skill_loader = RemoteSkillLoader()
 """技能包扩展加载器单例"""

@@ -9,9 +9,7 @@
 供用户对话额度（UserToken）按实际消耗扣费使用。
 """
 
-from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
-from functools import wraps
 from typing import Any, ClassVar
 
 from liuying.utils.LLM import token_tracker
@@ -178,53 +176,6 @@ class TokenTrackingHelper:
         """
         return _current_context.get() or {}
 
-    @staticmethod
-    def with_token_tracking(
-        purpose: str = "chat",
-    ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
-        """Token追踪装饰器
-
-        自动从上下文读取 group/user 信息，记录LLM调用的Token消耗。
-
-        参数:
-            purpose: 调用用途
-
-        返回:
-            装饰器函数
-        """
-
-        def decorator(
-            func: Callable[..., Awaitable[Any]],
-        ) -> Callable[..., Awaitable[Any]]:
-            """装饰器内部实现"""
-
-            @wraps(func)
-            async def wrapper(*args: Any, **kwargs: Any) -> Any:
-                """包装函数"""
-                ctx = TokenTrackingHelper.get_token_context()
-                result = await func(*args, **kwargs)
-                # 仅从 dict 结果中提取 token 信息；
-                # tuple（如 llm_helper.chat 返回的 (reasoning, content)）
-                # 不含 usage 字段，直接跳过避免 AttributeError。
-                if isinstance(result, dict):
-                    usage = result.get("usage") or result.get("token_usage")
-                    if usage and isinstance(usage, dict):
-                        await TokenLedger.record(
-                            provider=usage.get("provider", ""),
-                            model=usage.get("model", ""),
-                            prompt_tokens=usage.get("prompt_tokens", 0),
-                            completion_tokens=usage.get("completion_tokens", 0),
-                            total_tokens=usage.get("total_tokens", 0),
-                            group_id=ctx.get("group_id", ""),
-                            user_id=ctx.get("user_id", ""),
-                            purpose=purpose,
-                        )
-                return result
-
-            return wrapper
-
-        return decorator
-
 
 class TokenLedger:
     """Token账本管理器
@@ -329,41 +280,6 @@ class TokenLedger:
             )
 
     @classmethod
-    async def record_from_context(
-        cls,
-        provider: str,
-        model: str,
-        prompt_tokens: int = 0,
-        completion_tokens: int = 0,
-        total_tokens: int = 0,
-        extra: dict[str, Any] | None = None,
-    ) -> None:
-        """从当前上下文记录Token消耗
-
-        读取 contextvar 中的 group_id/user_id/purpose。
-
-        参数:
-            provider: 供应商名
-            model: 模型名
-            prompt_tokens: 提示Token数
-            completion_tokens: 补全Token数
-            total_tokens: 总Token数
-            extra: 额外信息
-        """
-        ctx = get_token_context()
-        await cls.record(
-            provider=provider,
-            model=model,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            group_id=ctx.get("group_id", ""),
-            user_id=ctx.get("user_id", ""),
-            purpose=ctx.get("purpose", "chat"),
-            extra=extra,
-        )
-
-    @classmethod
     async def get_summary(
         cls,
         group_id: str = "",
@@ -412,13 +328,11 @@ class TokenLedger:
 
 
 # 向后兼容别名：保持模块级函数可被直接导入
-_patch_token_tracker = TokenTrackingHelper._patch_token_tracker
 start_conversation_tracking = TokenTrackingHelper.start_conversation_tracking
 stop_conversation_tracking = TokenTrackingHelper.stop_conversation_tracking
 set_token_context = TokenTrackingHelper.set_token_context
 reset_token_context = TokenTrackingHelper.reset_token_context
 get_token_context = TokenTrackingHelper.get_token_context
-with_token_tracking = TokenTrackingHelper.with_token_tracking
 
 token_ledger = TokenLedger()
 """Token账本单例"""

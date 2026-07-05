@@ -163,7 +163,7 @@ class HumanizeToolkit:
             tuple[str, str | None]: (修改后文本, 修正提示)，
                 未注入时修正提示为None
         """
-        if probability <= 0 or not _is_pure_chatty_text(text):
+        if probability <= 0 or not HumanizeToolkit._is_pure_chatty_text(text):
             return text, None
 
         use_rng = rng or random
@@ -281,14 +281,18 @@ class HumanizeToolkit:
         返回:
             list[str]: 碎片段列表
         """
-        cleaned = normalize_visible_reply_text(text)
+        cleaned = HumanizeToolkit.normalize_visible_reply_text(text)
         if not cleaned:
             return []
-        segments = split_text_into_segments(cleaned)
+        segments = HumanizeToolkit.split_text_into_segments(cleaned)
         if max_segment_chars > 0:
             expanded: list[str] = []
             for seg in segments:
-                expanded.extend(split_segment_if_long(seg, max_segment_chars))
+                expanded.extend(
+                    HumanizeToolkit.split_segment_if_long(
+                        seg, max_segment_chars
+                    )
+                )
             segments = expanded
         return [s for s in segments if s]
 
@@ -308,16 +312,9 @@ class HumanizeToolkit:
         )
 
 
-# 模块级单例实例（便于未来扩展为有状态工具）
-humanize_toolkit = HumanizeToolkit()
-
-# 模块级别名，保持向后兼容，调用方无需修改
+# 模块级别名，保持外部导入路径稳定
 compute_typing_delay = HumanizeToolkit.compute_typing_delay
 compute_gap_delay = HumanizeToolkit.compute_gap_delay
-_is_pure_chatty_text = HumanizeToolkit._is_pure_chatty_text
 maybe_inject_typo = HumanizeToolkit.maybe_inject_typo
-normalize_visible_reply_text = HumanizeToolkit.normalize_visible_reply_text
-split_text_into_segments = HumanizeToolkit.split_text_into_segments
-split_segment_if_long = HumanizeToolkit.split_segment_if_long
 fragment_reply = HumanizeToolkit.fragment_reply
 build_group_chat_style_prompt = HumanizeToolkit.build_group_chat_style_prompt

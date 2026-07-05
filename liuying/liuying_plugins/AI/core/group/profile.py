@@ -12,8 +12,8 @@ from typing import Any
 from liuying.services.cache import CacheDict
 from liuying.utils.log import logger
 
-from ...agent.runtime.planning.json_utils import extract_json_payload
 from ...models.group_context import GroupContextSnapshot
+from ..json_utils import extract_json_payload
 
 __all__ = [
     "build_group_style_prompt_block",

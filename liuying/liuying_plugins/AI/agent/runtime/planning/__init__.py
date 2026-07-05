@@ -3,8 +3,8 @@
 提供基于规则与LLM的回合规划能力。
 """
 
+from ....core.json_utils import extract_json_payload
 from .intent_rules import IntentRule, IntentRuleManager
-from .json_utils import extract_json_payload
 from .planner import TurnPlanner
 from .types import TurnPlan
 

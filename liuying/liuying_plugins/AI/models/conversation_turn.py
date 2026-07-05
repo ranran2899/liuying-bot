@@ -63,32 +63,3 @@ class ConversationTurn(Model):
     def _run_script(cls):
         """数据库初始化脚本"""
         return []
-
-    @classmethod
-    async def increment_turn(
-        cls,
-        user_id: str,
-        tokens: int = 0,
-        group_id: str | None = None,
-    ) -> "ConversationTurn":
-        """增加对话轮次
-
-        参数:
-            user_id: 用户ID
-            tokens: 本轮token消耗
-            group_id: 群组ID
-
-        返回:
-            ConversationTurn: 更新后的轮次记录
-        """
-        turn, _ = await cls.get_or_create(
-            user_id=user_id,
-            group_id=group_id,
-        )
-        turn.turn_count += 1
-        turn.total_tokens += tokens
-        turn.last_turn_time = datetime.now()
-        await turn.save(
-            update_fields=["turn_count", "total_tokens", "last_turn_time"]
-        )
-        return turn

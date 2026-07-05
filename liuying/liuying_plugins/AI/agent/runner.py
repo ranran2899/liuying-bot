@@ -337,8 +337,5 @@ class AgentRunner:
         return None
 
 
-# 向后兼容别名：保持模块级函数可被直接导入
+# 模块级别名：保持外部导入路径稳定
 run_agent = AgentRunner.run_agent
-_build_context_summary = AgentRunner._build_context_summary
-_build_timeout_result = AgentRunner._build_timeout_result
-_extract_image_url = AgentRunner._extract_image_url

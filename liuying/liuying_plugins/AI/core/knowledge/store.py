@@ -20,13 +20,7 @@ from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 
 from ...models.knowledge_query_log import KnowledgeQueryLog
-from .extractors import (
-    _build_keywords,
-    _extract_aliases,
-    _extract_commands,
-    _extract_smart_tools,
-    _tokenize,
-)
+from .extractors import KnowledgeExtractor
 from .types import KnowledgeStats, RecallResult
 
 _MAX_QUERY_LOG_LENGTH = 500
@@ -156,7 +150,7 @@ class PluginView:
     @property
     def keywords(self) -> str:
         """检索关键词（动态计算）"""
-        return _build_keywords(
+        return KnowledgeExtractor.build_keywords(
             display_name=self.display_name,
             description=self.description,
             commands=self.get_commands(),
@@ -182,7 +176,7 @@ class PluginView:
         返回:
             list[dict]: 命令字典列表
         """
-        return _extract_commands(self._extra)
+        return KnowledgeExtractor.extract_commands(self._extra)
 
     def get_smart_tools(self) -> list[dict[str, Any]]:
         """解析AI工具标签
@@ -190,7 +184,7 @@ class PluginView:
         返回:
             list[dict]: 工具标签字典列表
         """
-        return _extract_smart_tools(self._extra)
+        return KnowledgeExtractor.extract_smart_tools(self._extra)
 
     def get_aliases(self) -> list[str]:
         """解析别名
@@ -198,7 +192,7 @@ class PluginView:
         返回:
             list[str]: 别名列表
         """
-        return _extract_aliases(self._extra)
+        return KnowledgeExtractor.extract_aliases(self._extra)
 
     def get_extra(self) -> dict[str, Any]:
         """解析额外信息
@@ -456,7 +450,7 @@ class KnowledgeStore:
         if not text or not text.strip():
             return []
 
-        tokens = _tokenize(text)
+        tokens = KnowledgeExtractor.tokenize(text)
         if not tokens:
             return []
 

@@ -39,12 +39,6 @@ class KnowledgeRefreshHelper:
             )
 
 
-# 向后兼容别名
-_knowledge_cleanup_task = (
-    KnowledgeRefreshHelper._knowledge_cleanup_task
-)
-
-
 async def setup_knowledge_jobs() -> None:
     """注册知识库定时任务
 
@@ -53,7 +47,7 @@ async def setup_knowledge_jobs() -> None:
     try:
         await task_manager.add_cron_task(
             task_id=_CLEANUP_TASK_ID,
-            func=_knowledge_cleanup_task,
+            func=KnowledgeRefreshHelper._knowledge_cleanup_task,
             hour=4,
             minute=0,
             name="AI知识库清理",

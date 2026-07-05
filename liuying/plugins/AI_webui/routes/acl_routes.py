@@ -6,7 +6,8 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from liuying.liuying_plugins.AI.core.safety import check_permission
+
+from liuying.liuying_plugins.AI.core.safety import AclChecker
 
 __all__ = ["build_acl_router"]
 
@@ -36,7 +37,7 @@ def build_acl_router() -> APIRouter:
             dict: 权限检查结果
         """
         try:
-            result = await check_permission(
+            result = await AclChecker.check_permission(
                 user_id,
                 level,
                 group_id=group_id or None,

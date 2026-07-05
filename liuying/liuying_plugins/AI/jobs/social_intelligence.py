@@ -297,25 +297,6 @@ class SocialIntelligenceHelper:
                 )
 
 
-# 向后兼容别名
-_parse_group_style = (
-    SocialIntelligenceHelper._parse_group_style
-)
-_generate_and_send_to_groups = (
-    SocialIntelligenceHelper._generate_and_send_to_groups
-)
-_send_to_group = SocialIntelligenceHelper._send_to_group
-_get_festival = SocialIntelligenceHelper._get_festival
-_morning_greeting = (
-    SocialIntelligenceHelper._morning_greeting
-)
-_evening_greeting = (
-    SocialIntelligenceHelper._evening_greeting
-)
-_news_push = SocialIntelligenceHelper._news_push
-_topic_followup = SocialIntelligenceHelper._topic_followup
-
-
 async def setup_social_intelligence_jobs() -> None:
     """注册社交智能定时任务"""
     if not get_config("SOCIAL_INTELLIGENCE_ENABLED", True):
@@ -327,24 +308,24 @@ async def setup_social_intelligence_jobs() -> None:
 
     await task_manager.add_cron_task(
         task_id="ai_morning_greeting",
-        func=_morning_greeting,
+        func=SocialIntelligenceHelper._morning_greeting,
         hour=8,
         minute=0,
     )
     await task_manager.add_cron_task(
         task_id="ai_evening_greeting",
-        func=_evening_greeting,
+        func=SocialIntelligenceHelper._evening_greeting,
         hour=22,
         minute=30,
     )
     await task_manager.add_interval_task(
         task_id="ai_news_push",
-        func=_news_push,
+        func=SocialIntelligenceHelper._news_push,
         hours=4,
     )
     await task_manager.add_interval_task(
         task_id="ai_topic_followup",
-        func=_topic_followup,
+        func=SocialIntelligenceHelper._topic_followup,
         hours=2,
     )
 

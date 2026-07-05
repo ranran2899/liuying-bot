@@ -5,7 +5,7 @@
 """
 
 from .runner import AgentResult, run_agent
-from .skill_loader import SkillLoader, skill_loader
+from .skill_loader import RemoteSkillLoader, remote_skill_loader
 from .skillpacks import (
     get_current_time,
     get_game_info,
@@ -18,14 +18,14 @@ from .tools import AgentTool, ToolRegistry, tool_registry
 __all__ = [
     "AgentResult",
     "AgentTool",
-    "SkillLoader",
+    "RemoteSkillLoader",
     "ToolRegistry",
     "get_current_time",
     "get_game_info",
     "get_news",
     "get_weather",
+    "remote_skill_loader",
     "run_agent",
     "search_wiki",
-    "skill_loader",
     "tool_registry",
 ]

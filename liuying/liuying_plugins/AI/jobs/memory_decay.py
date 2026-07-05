@@ -179,19 +179,6 @@ class MemoryDecayHelper:
             )
 
 
-# 向后兼容别名
-_memory_decay_task = MemoryDecayHelper._memory_decay_task
-_memory_consolidation_task = (
-    MemoryDecayHelper._memory_consolidation_task
-)
-_get_active_users_in_window = (
-    MemoryDecayHelper._get_active_users_in_window
-)
-_user_persona_update_task = (
-    MemoryDecayHelper._user_persona_update_task
-)
-
-
 async def setup_memory_jobs() -> None:
     """注册记忆相关定时任务"""
     if not get_config("MEMORY_ENABLED", True):
@@ -205,7 +192,7 @@ async def setup_memory_jobs() -> None:
         try:
             await task_manager.add_interval_task(
                 task_id=_DECAY_TASK_ID,
-                func=_memory_decay_task,
+                func=MemoryDecayHelper._memory_decay_task,
                 hours=6,
                 name="AI记忆衰减",
                 group="ai_plugin",
@@ -227,7 +214,7 @@ async def setup_memory_jobs() -> None:
         try:
             await task_manager.add_cron_task(
                 task_id=_CONSOLIDATION_TASK_ID,
-                func=_memory_consolidation_task,
+                func=MemoryDecayHelper._memory_consolidation_task,
                 hour=3,
                 minute=0,
                 name="AI记忆巩固",
@@ -249,7 +236,7 @@ async def setup_memory_jobs() -> None:
     try:
         await task_manager.add_interval_task(
             task_id=_PERSONA_UPDATE_TASK_ID,
-            func=_user_persona_update_task,
+            func=MemoryDecayHelper._user_persona_update_task,
             hours=2,
             name="AI用户画像更新",
             group="ai_plugin",

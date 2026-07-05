@@ -17,12 +17,12 @@ import yaml
 
 from liuying.utils.log import logger
 
-from .skillpacks import register_builtin_skillpacks
+from .skillpacks import BuiltinSkillpackRegistrar
 from .tools import AgentTool, ToolRegistry, tool_registry
 
 __all__ = [
-    "SkillLoader",
     "SkillSpec",
+    "SkillpackLoader",
     "skill_loader",
 ]
 
@@ -164,7 +164,7 @@ def _load_skill_module(
     return module
 
 
-class SkillLoader:
+class SkillpackLoader:
     """技能包加载器
 
     扫描skillpacks目录，加载所有技能并注册到工具注册表。
@@ -336,7 +336,11 @@ class SkillLoader:
 
         # 注册内置单文件技能包（news/weather/datetime/wiki/game_info）
         try:
-            registered += register_builtin_skillpacks(registry)
+            registered += (
+                BuiltinSkillpackRegistrar.register_builtin_skillpacks(
+                    registry
+                )
+            )
         except Exception as e:
             logger.warning(
                 f"内置技能包注册失败: {e}",
@@ -351,5 +355,5 @@ class SkillLoader:
         return registered
 
 
-skill_loader = SkillLoader()
+skill_loader = SkillpackLoader()
 """技能包加载器单例"""

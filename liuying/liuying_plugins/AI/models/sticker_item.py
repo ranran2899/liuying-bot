@@ -252,43 +252,36 @@ class StickerItem(Model):
 
     @classmethod
     async def increment_usage(cls, item_id: int) -> None:
-        """增加使用计数
+        """增加使用计数（原子UPDATE）
 
         参数:
             item_id: 表情包ID
         """
-        item = await cls.filter(id=item_id).first()
-        if not item:
-            return
-        item.usage_count += 1
-        item.last_used_time = datetime.now()
-        await item.save(
-            update_fields=["usage_count", "last_used_time"]
+        await cls.filter(id=item_id).update(
+            usage_count=cls.usage_count + 1,
+            last_used_time=datetime.now(),
         )
 
     @classmethod
     async def update_feedback(
         cls, item_id: int, is_positive: bool
     ) -> None:
-        """更新反馈计数
+        """更新反馈计数（原子UPDATE）
 
         参数:
             item_id: 表情包ID
             is_positive: 是否正向反馈
         """
-        item = await cls.filter(id=item_id).first()
-        if not item:
-            return
         if is_positive:
-            item.positive_count += 1
+            await cls.filter(id=item_id).update(
+                positive_count=cls.positive_count + 1,
+                update_time=datetime.now(),
+            )
         else:
-            item.negative_count += 1
-        item.update_time = datetime.now()
-        await item.save(
-            update_fields=[
-                "positive_count", "negative_count", "update_time"
-            ]
-        )
+            await cls.filter(id=item_id).update(
+                negative_count=cls.negative_count + 1,
+                update_time=datetime.now(),
+            )
 
     @classmethod
     async def update_tags(
