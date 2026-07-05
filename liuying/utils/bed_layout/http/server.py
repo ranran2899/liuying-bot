@@ -10,9 +10,9 @@ from aiohttp import web
 from liuying.utils.bed_layout.http.config import BedLayoutHttpConfig
 from liuying.utils.bed_layout.http.handlers import BedLayoutHandlers
 from liuying.utils.bed_layout.http.utils import BedLayoutHttpUtils
+from liuying.utils.http import SSLUtils
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
-from liuying.utils.ssl_utils import create_ssl_context
 
 
 class BedLayoutServer:
@@ -64,7 +64,7 @@ class BedLayoutServer:
             logger.error(
                 f"请求处理异常: [{request.method}] {request.path} | "
                 f"IP={client_ip} | 耗时={duration:.2f}ms | 错误={e}",
-                "BedLayoutServer",
+                command="BedLayoutServer",
                 e=e,
             )
             raise
@@ -78,7 +78,7 @@ class BedLayoutServer:
 
         ssl_context = None
         if BedLayoutHttpConfig.is_https_enabled():
-            ssl_context = create_ssl_context(
+            ssl_context = SSLUtils.create_ssl_context(
                 cert_path=BedLayoutHttpConfig.get_ssl_cert_file(),
                 key_path=BedLayoutHttpConfig.get_ssl_key_file(),
                 auto_generate=True,

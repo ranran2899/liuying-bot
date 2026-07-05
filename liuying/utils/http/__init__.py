@@ -15,6 +15,7 @@ from .http_errors import (
 from .http_retry import Retry
 from .http_utils import AsyncHttpx, HttpClientManager, async_httpx
 from .http_ws import WsUtils, ws_utils
+from .ssl_utils import SSLUtils
 
 __all__ = [
     "AsyncHttpx",
@@ -33,6 +34,7 @@ __all__ = [
     "HttpTimeoutError",
     "ResponseCache",
     "Retry",
+    "SSLUtils",
     "WsUtils",
     "async_httpx",
     "response_cache",

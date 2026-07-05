@@ -82,20 +82,6 @@ class PlatformUtils:
         )
 
     @classmethod
-    def is_mail(cls, session: Uninfo | Bot) -> bool:
-        """判断是否为邮件适配器
-
-        参数:
-            session: Uninfo | Bot
-
-        返回:
-            bool: 是否为邮件适配器
-        """
-        if isinstance(session, Bot):
-            return "mail" in str(type(session)).lower()
-        return "mail" in session.scope.lower()
-
-    @classmethod
     async def ban_user(cls, bot: Bot, user_id: str, group_id: str, duration: int):
         """禁言
 
@@ -138,23 +124,20 @@ class PlatformUtils:
             case str() as sid:
                 superuser_ids = [sid]
             case _:
-                platform = cls.get_platform(bot)
-                if platform_superusers := BotConfig.get_superuser(platform):
-                    superuser_ids = platform_superusers
-                else:
+                if not (
+                    superuser_ids := BotConfig.get_superuser(cls.get_platform(bot))
+                ):
                     raise NotFindSuperuser()
         if isinstance(message, str):
             message = MessageUtils.build_message(message)
         result = []
         for sid in superuser_ids:
             try:
-                result.append(
-                    (sid, await cls.send_message(bot, sid, None, message))
-                )
+                result.append((sid, await cls.send_message(bot, sid, None, message)))
             except Exception as e:
                 logger.error(
                     "发送消息给超级用户失败",
-                    "PlatformUtils:send_superuser",
+                    command="PlatformUtils:send_superuser",
                     target=sid,
                     e=e,
                 )
@@ -173,9 +156,7 @@ class PlatformUtils:
         """
         if not (interface := get_interface(bot)):
             return []
-        members: list[Member] = await interface.get_members(
-            SceneType.GROUP, group_id
-        )
+        members: list[Member] = await interface.get_members(SceneType.GROUP, group_id)
         return [
             UserData(
                 name=member.user.name or "",
@@ -184,9 +165,9 @@ class PlatformUtils:
                 group_id=group_id,
                 role=member.role.id if member.role else "",
                 avatar_url=member.user.avatar,
-                join_time=int(member.joined_at.timestamp())
-                if member.joined_at
-                else None,
+                join_time=(
+                    int(member.joined_at.timestamp()) if member.joined_at else None
+                ),
             )
             for member in members
         ]
@@ -213,39 +194,39 @@ class PlatformUtils:
         if not (interface := get_interface(bot)):
             return None
         member = None
-        user = None
-        if channel_id:
-            member = await interface.get_member(
-                SceneType.CHANNEL_TEXT, channel_id, user_id
-            )
-            if member:
-                user = member.user
-        elif group_id:
-            member = await interface.get_member(SceneType.GROUP, group_id, user_id)
-            if member:
-                user = member.user
-        else:
-            user = await interface.get_user(user_id)
+        match (channel_id, group_id):
+            case (str(), _):
+                member = await interface.get_member(
+                    SceneType.CHANNEL_TEXT, channel_id, user_id
+                )
+            case (None, str()):
+                member = await interface.get_member(SceneType.GROUP, group_id, user_id)
+            case _:
+                user = await interface.get_user(user_id)
+        if member:
+            user = member.user
         if not user:
             return None
-        if member:
-            return UserData(
-                name=user.name or "",
-                card=member.nick,
-                user_id=user.id,
-                group_id=group_id,
-                channel_id=channel_id,
-                role=member.role.id if member.role else None,
-                join_time=(
-                    int(member.joined_at.timestamp()) if member.joined_at else None
-                ),
-            )
         return UserData(
             name=user.name or "",
+            card=member.nick if member else None,
             user_id=user.id,
             group_id=group_id,
             channel_id=channel_id,
+            role=member.role.id if member and member.role else None,
+            join_time=(
+                int(member.joined_at.timestamp())
+                if member and member.joined_at
+                else None
+            ),
         )
+
+    @classmethod
+    def _build_qq_avatar_url(cls, user_id: str, appid: str | None = None) -> str:
+        """构建QQ头像URL"""
+        if user_id.isdigit():
+            return f"http://q1.qlogo.cn/g?b=qq&nk={user_id}&s=640"
+        return f"https://q.qlogo.cn/qqapp/{appid}/{user_id}/640"
 
     @classmethod
     async def get_user_avatar(
@@ -263,12 +244,7 @@ class PlatformUtils:
         """
         if platform != "qq":
             return None
-        url = (
-            f"http://q1.qlogo.cn/g?b=qq&nk={user_id}&s=640"
-            if user_id.isdigit()
-            else f"https://q.qlogo.cn/qqapp/{appid}/{user_id}/640"
-        )
-        return await AsyncHttpx.get_content(url)
+        return await AsyncHttpx.get_content(cls._build_qq_avatar_url(user_id, appid))
 
     @classmethod
     def get_user_avatar_url(
@@ -286,11 +262,7 @@ class PlatformUtils:
         """
         if platform != "qq":
             return None
-        return (
-            f"http://q1.qlogo.cn/g?b=qq&nk={user_id}&s=640"
-            if user_id.isdigit()
-            else f"https://q.qlogo.cn/qqapp/{appid}/{user_id}/640"
-        )
+        return cls._build_qq_avatar_url(user_id, appid)
 
     @classmethod
     async def get_group_avatar(cls, gid: str, platform: str) -> bytes | None:
@@ -312,7 +284,10 @@ class PlatformUtils:
                     return (await client.get(url)).content
                 except Exception:
                     logger.error(
-                        "获取群头像错误", "Util", target=gid, platform=platform
+                        "获取群头像错误",
+                        command="Util",
+                        target=gid,
+                        platform=platform,
                     )
         return None
 
@@ -354,37 +329,31 @@ class PlatformUtils:
         返回:
             int: 更新个数
         """
-        create_list = []
-        update_list = []
         group_list, platform = await cls.get_group_list(bot)
-        if group_list:
-            db_group = await GroupConsole.filter().all()
-            db_group_id: list[tuple[str, str]] = [
-                (group.group_id, group.channel_id) for group in db_group
-            ]
-            for group in group_list:
-                group.platform = platform
-                if (group.group_id, group.channel_id) not in db_group_id:
-                    create_list.append(group)
-                    logger.debug(
-                        "群聊信息更新成功",
-                        "更新群信息",
-                        target=f"{group.group_id}:{group.channel_id}",
-                    )
-                else:
-                    _group = next(
-                        g
-                        for g in db_group
-                        if g.group_id == group.group_id
-                        and g.channel_id == group.channel_id
-                    )
-                    _group.group_name = group.group_name
-                    _group.max_member_count = group.max_member_count
-                    _group.member_count = group.member_count
-                    update_list.append(_group)
+        if not group_list:
+            return 0
+        db_groups = {
+            (g.group_id, g.channel_id): g
+            for g in await GroupConsole.filter().all()
+        }
+        create_list, update_list = [], []
+        for group in group_list:
+            group.platform = platform
+            if db_group := db_groups.get((group.group_id, group.channel_id)):
+                db_group.group_name = group.group_name
+                db_group.max_member_count = group.max_member_count
+                db_group.member_count = group.member_count
+                update_list.append(db_group)
+            else:
+                create_list.append(group)
+                logger.debug(
+                    "群聊信息更新成功",
+                    command="更新群信息",
+                    target=f"{group.group_id}:{group.channel_id}",
+                )
         if create_list:
             await GroupConsole.filter().bulk_create(create_list)
-        if group_list:
+        if update_list:
             await GroupConsole.filter().bulk_update(
                 update_list, ["group_name", "max_member_count", "member_count"]
             )
@@ -439,17 +408,12 @@ class PlatformUtils:
             return [], ""
         platform = cls.get_platform(bot)
         result_list = []
-        scenes = await interface.get_scenes(SceneType.GROUP)
-        for scene in scenes:
-            group_id = scene.id
+        for scene in await interface.get_scenes(SceneType.GROUP):
             result_list.append(
-                GroupConsole(
-                    group_id=scene.id,
-                    group_name=scene.name,
-                )
+                GroupConsole(group_id=scene.id, group_name=scene.name)
             )
             if not only_group and platform != "qq":
-                if channel_list := await interface.get_scenes(parent_scene_id=group_id):
+                if channel_list := await interface.get_scenes(parent_scene_id=scene.id):
                     result_list.extend(
                         GroupConsole(
                             group_id=scene.id,
@@ -498,9 +462,7 @@ class PlatformUtils:
             return [], ""
         user_list = await interface.get_users()
         return [
-            BotFriend(
-                bot_id=bot.self_id, user_id=u.id, user_name=u.name
-            )
+            BotFriend(bot_id=bot.self_id, user_id=u.id, user_name=u.name)
             for u in user_list
         ], cls.get_platform(bot)
 
@@ -574,13 +536,16 @@ class BroadcastEngine:
                 try:
                     self.bot_list.append(nonebot.get_bot(bid))
                 except KeyError:
-                    logger.warning(f"Bot:{bid} 对象未连接或不存在", log_cmd)
+                    logger.warning(
+                        f"Bot:{bid} 对象未连接或不存在", command=log_cmd
+                    )
         if not self.bot_list:
             try:
                 bot = nonebot.get_bot()
                 self.bot_list.append(bot)
                 logger.warning(
-                    f"广播任务未传入Bot对象，使用默认Bot {bot.self_id}", log_cmd
+                    f"广播任务未传入Bot对象，使用默认Bot {bot.self_id}",
+                    command=log_cmd,
                 )
             except Exception as e:
                 raise ValueError("当前没有可用的Bot对象...", log_cmd) from e
@@ -615,14 +580,14 @@ class BroadcastEngine:
         if not await self.call_check(bot, group.group_id):
             logger.debug(
                 "广播方法检测运行方法为 False, 已跳过该群组...",
-                self.log_cmd,
+                command=self.log_cmd,
                 group_id=group.group_id,
             )
             return
         if not await GroupConsole.is_proactive_allowed(group.group_id):
             logger.debug(
                 "群聊已关闭主动消息, 跳过该群组...",
-                self.log_cmd,
+                command=self.log_cmd,
                 group_id=group.group_id,
             )
             return
@@ -632,9 +597,11 @@ class BroadcastEngine:
         ):
             self.ignore_group.append(key)
             await MessageUtils.build_message(self.message).send(target, bot)
-            logger.debug("广播消息发送成功...", self.log_cmd, target=key)
+            logger.debug("广播消息发送成功...", command=self.log_cmd, target=key)
         else:
-            logger.warning("广播消息获取Target失败...", self.log_cmd, target=key)
+            logger.warning(
+                "广播消息获取Target失败...", command=self.log_cmd, target=key
+            )
 
     async def broadcast(self) -> int:
         """广播消息
@@ -660,7 +627,10 @@ class BroadcastEngine:
                     self.count += 1
                 except Exception as e:
                     logger.warning(
-                        "广播消息发送失败", self.log_cmd, target=group.group_id, e=e
+                        "广播消息发送失败",
+                        command=self.log_cmd,
+                        target=group.group_id,
+                        e=e,
                     )
         return self.count
 
