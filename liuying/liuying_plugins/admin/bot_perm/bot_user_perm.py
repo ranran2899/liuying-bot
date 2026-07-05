@@ -14,6 +14,7 @@ from liuying.models._user import UserLevel
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
+from liuying.utils.rules import admin_check
 
 __plugin_meta__ = PluginMetadata(
     name="机器人用户权限管理",
@@ -26,6 +27,7 @@ __plugin_meta__ = PluginMetadata(
     extra=PluginExtraData(
         author="liuying",
         version="1.0",
+        admin_level=10,
         plugin_type=PluginType.SUPERUSER,
     ).to_dict(),
 )
@@ -38,7 +40,8 @@ _add_matcher = on_alconna(
         Args["level", int],
         Args["uid", [str, At]],
     ),
-    permission=SUPERUSER,
+    # permission=SUPERUSER,
+    rule=admin_check(10),
     priority=5,
     block=True,
 )
@@ -50,7 +53,8 @@ _delete_matcher = on_alconna(
         Args["bot_id", str],
         Args["uid", [str, At]],
     ),
-    permission=SUPERUSER,
+    # permission=SUPERUSER,
+    rule=admin_check(10),
     priority=5,
     block=True,
 )
@@ -62,7 +66,8 @@ _query_matcher = on_alconna(
         Args["bot_id", str],
         Args["uid", [str, At]],
     ),
-    permission=SUPERUSER,
+    # permission=SUPERUSER,
+    rule=admin_check(10),
     priority=5,
     block=True,
 )

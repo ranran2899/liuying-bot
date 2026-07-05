@@ -16,6 +16,7 @@ from liuying.models._user import UserLevel
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
+from liuying.utils.rules import admin_check
 
 __plugin_meta__ = PluginMetadata(
     name="用户全局权限管理",
@@ -33,7 +34,7 @@ __plugin_meta__ = PluginMetadata(
         author="liuying",
         version="1.0",
         plugin_type=PluginType.SUPER_AND_ADMIN,
-        admin_level=5,
+        admin_level=10,
     ).to_dict(),
 )
 
@@ -49,7 +50,8 @@ _add_matcher = on_alconna(
             help_text="指定群组（不指定则为个人权限，不填群号则为当前群）",
         ),
     ),
-    permission=SUPERUSER,
+    # permission=SUPERUSER,
+    rule=admin_check(10),
     priority=5,
     block=True,
 )
@@ -66,7 +68,8 @@ _delete_matcher = on_alconna(
             help_text="指定群组（不指定则为个人权限，不填群号则为当前群）",
         ),
     ),
-    permission=SUPERUSER,
+    # permission=SUPERUSER,
+    rule=admin_check(10),
     priority=5,
     block=True,
 )
