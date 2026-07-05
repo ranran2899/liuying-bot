@@ -94,19 +94,22 @@ def _resolve_group_and_type(
             return None, "个人"
 
 
-async def _get_current_level(uid: str, group_id: str | None) -> int:
+async def _get_current_level(
+    uid: str, group_id: str | None, platform: str | None
+) -> int:
     """获取当前权限等级
 
     参数:
         uid: 用户ID
         group_id: 群组ID
+        platform: 平台名称
 
     返回:
         int: 当前权限等级
     """
     if group_id is None:
-        return await UserLevel.get_user_level(uid)
-    return await UserLevel.get_user_level(uid, group_id)
+        return await UserLevel.get_user_level(uid, platform=platform)
+    return await UserLevel.get_user_level(uid, group_id, platform=platform)
 
 
 @_add_matcher.handle()
@@ -129,10 +132,13 @@ async def handle_add_permission(
     if isinstance(uid, At):
         uid = uid.target
 
+    platform = session.adapter
     group_id, permission_type = _resolve_group_and_type(session, gid)
-    current_level = await _get_current_level(uid, group_id)
+    current_level = await _get_current_level(uid, group_id, platform)
 
-    await UserLevel.set_level(uid, group_id, level=level, group_flag=1)
+    await UserLevel.set_level(
+        uid, group_id, level=level, group_flag=1, platform=platform
+    )
 
     logger.info(
         f"添加{permission_type}权限: 用户 {uid} 权限从 {current_level} -> {level}",
@@ -171,13 +177,16 @@ async def handle_delete_permission(
     if isinstance(uid, At):
         uid = uid.target
 
+    platform = session.adapter
     group_id, permission_type = _resolve_group_and_type(session, gid)
-    current_level = await _get_current_level(uid, group_id)
+    current_level = await _get_current_level(uid, group_id, platform)
 
     if current_level <= 0:
         await MessageUtils.build_message("用户没有权限可删除").finish(reply_to=True)
 
-    await UserLevel.set_level(uid, group_id, level=0, group_flag=1)
+    await UserLevel.set_level(
+        uid, group_id, level=0, group_flag=1, platform=platform
+    )
 
     logger.info(
         f"删除{permission_type}权限: 用户 {uid} 权限从 {current_level} -> 0",

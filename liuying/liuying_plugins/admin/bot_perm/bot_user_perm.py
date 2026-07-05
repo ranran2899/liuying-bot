@@ -89,9 +89,10 @@ async def handle_add_permission(
     if isinstance(uid, At):
         uid = uid.target
 
-    current_level = await UserLevel.get_bot_level(bot_id, uid)
+    platform = session.adapter
+    current_level = await UserLevel.get_bot_level(bot_id, uid, platform=platform)
 
-    await UserLevel.set_bot_level(bot_id, uid, level)
+    await UserLevel.set_bot_level(bot_id, uid, level, platform=platform)
 
     logger.info(
         f"添加机器人用户权限: 机器人 {bot_id} 用户 {uid} "
@@ -124,14 +125,15 @@ async def handle_delete_permission(
     if isinstance(uid, At):
         uid = uid.target
 
-    current_level = await UserLevel.get_bot_level(bot_id, uid)
+    platform = session.adapter
+    current_level = await UserLevel.get_bot_level(bot_id, uid, platform=platform)
 
     if current_level <= 0:
         await MessageUtils.build_message(
             f"用户 {uid} 在机器人 {bot_id} 没有权限可删除"
         ).finish()
 
-    await UserLevel.delete_bot_level(bot_id, uid)
+    await UserLevel.delete_bot_level(bot_id, uid, platform=platform)
 
     logger.info(
         f"删除机器人用户权限: 机器人 {bot_id} 用户 {uid} "
@@ -164,7 +166,8 @@ async def handle_query_permission(
     if isinstance(uid, At):
         uid = uid.target
 
-    current_level = await UserLevel.get_bot_level(bot_id, uid)
+    platform = session.adapter
+    current_level = await UserLevel.get_bot_level(bot_id, uid, platform=platform)
 
     await MessageUtils.build_message(
         f"机器人 {bot_id} 的用户 {uid} 当前权限等级：{current_level}"

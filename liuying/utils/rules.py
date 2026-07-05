@@ -76,8 +76,8 @@ def admin_check(a: int | str, key: str | None = None) -> Rule:
         if await SUPERUSER(bot, event):
             return True
 
-        if PlatformUtils.is_qbot(session):
-            return False
+        # if PlatformUtils.is_qbot(session):
+        #     return False
 
         group_id = session.group.id if session.group else None
         user_id = session.user.id
@@ -191,53 +191,37 @@ def match_regex(pattern: str, flags: int = 0) -> Rule:
     return Rule(_rule)
 
 
-def word_count_rule(min_count: int = 0, max_count: int = 999999) -> Rule:
-    """字数限制规则
 
-    参数:
-        min_count: 最小字数
-        max_count: 最大字数
+# def scope_in(*scopes: str) -> Rule:
+#     """作用域白名单规则
 
-    返回:
-        Rule: Rule
-    """
+#     参数:
+#         scopes: 允许的作用域列表
 
-    async def _rule(event: Event) -> bool:
-        return min_count <= len(event.get_plaintext().strip()) <= max_count
+#     返回:
+#         Rule: Rule
+#     """
 
-    return Rule(_rule)
+#     async def _rule(session: Uninfo) -> bool:
+#         return session.scope in scopes
 
-
-def scope_in(*scopes: str) -> Rule:
-    """作用域白名单规则
-
-    参数:
-        scopes: 允许的作用域列表
-
-    返回:
-        Rule: Rule
-    """
-
-    async def _rule(session: Uninfo) -> bool:
-        return session.scope in scopes
-
-    return Rule(_rule)
+#     return Rule(_rule)
 
 
-def scope_not_in(*scopes: str) -> Rule:
-    """作用域黑名单规则
+# def scope_not_in(*scopes: str) -> Rule:
+#     """作用域黑名单规则
 
-    参数:
-        scopes: 禁止的作用域列表
+#     参数:
+#         scopes: 禁止的作用域列表
 
-    返回:
-        Rule: Rule
-    """
+#     返回:
+#         Rule: Rule
+#     """
 
-    async def _rule(session: Uninfo) -> bool:
-        return session.scope not in scopes
+#     async def _rule(session: Uninfo) -> bool:
+#         return session.scope not in scopes
 
-    return Rule(_rule)
+#     return Rule(_rule)
 
 
 def adapter_in(*adapters: str) -> Rule:
