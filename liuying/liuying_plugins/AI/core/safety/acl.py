@@ -22,11 +22,8 @@
 from dataclasses import dataclass
 from typing import Any
 
-import nonebot
-
 from liuying.models._user import UserLevel
 from liuying.models.ban_console import BanConsole
-from liuying.utils.log import logger
 
 __all__ = ["AclChecker", "PermissionResult", "acl_checker"]
 
@@ -75,23 +72,12 @@ class AclChecker:
 
         参数:
             user_id: 用户ID
-            bot: Bot对象，None时尝试获取
+            bot: Bot对象，此参数仅保留兼容性，不再使用
 
         返回:
             bool: 是否超级用户
         """
-        try:
-            if bot is None:
-                bot = nonebot.get_bot()
-            superusers = getattr(
-                bot.config, "superusers", set()
-            ) or set()
-            return str(user_id) in {str(s) for s in superusers}
-        except Exception as e:
-            logger.debug(
-                f"超级用户检查失败: {e}", command="AI", e=e
-            )
-            return False
+        return UserLevel.is_superuser(str(user_id))
 
     @staticmethod
     async def get_user_level(
@@ -109,15 +95,7 @@ class AclChecker:
         返回:
             int: 权限等级（0为普通用户）
         """
-        try:
-            return await UserLevel.get_level(
-                user_id, bot_id, group_id
-            )
-        except Exception as e:
-            logger.debug(
-                f"获取用户等级失败: {e}", command="AI", e=e
-            )
-            return 0
+        return await UserLevel.get_level(user_id, bot_id, group_id)
 
     @staticmethod
     async def check_admin(
@@ -165,17 +143,11 @@ class AclChecker:
         返回:
             bool: 是否在黑名单（True表示被拉黑）
         """
-        try:
-            if await BanConsole.is_ban(user_id, group_id):
-                return True
-            if group_id and await BanConsole.is_ban(None, group_id):
-                return True
-            return False
-        except Exception as e:
-            logger.debug(
-                f"黑名单检查失败: {e}", command="AI", e=e
-            )
-            return False
+        if await BanConsole.is_ban(user_id, group_id):
+            return True
+        if group_id and await BanConsole.is_ban(None, group_id):
+            return True
+        return False
 
     @staticmethod
     async def check_permission(
