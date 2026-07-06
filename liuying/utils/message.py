@@ -60,6 +60,7 @@ MESSAGE_TYPE = (
 
 class Config(BaseModel):
     image_to_bytes: bool = False
+    """是否将图片转换为bytes发送"""
 
 
 class MessageUtils:

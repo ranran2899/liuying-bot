@@ -41,26 +41,26 @@ class BedLayoutHttpConfig:
         return get_config("ENABLE_HTTPS", False)
 
     @classmethod
-    def is_nat_proxy_enabled(cls) -> bool:
-        """是否启用内网穿透代理"""
-        return get_config("NAT_PROXY_ENABLED", False)
+    def is_public_address_enabled(cls) -> bool:
+        """是否开启公网地址"""
+        return get_config("PUBLIC_ADDRESS_ENABLED", False)
 
     @classmethod
-    def get_nat_proxy_base_url(cls) -> str:
+    def get_public_address_base_url(cls) -> str:
         """
-        获取内网穿透基础URL
+        获取公网地址基础URL
 
         支持多种配置格式:
         - 完整URL: https://example.com 或 https://example.com:8443
         - 仅域名: example.com (自动添加协议和端口)
         - 域名+端口: example.com:9999 (自动添加协议)
         """
-        host = get_config("NAT_PROXY_HOST", "")
+        host = get_config("PUBLIC_ADDRESS_HOST", "")
         if not host:
             return cls.get_base_url()
 
-        port = get_config("NAT_PROXY_PORT")
-        use_https = get_config("NAT_PROXY_USE_HTTPS", False)
+        port = get_config("PUBLIC_ADDRESS_PORT")
+        use_https = get_config("PUBLIC_ADDRESS_USE_HTTPS", False)
 
         parsed = urlparse(host)
 
@@ -106,8 +106,8 @@ class BedLayoutHttpConfig:
         返回:
             str: 图片的完整访问URL
         """
-        if cls.is_nat_proxy_enabled():
-            base = cls.get_nat_proxy_base_url()
+        if cls.is_public_address_enabled():
+            base = cls.get_public_address_base_url()
         else:
             base = cls.get_base_url()
         return f"{base}/images/{filename}"
