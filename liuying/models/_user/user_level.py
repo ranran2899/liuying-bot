@@ -43,10 +43,6 @@ class UserLevel(Model):
         String(255), nullable=True, comment="机器人id"
     )
     """机器人id"""
-    platform: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="用户所在平台"
-    )
-    """用户所在平台"""
     user_level: Mapped[int] = mapped_column(
         nullable=False, comment="用户权限等级"
     )
@@ -56,6 +52,10 @@ class UserLevel(Model):
         comment="特殊标记，是否随群管理员变更而设置权限",
     )
     """特殊标记，是否随群管理员变更而设置权限"""
+    platform: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="所在平台"
+    )
+    """所在平台"""
 
     cache_type = CacheType.LEVEL
     """缓存类型"""
@@ -63,9 +63,12 @@ class UserLevel(Model):
     """缓存键字段"""
 
     @classmethod
-    def _is_superuser(cls, user_id: str, platform: str | None = None) -> bool:
-        """
-        检查用户是否为超级用户
+    def is_superuser(
+        cls,
+        user_id: str,
+        platform: str | None = None
+    ) -> bool:
+        """检查用户是否为超级用户
 
         优先检查 NoneBot 全局超级用户，再检查平台超级用户配置。
 
@@ -137,7 +140,7 @@ class UserLevel(Model):
         返回:
             int: 权限等级
         """
-        if cls._is_superuser(user_id, platform):
+        if cls.is_superuser(user_id, platform):
             return 10
         levels = [await cls._fetch_level(user_id, None, None)]
         if bot_id:
@@ -164,7 +167,7 @@ class UserLevel(Model):
         返回:
             int: 权限等级
         """
-        if cls._is_superuser(user_id, platform):
+        if cls.is_superuser(user_id, platform):
             return 10
         return await cls._fetch_level(user_id, group_id, None)
 
@@ -183,7 +186,7 @@ class UserLevel(Model):
         返回:
             int: 权限等级
         """
-        if cls._is_superuser(user_id, platform):
+        if cls.is_superuser(user_id, platform):
             return 10
         return await cls._fetch_level(user_id, None, bot_id)
 
@@ -334,7 +337,7 @@ class UserLevel(Model):
         返回:
             bool: 是否满足权限要求
         """
-        if cls._is_superuser(user_id, platform):
+        if cls.is_superuser(user_id, platform):
             return True
         if group_id:
             return await cls._fetch_level(user_id, group_id, None) >= level

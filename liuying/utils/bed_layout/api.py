@@ -269,7 +269,7 @@ class BedLayout:
             ),
         )
         # 测试用
-        logger.info(f"保存图片成功，返回图片链接: {url}", command="BedLayout")
+        # logger.info(f"保存图片成功，返回图片链接: {url}", command="BedLayout")
 
         return {
             "url": url,
