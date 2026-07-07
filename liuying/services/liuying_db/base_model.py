@@ -43,7 +43,7 @@ class Model(Base):
     def filter(cls, *args, **kwargs) -> QueryWrapper:
         """便捷的过滤查询方法，自动处理会话管理
 
-        当前仅支持SQLAlchemy风格的查询。Django风格查询只是保留向后兼容，不建议使用。
+        当前filter支持SQLAlchemy风格的查询和Django风格查询。
 
         参数:
             *args: SQLAlchemy过滤表达式

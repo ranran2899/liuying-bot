@@ -235,5 +235,5 @@ async def _shutdown_ai_plugin() -> None:
     logger.info("AI插件已关闭", command="AI")
 
 
-# 保留 driver 引用，便于 WebUI 等模块通过 AI 插件获取 driver 实例
-driver = get_driver()
+# # 保留 driver 引用，便于 WebUI 等模块通过 AI 插件获取 driver 实例
+# driver = get_driver()
