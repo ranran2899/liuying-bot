@@ -136,7 +136,7 @@ class FTSManager:
             await session.execute(sql_text("DELETE FROM search_fts_idx"))
             await session.execute(sql_text("DELETE FROM search_fts"))
             await session.commit()
-            logger.debug("已清空 FTS 索引数据", command=LOG_COMMAND)
+            logger.debug("已清空 FTS 索引数据", LOG_COMMAND)
 
     async def get_text(self, doc_id: int) -> str | None:
         """获取指定文档的原始索引文本

@@ -70,7 +70,7 @@ def _with_write_lock(func: Callable[..., Awaitable[None]]):
                     logger.debug(
                         f"数据库写锁冲突，{delay:.2f}s 后重试 "
                         f"({attempt + 1}/{_WRITE_MAX_RETRIES}): {e}",
-                        command=LOG_COMMAND,
+                        LOG_COMMAND,
                     )
                     await asyncio.sleep(delay)
 
@@ -272,7 +272,7 @@ class SearchManager:
                 await session.execute(sql_text("DELETE FROM search_vector_chunks"))
                 await session.execute(sql_text("DELETE FROM search_entities"))
                 await session.execute(sql_text("DELETE FROM search_relations"))
-        logger.warning("已清空所有搜索表数据", command=LOG_COMMAND)
+        logger.warning("已清空所有搜索表数据", LOG_COMMAND)
 
 
 search_manager = SearchManager()

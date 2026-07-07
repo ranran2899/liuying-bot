@@ -92,12 +92,6 @@ class UpdateDeleteBuilder(FilterMixin):
             return []
 
         total = len(objects)
-        pk_names = DbUtils.get_primary_key_names(self.model_class)
-
-        for obj in objects:
-            for pk_name in pk_names:
-                if hasattr(obj, pk_name) and getattr(obj, pk_name) is None:
-                    setattr(obj, pk_name, None)
 
         async with self.model_class.get_session(db_name=self._db_name) as session:
             if batch_size and batch_size > 0:

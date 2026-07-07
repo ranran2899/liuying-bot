@@ -75,9 +75,7 @@ class DbUtils:
         返回:
             Any: 列对象
         """
-        return (
-            getattr(model_class, column) if isinstance(column, str) else column
-        )
+        return getattr(model_class, column) if isinstance(column, str) else column
 
     @staticmethod
     def get_primary_key_names(model_class: Any) -> tuple[str, ...]:
@@ -111,11 +109,10 @@ class DbUtils:
             base_date = datetime.today()
 
         today_start = base_date.replace(**_MIDNIGHT)
-        today_end = base_date.replace(**_END_OF_DAY)
 
         match period:
             case "today":
-                return today_start, today_end
+                return today_start, base_date.replace(**_END_OF_DAY)
             case "yesterday":
                 yesterday = base_date - timedelta(days=1)
                 return (

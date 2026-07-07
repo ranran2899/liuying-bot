@@ -14,7 +14,6 @@ from sqlalchemy import text
 
 from liuying.configs.config import BotConfig
 from liuying.utils.log import logger
-from liuying.utils.manager.priority_manager import PriorityLifecycle
 
 from .base_model import Base
 from .config import (

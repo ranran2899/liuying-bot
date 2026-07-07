@@ -165,9 +165,7 @@ class ConnectionRegistry:
         seen.update(self._builtin_factories.keys())
         return sorted(seen)
 
-    def create_engine(
-        self, db_url: str, config_params: dict
-    ) -> AsyncEngine:
+    def create_engine(self, db_url: str, config_params: dict) -> AsyncEngine:
         """根据 URL 自动选择注册的工厂创建 engine
 
         未注册的 scheme 回退到 ``create_async_engine``。

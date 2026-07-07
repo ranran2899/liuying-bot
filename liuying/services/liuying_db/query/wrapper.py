@@ -8,6 +8,7 @@ QueryWrapper 采用 Mixin 模式组合多个功能域，实现关注点分离：
 """
 
 import asyncio
+import hashlib
 import time
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
@@ -262,8 +263,10 @@ class QueryWrapper(
 
         cache_key = self._cache_key
         if cache_key is None and self._cache_enabled:
+            stmt_hash = hashlib.md5(str(stmt).encode("utf-8")).hexdigest()
             cache_key = (
-                f"{self._db_name}:{self.model_class.__name__}:" f"{fetch_type}:{stmt!s}"
+                f"{self._db_name}:{self.model_class.__name__}:"
+                f"{fetch_type}:{stmt_hash}"
             )
 
         if self._cache_enabled and cache_key:

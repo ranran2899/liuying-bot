@@ -103,9 +103,7 @@ class ConditionQueryBuilder:
         """
         col = DbUtils.get_column(self.model_class, column)
         condition = (
-            col.between(start, end)
-            if inclusive
-            else and_(col > start, col < end)
+            col.between(start, end) if inclusive else and_(col > start, col < end)
         )
         return self._add_condition(column, condition)
 

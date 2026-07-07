@@ -261,21 +261,25 @@ class QueryExecutionBuilder:
             list: 字典形式的记录列表
         """
         results = await self.all()
-        dict_results = []
+        dict_results: list[dict[str, Any]] = []
+
+        only_set = set(only) if only else None
+        except_set = set(except_) if except_ else None
 
         for result in results:
-            if hasattr(result, "__table__"):
-                columns = result.__table__.columns.keys()
-                data = {}
-                for column in columns:
-                    if only and column not in only:
-                        continue
-                    if except_ and column in except_:
-                        continue
-                    data[column] = getattr(result, column, None)
-                dict_results.append(data)
-            else:
+            table = getattr(result, "__table__", None)
+            if table is None:
                 dict_results.append(result)
+                continue
+
+            data: dict[str, Any] = {}
+            for column in table.columns.keys():
+                if only_set and column not in only_set:
+                    continue
+                if except_set and column in except_set:
+                    continue
+                data[column] = getattr(result, column)
+            dict_results.append(data)
 
         return dict_results
 

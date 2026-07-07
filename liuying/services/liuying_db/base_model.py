@@ -211,12 +211,20 @@ class Model(Base):
     async def _invalidate_cache(cls, instance):
         """使缓存失效
 
+        统一的缓存失效入口，写操作（create/update/delete）后调用。
+        当模型声明了 ``cache_type`` 时，按 ``cache_key_field`` 删除对应缓存键，
+        保证后续读取会重新从数据库加载，维持缓存一致性。
+
         参数:
             instance: 模型实例
         """
-        if cache_type := cls.get_cache_type():
-            cache = Cache(cache_type, result_type=cls)
-            await cache.delete(cls.get_cache_key(instance))
+        if not (cache_type := cls.get_cache_type()):
+            return
+        cache_key = cls.get_cache_key(instance)
+        if cache_key is None:
+            return
+        cache = Cache(cache_type, result_type=cls)
+        await cache.delete(cache_key)
 
     @classmethod
     async def create(
@@ -503,7 +511,7 @@ class Model(Base):
                 return None
             except Exception as e:
                 logger.error(
-                    f"数据库操作异常: {cls.__name__}.safe_get_or_none, {e!s}",
+                    f"数据库操作异常: {cls.__name__}.safe_get_or_none: {e!s}",
                     LOG_COMMAND,
                 )
                 raise
