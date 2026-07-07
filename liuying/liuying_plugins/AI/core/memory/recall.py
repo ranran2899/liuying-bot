@@ -147,7 +147,7 @@ class RecallMixin:
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
-        return await self._db.fts.search(query, limit)
+        return await self._db.search_fts(query, limit)
 
     async def _search_vector(
         self, query: str, limit: int
@@ -162,7 +162,7 @@ class RecallMixin:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
         query_vec = _hash_bow_embedding(query, self._embedding_dim)
-        return await self._db.vector.vector_search(query_vec, limit)
+        return await self._db.search_vector(query_vec, limit)
 
     async def _search_embedding(
         self, query: str, limit: int
@@ -180,7 +180,7 @@ class RecallMixin:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
         query_vec = _hash_bow_embedding(query, self._embedding_dim)
-        return await self._db.vector.embedding_search(query_vec, limit)
+        return await self._db.search_embedding(query_vec, limit)
 
     async def _search_time(
         self,
@@ -237,7 +237,7 @@ class RecallMixin:
         """
         entities = _extract_entities_simple(query)
         entity_names = [e["name"] for e in entities]
-        return await self._db.entity.entity_search(entity_names, limit)
+        return await self._db.search_entity(entity_names, limit)
 
     def _fuse_recall(
         self,

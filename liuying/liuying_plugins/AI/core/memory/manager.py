@@ -8,10 +8,10 @@
 
 import asyncio
 
-from liuying.services.liuying_db import search_manager
 from liuying.utils.log import logger
 
 from ...models.memory_item import MemoryItem
+from ..knowledge_db import knowledge_base
 from ._common import (
     _DEFAULT_PERSONA,
     _EMBEDDING_DIM,
@@ -33,9 +33,9 @@ class MemoryManager(RecallMixin, ConsolidationMixin):
         """初始化记忆管理器
 
         参数:
-            db: SearchManager实例，None时用单例
+            db: KnowledgeBase实例，None时用单例
         """
-        self._db = db or search_manager
+        self._db = db or knowledge_base
         self._embedding_dim = _EMBEDDING_DIM
 
     async def add(
@@ -92,7 +92,7 @@ class MemoryManager(RecallMixin, ConsolidationMixin):
     async def _index_memory(self, memory: MemoryItem) -> None:
         """为记忆建立检索索引（原子写入）
 
-        通过 SearchManager.upsert_document 在单个事务内同时写入
+        通过 KnowledgeBase.index_document 在单个事务内同时写入
         FTS、向量、实体数据，保证一致性。
         metadata 中包含 persona_name 以支持按人格过滤。
 
@@ -102,7 +102,7 @@ class MemoryManager(RecallMixin, ConsolidationMixin):
         search_text = f"{memory.summary} {memory.content}"
         embedding = _hash_bow_embedding(search_text, self._embedding_dim)
         entities = _extract_entities_simple(search_text)
-        await self._db.upsert_document(
+        await self._db.index_document(
             doc_id=memory.id,
             text=search_text,
             embedding=embedding,

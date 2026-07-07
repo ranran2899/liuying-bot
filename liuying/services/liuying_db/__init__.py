@@ -5,7 +5,6 @@
 - 会话管理：``session_manager`` 单例、``DatabaseSessionManager``、``nested_transaction``
 - 连接工厂：``connection_registry`` 单例、``ConnectionRegistry``
 - 生命周期：``init``（启动时自动触发）、``LifecycleManager``
-- 搜索能力：``SearchManager``、``search_manager``、``init_search_tables``
 - 同步能力：``sync_manager`` 单例、``DBSyncManager``
 - 工具集合：``DbUtils``（``with_db_timeout``、``get_column`` 等）
 - 配置常量：``DB_TIMEOUT_SECONDS``、``SLOW_QUERY_THRESHOLD``、``db_model``
@@ -22,7 +21,6 @@ from .config import (
 from .connection_registry import ConnectionRegistry, connection_registry
 from .exceptions import DbConnectError, DbUrlIsNone
 from .lifecycle import LifecycleManager
-from .search import SearchManager, init_search_tables, search_manager
 from .session import DatabaseSessionManager, nested_transaction, session_manager
 from .sync import DBSyncManager, sync_manager
 from .utils import DbUtils
@@ -49,12 +47,9 @@ __all__ = [
     "DbUtils",
     "LifecycleManager",
     "Model",
-    "SearchManager",
     "connection_registry",
     "db_model",
-    "init_search_tables",
     "nested_transaction",
-    "search_manager",
     "session_manager",
     "sync_manager",
 ]

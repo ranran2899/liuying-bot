@@ -1,6 +1,6 @@
 """数据库生命周期管理模块
 
-负责数据库连接的初始化、表结构创建、脚本执行、搜索表初始化与同步任务启动，
+负责数据库连接的初始化、表结构创建、脚本执行与同步任务启动，
 包含自动重试机制。所有初始化逻辑封装在 ``LifecycleManager`` 类中，
 通过模块级 ``init`` 函数对接 NoneBot 启动钩子。
 """
@@ -24,7 +24,6 @@ from .config import (
     prompt,
 )
 from .exceptions import DbConnectError, DbUrlIsNone
-from .search import init_search_tables
 from .session import session_manager
 from .sync import sync_manager
 from .utils import DbUtils
@@ -35,7 +34,7 @@ driver = nonebot.get_driver()
 class LifecycleManager:
     """数据库生命周期管理器
 
-    封装数据库初始化、表结构创建、脚本执行、搜索表初始化与同步任务启动等逻辑,
+    封装数据库初始化、表结构创建、脚本执行与同步任务启动等逻辑,
     由模块级 ``init`` 函数在 NoneBot 启动时调用。
     """
 
@@ -109,18 +108,6 @@ class LifecycleManager:
         logger.debug("默认数据库表结构生成完毕!")
 
     @staticmethod
-    async def _init_search_tables_for_all():
-        """为所有已初始化的 SQLite 数据库初始化搜索表结构
-
-        仅对 SQLite 数据库生效，其他类型跳过。
-        """
-        for db_name in session_manager.engines:
-            try:
-                await init_search_tables(db_name)
-            except Exception as e:
-                logger.warning(f"数据库 {db_name} 搜索表初始化失败: {e}")
-
-    @staticmethod
     async def _init_extra_databases():
         """初始化额外数据库连接"""
         if not BotConfig.db_urls:
@@ -154,7 +141,7 @@ class LifecycleManager:
         """执行完整的数据库初始化流程
 
         包含主数据库连接、额外数据库连接、脚本执行、表结构创建、
-        搜索表初始化、监控启动与同步任务启动，带自动重试机制。
+        监控启动与同步任务启动，带自动重试机制。
 
         异常:
             DbUrlIsNone: 数据库连接字符串为空
@@ -171,7 +158,6 @@ class LifecycleManager:
                 await LifecycleManager._init_extra_databases()
                 await LifecycleManager._run_script_methods()
                 await LifecycleManager._create_default_tables()
-                await LifecycleManager._init_search_tables_for_all()
 
                 db_count = len(session_manager.engines)
                 logger.info(f"数据库加载成功！共初始化 {db_count} 个数据库连接")

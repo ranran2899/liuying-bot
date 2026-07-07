@@ -8,7 +8,6 @@ from nonebot import get_driver
 from nonebot.plugin import PluginMetadata
 
 from liuying.configs.utils import Command, PluginExtraData, PluginSetting
-from liuying.services.liuying_db import search_manager
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
@@ -19,6 +18,7 @@ from .agent.tools import (  # 公开API供第三方注册工具
     tool_registry,
 )
 from .config import PluginConfig, get_config
+from .core.knowledge_db import knowledge_base
 from .models import (  # noqa: F401  导入触发模型注册
     ConversationRecord,
     ConversationTurn,
@@ -133,7 +133,7 @@ __plugin_meta__ = PluginMetadata(
 async def _init_ai_plugin() -> None:
     """AI插件初始化
 
-    初始化搜索表（如未由 liuying_db 统一创建则兜底），
+    初始化内置知识库（独立 SQLite，与 liuying_db 解耦），
     注册定时任务和matcher。
 
     通过 PriorityLifecycle 注册，优先级=2，确保在依赖系统
@@ -143,7 +143,7 @@ async def _init_ai_plugin() -> None:
         logger.info("AI插件已禁用", command="AI")
         return
 
-    await search_manager.init()
+    await knowledge_base.init()
     logger.info(
         f"AI插件初始化完成，人格: {get_config('DEFAULT_PERSONA', 'liuying')}",
         command="AI",
