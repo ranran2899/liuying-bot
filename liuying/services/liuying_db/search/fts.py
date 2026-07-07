@@ -8,6 +8,7 @@
 """
 
 import json
+import re
 
 from sqlalchemy import text as sql_text
 
@@ -94,30 +95,69 @@ class FTSManager:
             )
             await session.commit()
 
+    @staticmethod
+    def _tokenize_query(query: str) -> list[str]:
+        """对查询文本做简单分词
+
+        将标点符号替换为空格后按空白拆分，保留中文、英文与数字词元。
+        不引入外部分词库，避免额外依赖。
+
+        参数:
+            query: 原始查询文本
+
+        返回:
+            list[str]: 分词后的词元列表
+        """
+        cleaned = re.sub(r"[^\w\s\u4e00-\u9fff]", " ", query)
+        return [token for token in cleaned.split() if token]
+
+    def _build_match_query(self, query: str, mode: str) -> str:
+        """根据模式构建 FTS5 MATCH 查询字符串
+
+        参数:
+            query: 原始查询文本
+            mode: 匹配模式，"phrase" 为短语匹配，"or" 为分词后 OR 匹配
+
+        返回:
+            str: 可用于 FTS5 MATCH 的查询字符串
+        """
+        escaped = query.replace('"', '""')
+        if mode == "phrase" or not escaped.strip():
+            return f'"{escaped}"'
+
+        tokens = self._tokenize_query(query)
+        if not tokens:
+            return f'"{escaped}"'
+
+        escaped_tokens = [token.replace('"', '""') for token in tokens]
+        return " OR ".join(f'"{token}"' for token in escaped_tokens)
+
     async def search(
         self,
         query: str,
         limit: int = 10,
+        mode: str = "or",
     ) -> list[tuple[int, float]]:
         """FTS5 全文检索
 
         参数:
             query: 查询文本
             limit: 返回条数上限
+            mode: 匹配模式，"phrase" 为短语匹配，"or" 为分词后 OR 匹配（默认）
 
         返回:
             list[tuple[int, float]]: (doc_id, score) 列表，按分数降序
         """
         if not query.strip():
             return []
-        escaped = query.replace('"', '""')
+        match_query = self._build_match_query(query, mode)
         sql = (
             "SELECT doc_id, rank FROM search_fts_idx "
             "WHERE content MATCH :q ORDER BY rank LIMIT :limit"
         )
         async with session_manager.get_session(self._db_name) as session:
             result = await session.execute(
-                sql_text(sql), {"q": f'"{escaped}"', "limit": limit}
+                sql_text(sql), {"q": match_query, "limit": limit}
             )
             rows = result.fetchall()
         if not rows:

@@ -128,22 +128,31 @@ class VectorManager:
         self,
         query_vec: list[float],
         top_k: int = 10,
+        model_version: str | None = "hash_bow",
     ) -> list[tuple[int, float]]:
         """向量余弦相似度检索
 
-        全表扫描所有分块向量，计算余弦相似度后取 TopK。
+        按维度与模型版本预过滤后，计算余弦相似度并取 TopK。
 
         参数:
             query_vec: 查询向量
             top_k: 返回条数上限
+            model_version: 模型版本，None 时不按版本过滤
 
         返回:
             list[tuple[int, float]]: (doc_id, similarity) 列表，按相似度降序
         """
+        params: dict[str, int | str] = {"dim": len(query_vec)}
+        sql = (
+            "SELECT doc_id, vector FROM search_vector_chunks "
+            "WHERE embedding_dim = :dim"
+        )
+        if model_version is not None:
+            params["model_version"] = model_version
+            sql += " AND model_version = :model_version"
+
         async with session_manager.get_session(self._db_name) as session:
-            result = await session.execute(
-                sql_text("SELECT doc_id, vector FROM search_vector_chunks")
-            )
+            result = await session.execute(sql_text(sql), params)
             rows = result.fetchall()
         if not rows:
             return []
@@ -163,6 +172,7 @@ class VectorManager:
         self,
         query_vec: list[float],
         top_k: int = 10,
+        model_version: str | None = "hash_bow",
     ) -> list[tuple[int, float]]:
         """主向量嵌入相似度检索（基于 search_embeddings 表）
 
@@ -172,14 +182,19 @@ class VectorManager:
         参数:
             query_vec: 查询向量
             top_k: 返回条数上限
+            model_version: 模型版本，None 时不按版本过滤
 
         返回:
             list[tuple[int, float]]: (doc_id, similarity) 列表
         """
+        params: dict[str, int | str] = {"dim": len(query_vec)}
+        sql = "SELECT doc_id, embedding FROM search_embeddings WHERE dim = :dim"
+        if model_version is not None:
+            params["model_version"] = model_version
+            sql += " AND model_version = :model_version"
+
         async with session_manager.get_session(self._db_name) as session:
-            result = await session.execute(
-                sql_text("SELECT doc_id, embedding FROM search_embeddings")
-            )
+            result = await session.execute(sql_text(sql), params)
             rows = result.fetchall()
         if not rows:
             return []

@@ -43,6 +43,10 @@ SEARCH_DDL: list[str] = [
         dim INTEGER DEFAULT 64
     )
     """,
+    (
+        "CREATE INDEX IF NOT EXISTS idx_search_embeddings_filter "
+        "ON search_embeddings(dim, model_version)"
+    ),
     # 向量分块表（一个文档可拆为多个分块向量）
     """
     CREATE TABLE IF NOT EXISTS search_vector_chunks(
@@ -59,6 +63,10 @@ SEARCH_DDL: list[str] = [
     (
         "CREATE INDEX IF NOT EXISTS idx_search_vec_chunks_doc "
         "ON search_vector_chunks(doc_id)"
+    ),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_search_vec_chunks_filter "
+        "ON search_vector_chunks(embedding_dim, model_version)"
     ),
     # 实体表（一个文档可关联多个实体）
     """
