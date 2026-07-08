@@ -328,53 +328,33 @@ _GREETING_PROMPT = """请以流萤的口吻为一位高好感度好友发送一�
 async def setup_proactive_jobs() -> None:
     """注册主动行为定时任务"""
     if not get_config("PROACTIVE_ENABLED", True):
-        logger.info(
-            "主动行为任务已禁用",
-            command="AI",
-        )
+        logger.info("主动行为任务已禁用", command="AI")
         return
 
     interval_minutes = get_config("PROACTIVE_INTERVAL_MINUTES", 30)
-    try:
-        await task_manager.add_interval_task(
-            task_id=_PROACTIVE_TASK_ID,
-            func=ProactiveHelper._check_group_idle_and_send,
-            minutes=interval_minutes,
-            name="AI群主动发话",
-            group="ai_plugin",
-            description="检查群空闲状态并主动发话",
-            replace_existing=True,
-        )
-        logger.info(
-            f"主动行为任务已注册，间隔{interval_minutes}分钟",
-            command="AI",
-        )
-    except Exception as e:
-        logger.warning(
-            f"注册主动行为任务失败: {e}",
-            command="AI",
-            e=e,
-        )
+    await task_manager.add_interval_task(
+        task_id=_PROACTIVE_TASK_ID,
+        func=ProactiveHelper._check_group_idle_and_send,
+        minutes=interval_minutes,
+        name="AI群主动发话",
+        group="ai_plugin",
+        description="检查群空闲状态并主动发话",
+        replace_existing=True,
+    )
+    logger.info(
+        f"主动行为任务已注册，间隔{interval_minutes}分钟",
+        command="AI",
+    )
 
     # 注册私聊问候任务（每天8点和22点执行）
-    try:
-        await task_manager.add_cron_task(
-            task_id=_PROACTIVE_PRIVATE_TASK_ID,
-            func=ProactiveHelper._proactive_private_greeting,
-            hour="8,22",
-            minute=0,
-            name="AI私聊问候",
-            group="ai_plugin",
-            description="每天早晚向高好感用户发送问候",
-            replace_existing=True,
-        )
-        logger.info(
-            "私聊问候任务已注册（每天8:00和22:00）",
-            command="AI",
-        )
-    except Exception as e:
-        logger.warning(
-            f"注册私聊问候任务失败: {e}",
-            command="AI",
-            e=e,
-        )
+    await task_manager.add_cron_task(
+        task_id=_PROACTIVE_PRIVATE_TASK_ID,
+        func=ProactiveHelper._proactive_private_greeting,
+        hour="8,22",
+        minute=0,
+        name="AI私聊问候",
+        group="ai_plugin",
+        description="每天早晚向高好感用户发送问候",
+        replace_existing=True,
+    )
+    logger.info("私聊问候任务已注册（每天8:00和22:00）", command="AI")

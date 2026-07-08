@@ -182,74 +182,41 @@ class MemoryDecayHelper:
 async def setup_memory_jobs() -> None:
     """注册记忆相关定时任务"""
     if not get_config("MEMORY_ENABLED", True):
-        logger.info(
-            "记忆任务已禁用",
-            command="AI",
-        )
+        logger.info("记忆任务已禁用", command="AI")
         return
 
     if get_config("MEMORY_DECAY_ENABLED", True):
-        try:
-            await task_manager.add_interval_task(
-                task_id=_DECAY_TASK_ID,
-                func=MemoryDecayHelper._memory_decay_task,
-                hours=6,
-                name="AI记忆衰减",
-                group="ai_plugin",
-                description="定期处理过期记忆",
-                replace_existing=True,
-            )
-            logger.info(
-                "记忆衰减任务已注册（每6小时）",
-                command="AI",
-            )
-        except Exception as e:
-            logger.warning(
-                f"注册记忆衰减任务失败: {e}",
-                command="AI",
-                e=e,
-            )
-
-    if get_config("MEMORY_CONSOLIDATION_ENABLED", True):
-        try:
-            await task_manager.add_cron_task(
-                task_id=_CONSOLIDATION_TASK_ID,
-                func=MemoryDecayHelper._memory_consolidation_task,
-                hour=3,
-                minute=0,
-                name="AI记忆巩固",
-                group="ai_plugin",
-                description="每天凌晨3点巩固记忆",
-                replace_existing=True,
-            )
-            logger.info(
-                "记忆巩固任务已注册（每天3:00）",
-                command="AI",
-            )
-        except Exception as e:
-            logger.warning(
-                f"注册记忆巩固任务失败: {e}",
-                command="AI",
-                e=e,
-            )
-
-    try:
         await task_manager.add_interval_task(
-            task_id=_PERSONA_UPDATE_TASK_ID,
-            func=MemoryDecayHelper._user_persona_update_task,
-            hours=2,
-            name="AI用户画像更新",
+            task_id=_DECAY_TASK_ID,
+            func=MemoryDecayHelper._memory_decay_task,
+            hours=6,
+            name="AI记忆衰减",
             group="ai_plugin",
-            description="每2小时检查并更新用户画像",
+            description="定期处理过期记忆",
             replace_existing=True,
         )
-        logger.info(
-            "用户画像更新任务已注册（每2小时）",
-            command="AI",
+        logger.info("记忆衰减任务已注册（每6小时）", command="AI")
+
+    if get_config("MEMORY_CONSOLIDATION_ENABLED", True):
+        await task_manager.add_cron_task(
+            task_id=_CONSOLIDATION_TASK_ID,
+            func=MemoryDecayHelper._memory_consolidation_task,
+            hour=3,
+            minute=0,
+            name="AI记忆巩固",
+            group="ai_plugin",
+            description="每天凌晨3点巩固记忆",
+            replace_existing=True,
         )
-    except Exception as e:
-        logger.warning(
-            f"注册用户画像更新任务失败: {e}",
-            command="AI",
-            e=e,
-        )
+        logger.info("记忆巩固任务已注册（每天3:00）", command="AI")
+
+    await task_manager.add_interval_task(
+        task_id=_PERSONA_UPDATE_TASK_ID,
+        func=MemoryDecayHelper._user_persona_update_task,
+        hours=2,
+        name="AI用户画像更新",
+        group="ai_plugin",
+        description="每2小时检查并更新用户画像",
+        replace_existing=True,
+    )
+    logger.info("用户画像更新任务已注册（每2小时）", command="AI")

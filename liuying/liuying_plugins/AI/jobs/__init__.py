@@ -4,8 +4,6 @@
 日记系统、知识库刷新与清理。
 """
 
-from liuying.utils.log import logger
-
 from ..config import get_config
 from .diary import setup_diary_job
 from .knowledge_refresh import setup_knowledge_jobs
@@ -35,32 +33,12 @@ async def setup_jobs() -> None:
     await setup_memory_jobs()
 
     if get_config("MEMORY_ENABLED", True):
-        try:
-            await setup_memory_curation_job()
-        except Exception as e:
-            logger.warning(
-                f"记忆策展任务注册失败: {e}", command="AI", e=e
-            )
+        await setup_memory_curation_job()
 
     if get_config("SOCIAL_INTELLIGENCE_ENABLED", True):
-        try:
-            await setup_social_intelligence_jobs()
-        except Exception as e:
-            logger.warning(
-                f"社交智能任务注册失败: {e}", command="AI", e=e
-            )
+        await setup_social_intelligence_jobs()
 
     if get_config("DIARY_ENABLED", True):
-        try:
-            await setup_diary_job()
-        except Exception as e:
-            logger.warning(
-                f"日记任务注册失败: {e}", command="AI", e=e
-            )
+        await setup_diary_job()
 
-    try:
-        await setup_knowledge_jobs()
-    except Exception as e:
-        logger.warning(
-            f"知识库任务注册失败: {e}", command="AI", e=e
-        )
+    await setup_knowledge_jobs()

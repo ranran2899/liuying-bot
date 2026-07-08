@@ -144,67 +144,43 @@ async def _init_ai_plugin() -> None:
     # 内置Agent工具在 agent.tools 导入时自动注册
     logger.debug("Agent内置工具已自动注册", command="AI")
 
-    # 知识库现基于流萤本体 PluginInfo + 实时元信息，
-    # 无需扫描入库，直接通过 knowledge_store 查询即可。
-
     # 初始化运行时开关（从配置加载全局状态）
-    try:
-        # 延迟导入以避免循环依赖：__init__ 导入 runtime_switch，
-        # runtime_switch 可能通过 core 层间接引用 AI 插件配置
-        from .core.runtime import runtime_switch
+    # 延迟导入以避免循环依赖：__init__ 导入 runtime_switch，
+    # runtime_switch 可能通过 core 层间接引用 AI 插件配置
+    from .core.runtime import runtime_switch
 
-        runtime_switch.initialize()
-        logger.debug("运行时开关已初始化", command="AI")
-    except Exception as e:
-        logger.warning(
-            f"运行时开关初始化失败: {e}", command="AI", e=e
-        )
+    runtime_switch.initialize()
+    logger.debug("运行时开关已初始化", command="AI")
 
-    try:
-        # 延迟导入以避免循环依赖：chat_matchers 导入 AI 插件模块，
-        # 而 __init__ 在初始化阶段调用 setup_matchers
-        from .handlers.chat_matchers import setup_matchers
+    # 延迟导入以避免循环依赖：chat_matchers 导入 AI 插件模块，
+    # 而 __init__ 在初始化阶段调用 setup_matchers
+    from .handlers.chat_matchers import setup_matchers
 
-        setup_matchers()
-    except ImportError:
-        logger.debug("AI matcher尚未实现，跳过", command="AI")
+    setup_matchers()
 
     # 注册AI管理员命令
-    try:
-        # 延迟导入以避免循环依赖：admin_commands 导入 AI 插件模块，
-        # 而 __init__ 在初始化阶段调用 setup_admin_matchers
-        from .handlers.admin_commands import setup_admin_matchers
+    # 延迟导入以避免循环依赖：admin_commands 导入 AI 插件模块，
+    # 而 __init__ 在初始化阶段调用 setup_admin_matchers
+    from .handlers.admin_commands import setup_admin_matchers
 
-        setup_admin_matchers()
-        logger.debug("AI管理员命令已注册", command="AI")
-    except Exception as e:
-        logger.warning(
-            f"AI管理员命令注册失败: {e}", command="AI", e=e
-        )
+    setup_admin_matchers()
+    logger.debug("AI管理员命令已注册", command="AI")
 
-    try:
-        # 延迟导入以避免循环依赖：jobs 模块导入 AI 插件核心模块，
-        # 而 __init__ 在初始化阶段调用 setup_jobs
-        from .jobs import setup_jobs
+    # 延迟导入以避免循环依赖：jobs 模块导入 AI 插件核心模块，
+    # 而 __init__ 在初始化阶段调用 setup_jobs
+    from .jobs import setup_jobs
 
-        await setup_jobs()
-    except ImportError:
-        logger.debug("AI定时任务尚未实现，跳过", command="AI")
+    await setup_jobs()
 
     # WebUI 已分离为独立插件 AI_webui（liuying/plugins/AI_webui），
     # 通过 WEBUI_ENABLED 配置项（AI_WEBUI 模块）控制挂载，无需在此初始化。
 
-    try:
-        # 延迟导入以避免循环依赖：skill_runtime 导入 agent 工具模块，
-        # 而 AI 插件 __init__ 在初始化阶段调用 register_all
-        from .agent.skill_runtime import skill_loader
+    # 延迟导入以避免循环依赖：skill_runtime 导入 agent 工具模块，
+    # 而 AI 插件 __init__ 在初始化阶段调用 register_all
+    from .agent.skill_runtime import skill_loader
 
-        skill_loader.register_all()
-        logger.debug("AI技能包已加载", command="AI")
-    except Exception as e:
-        logger.debug(
-            f"AI技能包加载失败: {e}", command="AI", e=e
-        )
+    skill_loader.register_all()
+    logger.debug("AI技能包已加载", command="AI")
 
 
 @PriorityLifecycle.on_shutdown(priority=_AI_PLUGIN_PRIORITY)
@@ -214,14 +190,9 @@ async def _shutdown_ai_plugin() -> None:
     通过 PriorityLifecycle 注册，优先级=2，
     按数字升序执行，先于业务插件关闭。
     """
-    try:
-        # 延迟导入以避免循环依赖：core.llm 模块可能在初始化时
-        # 间接引用 AI 插件配置，而 __init__ 在关闭阶段调用 prune_old
-        from .core.llm import token_ledger
+    # 延迟导入以避免循环依赖：core.llm 模块可能在初始化时
+    # 间接引用 AI 插件配置，而 __init__ 在关闭阶段调用 prune_old
+    from .core.llm import token_ledger
 
-        await token_ledger.prune_old(days=1)
-    except Exception as e:
-        logger.debug(
-            f"Token账本清理失败: {e}", command="AI", e=e
-        )
+    await token_ledger.prune_old(days=1)
     logger.info("AI插件已关闭", command="AI")

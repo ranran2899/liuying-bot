@@ -46,22 +46,13 @@ async def setup_memory_curation_job() -> None:
 
     每12小时执行一次。
     """
-    try:
-        await task_manager.add_interval_task(
-            task_id=_CURATION_TASK_ID,
-            func=MemoryCurationHelper._memory_curation_task,
-            hours=_CURATION_INTERVAL_HOURS,
-            name="AI记忆策展",
-            group="ai_plugin",
-            description="定期对记忆进行质量评估/去重/主题聚合/主动学习",
-            replace_existing=True,
-        )
-        logger.debug(
-            "记忆策展定时任务已注册", command="AI"
-        )
-    except Exception as e:
-        logger.warning(
-            f"记忆策展任务注册失败: {e}",
-            command="AI",
-            e=e,
-        )
+    await task_manager.add_interval_task(
+        task_id=_CURATION_TASK_ID,
+        func=MemoryCurationHelper._memory_curation_task,
+        hours=_CURATION_INTERVAL_HOURS,
+        name="AI记忆策展",
+        group="ai_plugin",
+        description="定期对记忆进行质量评估/去重/主题聚合/主动学习",
+        replace_existing=True,
+    )
+    logger.debug("记忆策展定时任务已注册", command="AI")

@@ -44,23 +44,14 @@ async def setup_knowledge_jobs() -> None:
 
     仅包含查询日志清理任务（每天凌晨4点）。
     """
-    try:
-        await task_manager.add_cron_task(
-            task_id=_CLEANUP_TASK_ID,
-            func=KnowledgeRefreshHelper._knowledge_cleanup_task,
-            hour=4,
-            minute=0,
-            name="AI知识库清理",
-            group="ai_plugin",
-            description="每天凌晨4点清理过期查询日志",
-            replace_existing=True,
-        )
-        logger.debug(
-            "知识库定时任务已注册", command="AI"
-        )
-    except Exception as e:
-        logger.warning(
-            f"知识库定时任务注册失败: {e}",
-            command="AI",
-            e=e,
-        )
+    await task_manager.add_cron_task(
+        task_id=_CLEANUP_TASK_ID,
+        func=KnowledgeRefreshHelper._knowledge_cleanup_task,
+        hour=4,
+        minute=0,
+        name="AI知识库清理",
+        group="ai_plugin",
+        description="每天凌晨4点清理过期查询日志",
+        replace_existing=True,
+    )
+    logger.debug("知识库定时任务已注册", command="AI")
