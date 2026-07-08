@@ -53,7 +53,7 @@ class AdminCommandsHelper:
     """
 
     @staticmethod
-    def AdminCommandsHelper._format_status_line(
+    def _format_status_line(
         name: str, enabled: bool, source: str
     ) -> str:
         """格式化状态行
@@ -71,7 +71,7 @@ class AdminCommandsHelper:
         return f"{mark} {name}{source_tag}"
 
     @staticmethod
-    def AdminCommandsHelper._parse_state(state: str) -> bool | None:
+    def _parse_state(state: str) -> bool | None:
         """解析开关状态文本
 
         参数:
