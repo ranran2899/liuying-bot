@@ -8,7 +8,6 @@ from typing import Any, TypeAlias
 from nonebot.utils import is_coroutine_callable
 import orjson as json
 import websockets
-from websockets.client import WebSocketClientProtocol
 
 from liuying.utils.log import logger
 
@@ -96,7 +95,7 @@ class WsUtils:
     @classmethod
     async def send(
         cls,
-        websocket: WebSocketClientProtocol,
+        websocket: websockets.ClientConnection,
         data: str | dict[str, Any],
         is_binary: bool = False,
     ) -> WsResult:
@@ -125,7 +124,7 @@ class WsUtils:
     @classmethod
     async def receive(
         cls,
-        websocket: WebSocketClientProtocol,
+        websocket: websockets.ClientConnection,
         timeout: int | None = None,
         parse_json: bool = True,
     ) -> WsResult:
@@ -191,7 +190,7 @@ class WsUtils:
     @classmethod
     async def close(
         cls,
-        websocket: WebSocketClientProtocol,
+        websocket: websockets.ClientConnection,
         code: int = 1000,
         reason: str = "Normal closure",
     ) -> WsResult:
@@ -216,7 +215,7 @@ class WsUtils:
     @asynccontextmanager
     async def _managed_connection(
         cls, url: str, headers: dict[str, str] | None = None, timeout: int = 30
-    ) -> WebSocketClientProtocol:
+    ) -> websockets.ClientConnection:
         """管理WebSocket连接的上下文，自动关闭。
 
         参数:
@@ -280,7 +279,7 @@ class WsUtils:
 
     @classmethod
     async def _send_heartbeat(
-        cls, websocket: WebSocketClientProtocol, interval: int
+        cls, websocket: websockets.ClientConnection, interval: int
     ) -> None:
         """周期性发送心跳包。
 
