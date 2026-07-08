@@ -31,7 +31,7 @@ class Base(DeclarativeBase):
 
 
 class Model(Base):
-    """增强的ORM基类，基于SQLAlchemy 2.0异步"""
+    """增强的ORM基类，基于SQLAlchemy 2.0.51异步"""
 
     __abstract__ = True
 

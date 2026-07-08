@@ -22,7 +22,7 @@ nonebot-adapter-minecraft = "==1.8.1" # Minecraft适配器
 nonebot-plugin-apscheduler = "==0.5.0"
 httpx = "*"
 websockets = "*"
-sqlalchemy = {extras = ["asyncio"], version = "^2.0.49"}
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.51"}
 pymysql = ">=1.0,<2.0"  # 用于MySQL支持
 nonebot-plugin-uninfo = "^0.11.0"
 nonebot-plugin-waiter = "^0.8.1"

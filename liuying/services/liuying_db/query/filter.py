@@ -45,12 +45,11 @@ class FilterMixin(DjangoStyleMixin):
         self._exclude_kwargs = exclude_kwargs
         return self
 
-    def _apply_filters(self, stmt: Select, *, for_count: bool = False) -> Select:
+    def _apply_filters(self, stmt: Select) -> Select:
         """统一应用所有过滤条件
 
         参数:
             stmt: SQLAlchemy 查询语句
-            for_count: 是否为计数查询，计数时跳过 join/load options
 
         返回:
             Select: 应用过滤条件后的查询语句
@@ -60,11 +59,8 @@ class FilterMixin(DjangoStyleMixin):
         ):
             stmt = stmt.where(getattr(self.model_class, "deleted_at").is_(None))
 
-        if not for_count:
-            for join_condition in getattr(self, "_join_conditions", []):
-                stmt = stmt.join(
-                    join_condition["target"], join_condition["onclause"]
-                )
+        for join_condition in getattr(self, "_join_conditions", []):
+            stmt = stmt.join(join_condition["target"], join_condition["onclause"])
 
         stmt = self._apply_kwargs_filters(stmt, self.kwargs)
 

@@ -7,6 +7,7 @@ from typing import Any, Self
 from sqlalchemy import ColumnElement, and_, not_, or_
 
 from ..utils import DbUtils
+from .django_style import DjangoStyleMixin
 
 
 class ConditionQueryBuilder:
@@ -239,10 +240,7 @@ class ConditionQueryBuilder:
             QueryWrapper: 返回自身以支持链式调用
         """
         col = DbUtils.get_column(self.model_class, column)
-        escaped = (
-            substring.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        )
-        pattern = f"%{escaped}%"
+        pattern = f"%{DjangoStyleMixin._escape_like(substring)}%"
         if case_sensitive:
             condition = col.like(pattern, escape="\\")
         else:

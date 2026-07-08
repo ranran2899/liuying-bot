@@ -16,6 +16,7 @@
     - gte: 大于等于 (field__gte=value)
     - lt: 小于 (field__lt=value)
     - lte: 小于等于 (field__lte=value)
+    - ne: 不等于 (field__ne=value)
     - in: 包含于列表 (field__in=[v1, v2])
     - not_in: 不包含于列表 (field__not_in=[v1, v2])
     - range: 范围查询 (field__range=(start, end))
@@ -24,6 +25,8 @@
     - regex: 正则匹配 (field__regex=pattern)
     - iregex: 不区分大小写正则匹配 (field__iregex=pattern)
     - year/month/day: 年/月/日提取 (field__year=2024)
+    - quarter: 季度提取 (field__quarter=1)
+    - week: ISO周数提取 (field__week=1)
     - hour/minute/second: 时/分/秒提取
     - week_day: 星期几提取（PostgreSQL为dow，其他方言可能不同）
     - date: 日期部分匹配 (field__date="2024-01-01")
@@ -169,6 +172,16 @@ class DjangoStyleMixin:
         return func.extract("day", col) == value
 
     @staticmethod
+    def _build_quarter(col: Any, value: Any) -> Any:
+        """季度查询（1-4）"""
+        return func.extract("quarter", col) == value
+
+    @staticmethod
+    def _build_week(col: Any, value: Any) -> Any:
+        """ISO周数查询（1-53）"""
+        return func.extract("week", col) == value
+
+    @staticmethod
     def _build_hour(col: Any, value: Any) -> Any:
         return func.extract("hour", col) == value
 
@@ -309,6 +322,8 @@ DjangoStyleMixin._LOOKUPS = {
     "year": DjangoStyleMixin._build_year,
     "month": DjangoStyleMixin._build_month,
     "day": DjangoStyleMixin._build_day,
+    "quarter": DjangoStyleMixin._build_quarter,
+    "week": DjangoStyleMixin._build_week,
     "hour": DjangoStyleMixin._build_hour,
     "minute": DjangoStyleMixin._build_minute,
     "second": DjangoStyleMixin._build_second,

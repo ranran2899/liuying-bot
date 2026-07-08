@@ -20,19 +20,14 @@ class QueryExecutionBuilder:
     _db_name: str
     _values: tuple[Any, ...] | None
     _annotations: dict[str, Any] | None
-    _compound_stmt: Any
 
     def _returns_rows(self) -> bool:
         """判断查询结果是否应返回 Row 而非模型实例
 
         返回:
-            bool: 当指定了 values、annotate 或复合查询时返回 True
+            bool: 当指定了 values 或 annotate 时返回 True
         """
-        return bool(
-            self._values is not None
-            or getattr(self, "_annotations", None)
-            or getattr(self, "_compound_stmt", None)
-        )
+        return bool(self._values is not None or getattr(self, "_annotations", None))
 
     async def first(self) -> Any | None:
         """获取查询结果的第一条记录
@@ -44,14 +39,6 @@ class QueryExecutionBuilder:
         if self._returns_rows():
             return await self._execute_query(stmt, "first_row")
         return await self._execute_query(stmt, "first")
-
-    async def first_or_none(self) -> Any | None:
-        """获取查询结果的第一条记录，语义化别名
-
-        返回:
-            第一条记录，如果没有则返回None
-        """
-        return await self.first()
 
     async def earliest(self, field: str | None = None) -> Any | None:
         """按指定字段升序取第一条记录
@@ -93,11 +80,14 @@ class QueryExecutionBuilder:
     def _build_count_query(self) -> select:
         """构建计数查询语句
 
+        使用子查询包装过滤后的查询，避免 JOIN 导致计数膨胀，
+        同时兼容无 ``id`` 字段或复合主键的模型。
+
         返回:
             Select: 计数查询语句
         """
-        stmt = select(func.count(self.model_class.id))
-        return self._apply_filters(stmt)
+        base = self._apply_filters(select(self.model_class))
+        return select(func.count()).select_from(base.subquery())
 
     async def count(self) -> int:
         """获取查询结果的记录数
@@ -129,9 +119,20 @@ class QueryExecutionBuilder:
 
         返回:
             单个记录对象，如果不存在则返回None
+
+        抛出:
+            ValueError: 模型无主键或为复合主键
         """
+        pk_names = DbUtils.get_primary_key_names(self.model_class)
+        if not pk_names:
+            raise ValueError(f"模型 {self.model_class.__name__} 没有主键")
+        if len(pk_names) > 1:
+            raise ValueError(
+                f"模型 {self.model_class.__name__} 为复合主键，"
+                f"不支持 get(pk)，请使用 filter"
+            )
         stmt = self._build_base_query()
-        stmt = stmt.where(self.model_class.id == pk)
+        stmt = stmt.where(getattr(self.model_class, pk_names[0]) == pk)
         return await self._execute_query(stmt.limit(1), "first")
 
     async def find_by(self, **kwargs: Any) -> Any | None:
@@ -344,28 +345,6 @@ class QueryExecutionBuilder:
             yield batch
             offset += batch_size
             if len(batch) < batch_size:
-                break
-
-    async def achunked(
-        self,
-        chunk_size: int = 1000,
-    ) -> AsyncGenerator[list[Any], None]:
-        """异步生成器分批读取数据
-
-        参数:
-            chunk_size: 每批记录数
-
-        返回:
-            AsyncGenerator: 每次产生一批记录
-        """
-        offset = 0
-        while True:
-            batch = await self.limit(chunk_size).offset(offset).all()
-            if not batch:
-                break
-            yield batch
-            offset += chunk_size
-            if len(batch) < chunk_size:
                 break
 
     async def iterator(

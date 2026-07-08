@@ -170,7 +170,7 @@ class QueryWrapper(
         返回:
             Select: 应用预加载选项后的查询语句
         """
-        for field in getattr(self, "_deferred_fields", []):
+        for field in self._deferred_fields:
             stmt = stmt.options(defer(field))
 
         for relationship, options in self._load_relationships:
@@ -212,8 +212,8 @@ class QueryWrapper(
         if self._distinct:
             stmt = stmt.distinct()
 
-        if for_update_options := getattr(self, "_for_update_options", None):
-            stmt = stmt.with_for_update(**for_update_options)
+        if self._for_update_options:
+            stmt = stmt.with_for_update(**self._for_update_options)
         elif self._lock_mode:
             stmt = stmt.with_for_update(read=self._lock_mode == "FOR SHARE")
 
@@ -282,14 +282,8 @@ class QueryWrapper(
                 async with self.model_class.get_session(
                     db_name=self._db_name
                 ) as session:
-                    final_stmt = stmt
-                    if self._limit:
-                        final_stmt = final_stmt.limit(self._limit)
-                    if self._offset:
-                        final_stmt = final_stmt.offset(self._offset)
-
                     start_time = time.perf_counter()
-                    result = await session.execute(final_stmt)
+                    result = await session.execute(stmt)
                     elapsed = time.perf_counter() - start_time
 
                     if elapsed > SLOW_QUERY_THRESHOLD:
