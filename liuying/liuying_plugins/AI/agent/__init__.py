@@ -4,7 +4,7 @@
 支持LLM自主调用工具完成多步任务。
 """
 
-from .runner import AgentResult, run_agent
+from .runner import AgentResult, AgentRunner
 from .skill_loader import RemoteSkillLoader, remote_skill_loader
 from .skillpacks import (
     get_current_time,
@@ -17,6 +17,7 @@ from .tools import AgentTool, ToolRegistry, tool_registry
 
 __all__ = [
     "AgentResult",
+    "AgentRunner",
     "AgentTool",
     "RemoteSkillLoader",
     "ToolRegistry",
@@ -25,7 +26,6 @@ __all__ = [
     "get_news",
     "get_weather",
     "remote_skill_loader",
-    "run_agent",
     "search_wiki",
     "tool_registry",
 ]

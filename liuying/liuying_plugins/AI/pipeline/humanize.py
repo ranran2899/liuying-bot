@@ -310,11 +310,3 @@ class HumanizeToolkit:
             "单条尽量不超过40字，口语化，"
             "可以只接半句，不要写成完整段落或书面文。"
         )
-
-
-# 模块级别名，保持外部导入路径稳定
-compute_typing_delay = HumanizeToolkit.compute_typing_delay
-compute_gap_delay = HumanizeToolkit.compute_gap_delay
-maybe_inject_typo = HumanizeToolkit.maybe_inject_typo
-fragment_reply = HumanizeToolkit.fragment_reply
-build_group_chat_style_prompt = HumanizeToolkit.build_group_chat_style_prompt

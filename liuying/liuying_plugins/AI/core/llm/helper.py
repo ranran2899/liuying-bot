@@ -44,6 +44,36 @@ class LLMHelper:
             raise ValueError("无可用LLM provider，请检查配置")
         return provider
 
+    @staticmethod
+    def _resolve_capability(
+        name: str,
+        capability: Capability,
+        action: str,
+    ):
+        """获取provider的指定能力实例
+
+        统一处理provider存在性检查与能力检查，
+        供 chat/embedding/tts/image/web_search 的 _call 回调复用。
+
+        参数:
+            name: provider名
+            capability: 能力类型
+            action: 能力描述（用于错误信息）
+
+        返回:
+            能力实例
+
+        异常:
+            ValueError: provider不存在或不支持该能力
+        """
+        provider = llm_manager.get_provider(name)
+        if not provider:
+            raise ValueError(f"provider '{name}' 不存在")
+        cap = provider.get_capability(capability)
+        if not cap:
+            raise ValueError(f"provider '{name}' 不支持{action}")
+        return cap
+
     def _build_candidates(
         self,
         capability: Capability,
@@ -131,14 +161,9 @@ class LLMHelper:
         }
 
         async def _call(name: str) -> tuple[str, str]:
-            provider = llm_manager.get_provider(name)
-            if not provider:
-                raise ValueError(f"provider '{name}' 不存在")
-            chat_cap = provider.get_capability(Capability.CHAT)
-            if not chat_cap:
-                raise ValueError(
-                    f"provider '{name}' 不支持对话能力"
-                )
+            chat_cap = LLMHelper._resolve_capability(
+                name, Capability.CHAT, "对话能力"
+            )
             return await chat_cap.chat(
                 use_model, messages, call_options
             )
@@ -258,14 +283,9 @@ class LLMHelper:
         )
 
         async def _call(name: str) -> list[float]:
-            provider = llm_manager.get_provider(name)
-            if not provider:
-                raise ValueError(f"provider '{name}' 不存在")
-            emb_cap = provider.get_capability(Capability.EMBEDDING)
-            if not emb_cap:
-                raise ValueError(
-                    f"provider '{name}' 不支持嵌入能力"
-                )
+            emb_cap = LLMHelper._resolve_capability(
+                name, Capability.EMBEDDING, "嵌入能力"
+            )
             return await emb_cap.create(text, use_model)
 
         return await provider_router.call_with_failover(
@@ -301,14 +321,9 @@ class LLMHelper:
         )
 
         async def _call(name: str) -> bytes:
-            provider = llm_manager.get_provider(name)
-            if not provider:
-                raise ValueError(f"provider '{name}' 不存在")
-            audio_cap = provider.get_capability(Capability.AUDIO)
-            if not audio_cap:
-                raise ValueError(
-                    f"provider '{name}' 不支持语音能力"
-                )
+            audio_cap = LLMHelper._resolve_capability(
+                name, Capability.AUDIO, "语音能力"
+            )
             return await audio_cap.text_to_speech(
                 text, use_model, use_voice
             )
@@ -347,14 +362,9 @@ class LLMHelper:
         )
 
         async def _call(name: str) -> list[str]:
-            provider = llm_manager.get_provider(name)
-            if not provider:
-                raise ValueError(f"provider '{name}' 不存在")
-            image_cap = provider.get_capability(Capability.IMAGE)
-            if not image_cap:
-                raise ValueError(
-                    f"provider '{name}' 不支持图片生成"
-                )
+            image_cap = LLMHelper._resolve_capability(
+                name, Capability.IMAGE, "图片生成"
+            )
             return await image_cap.generate(
                 prompt, use_model, size, n
             )
@@ -393,14 +403,9 @@ class LLMHelper:
             return []
 
         async def _call(name: str) -> list[dict[str, str]]:
-            provider = llm_manager.get_provider(name)
-            if not provider:
-                raise ValueError(f"provider '{name}' 不存在")
-            search_cap = provider.get_capability(Capability.WEB_SEARCH)
-            if not search_cap:
-                raise ValueError(
-                    f"provider '{name}' 不支持搜索能力"
-                )
+            search_cap = LLMHelper._resolve_capability(
+                name, Capability.WEB_SEARCH, "搜索能力"
+            )
             response = await search_cap.search(
                 query,
                 count=count,

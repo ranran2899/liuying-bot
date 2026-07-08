@@ -335,7 +335,3 @@ class AgentRunner:
             if url and not url.startswith("图片生成失败"):
                 return url
         return None
-
-
-# 模块级别名：保持外部导入路径稳定
-run_agent = AgentRunner.run_agent

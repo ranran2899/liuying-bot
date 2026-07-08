@@ -4,7 +4,6 @@ AI对话核心 + 主动行为 + 工具调用 + 拟人化发送 + 完整记忆系
 深度整合流萤本体系统：LLM/数据库/缓存/定时任务/好感度/权限。
 """
 
-from nonebot import get_driver
 from nonebot.plugin import PluginMetadata
 
 from liuying.configs.utils import Command, PluginExtraData, PluginSetting
@@ -48,13 +47,13 @@ __plugin_meta__ = PluginMetadata(
     name="流萤AI",
     description="AI对话核心 + 主动行为 + 工具调用 + 拟人化发送 + 完整记忆 + TTS + 贴纸",
     usage="""
-    @bot [消息] - 与流萤AI对话（也可@机器人或私聊）
-    流萤对话 - 开启/关闭AI对话
-    流萤人格 [名称] - 切换AI人格
-    流萤画像 - 查看你的用户画像
-    流萤记忆 - 查看AI记忆摘要
-    流萤清空 - 清空对话历史（管理员）
-    流萤说 [文本] - TTS语音合成
+    @bot [消息] - 与流萤AI对话（也可私聊）
+    bot人格切换 [名称] - 切换/查看AI人格
+    我的画像 - 查看你的用户画像
+    bot记忆 - 查看AI记忆摘要
+    清空对话历史 - 清空对话历史
+    清空记忆 - 清空当前人格的所有记忆数据
+    bot说 [文本] - TTS语音合成
     """.strip(),
     extra=PluginExtraData(
         author="liuying",
@@ -70,17 +69,9 @@ __plugin_meta__ = PluginMetadata(
             impression=0.0,
         ),
         commands=[
-            # Command(
-            #     command="流萤 [消息]",
-            #     description="与流萤AI对话",
-            # ),
             Command(
-                command="bot对话",
-                description="开启/关闭AI对话",
-            ),
-            Command(
-                command="bot人格 [名称]",
-                description="切换AI人格",
+                command="bot人格切换 [名称]",
+                description="切换/查看AI人格",
             ),
             Command(
                 command="我的画像",
@@ -95,6 +86,10 @@ __plugin_meta__ = PluginMetadata(
                 description="清空对话历史",
             ),
             Command(
+                command="清空记忆",
+                description="清空当前人格的所有记忆数据",
+            ),
+            Command(
                 command="bot说 [文本]",
                 description="TTS语音合成",
             ),
@@ -106,20 +101,17 @@ __plugin_meta__ = PluginMetadata(
                 command="流萤AI开关 [功能] [on/off]",
                 description="设置全局功能开关（管理员）",
             ),
-            Command(
-                command="流萤AI体检",
-                description="AI功能健康体检（管理员）",
-            ),
         ],
         superuser_help="""
         超级用户命令:
         - 清空对话历史: 清空对话历史
-        - bot人格 [名称]: 切换AI人格
+        - bot人格切换 [名称]: 切换AI人格
         - 流萤AI状态: 查看AI子功能开关
         - 流萤AI开关 [功能] [on/off]: 全局AI子功能开关
         - 流萤AI群开关 [群号] [功能] [on/off]: 群组级AI子功能开关
         - 流萤AI用户开关 [用户ID] [功能] [on/off]: 用户级AI子功能开关
         - 流萤AI重置: 重置所有运行时覆盖
+        - 全局清空记忆: 清空所有用户的所有人格记忆与对话记录
 
         注意: ban/unban/黑名单/管理员授权请使用流萤本体命令:
         - ban/unban/ban列表: 使用 admin.ban 插件
@@ -233,7 +225,3 @@ async def _shutdown_ai_plugin() -> None:
             f"Token账本清理失败: {e}", command="AI", e=e
         )
     logger.info("AI插件已关闭", command="AI")
-
-
-# # 保留 driver 引用，便于 WebUI 等模块通过 AI 插件获取 driver 实例
-# driver = get_driver()

@@ -169,16 +169,7 @@ class KnowledgeBase:
         row = await cursor.fetchone()
         if row is None:
             return None
-        return {
-            "doc_id": row["doc_id"],
-            "title": row["title"],
-            "content": row["content"],
-            "tags": row["tags"],
-            "source": row["source"],
-            "metadata": json.loads(row["metadata"]) if row["metadata"] else None,
-            "create_time": row["create_time"],
-            "update_time": row["update_time"],
-        }
+        return KnowledgeBase._row_to_entry(row)
 
     async def list_entries(
         self, limit: int = 50, offset: int = 0
@@ -199,21 +190,7 @@ class KnowledgeBase:
             (limit, offset),
         )
         rows = await cursor.fetchall()
-        return [
-            {
-                "doc_id": row["doc_id"],
-                "title": row["title"],
-                "content": row["content"],
-                "tags": row["tags"],
-                "source": row["source"],
-                "metadata": (
-                    json.loads(row["metadata"]) if row["metadata"] else None
-                ),
-                "create_time": row["create_time"],
-                "update_time": row["update_time"],
-            }
-            for row in rows
-        ]
+        return [KnowledgeBase._row_to_entry(row) for row in rows]
 
     @with_write_lock
     async def update_entry(
@@ -392,7 +369,7 @@ class KnowledgeBase:
         ):
             await db.execute(f"DELETE FROM {table}")
         await db.commit()
-        logger.warning("已清空所有知识库表数据", _LOG_CMD)
+        logger.warning("已清空所有知识库表数据", command=_LOG_CMD)
 
     # ---------- 检索能力 ----------
 
@@ -527,32 +504,24 @@ class KnowledgeBase:
         """
         candidates: dict[int, float] = {}
         if query.strip():
-            for rank, (doc_id, _) in enumerate(
-                await self.search_fts(query, top_k * 3)
-            ):
-                candidates[doc_id] = candidates.get(doc_id, 0.0) + (
-                    1.0 / (_RRF_K + rank + 1)
-                )
+            KnowledgeBase._rrf_add(
+                candidates,
+                await self.search_fts(query, top_k * 3),
+            )
         if query_vec is not None:
-            for rank, (doc_id, _) in enumerate(
-                await self.search_vector(query_vec, top_k * 3, model_version)
-            ):
-                candidates[doc_id] = candidates.get(doc_id, 0.0) + (
-                    1.0 / (_RRF_K + rank + 1)
-                )
-            for rank, (doc_id, _) in enumerate(
-                await self.search_embedding(query_vec, top_k * 3, model_version)
-            ):
-                candidates[doc_id] = candidates.get(doc_id, 0.0) + (
-                    1.0 / (_RRF_K + rank + 1)
-                )
+            KnowledgeBase._rrf_add(
+                candidates,
+                await self.search_vector(query_vec, top_k * 3, model_version),
+            )
+            KnowledgeBase._rrf_add(
+                candidates,
+                await self.search_embedding(query_vec, top_k * 3, model_version),
+            )
         if entity_names:
-            for rank, (doc_id, _) in enumerate(
-                await self.search_entity(entity_names, top_k * 3)
-            ):
-                candidates[doc_id] = candidates.get(doc_id, 0.0) + (
-                    1.0 / (_RRF_K + rank + 1)
-                )
+            KnowledgeBase._rrf_add(
+                candidates,
+                await self.search_entity(entity_names, top_k * 3),
+            )
         return sorted(
             candidates.items(), key=lambda x: x[1], reverse=True
         )[:top_k]
@@ -653,6 +622,49 @@ class KnowledgeBase:
         ]
 
     # ---------- 内部辅助方法 ----------
+
+    @staticmethod
+    def _row_to_entry(row) -> dict:
+        """将数据库行转换为条目字典
+
+        供 get_entry/list_entries 复用，统一字段映射与 metadata 反序列化。
+
+        参数:
+            row: 数据库行对象
+
+        返回:
+            dict: 条目字典
+        """
+        return {
+            "doc_id": row["doc_id"],
+            "title": row["title"],
+            "content": row["content"],
+            "tags": row["tags"],
+            "source": row["source"],
+            "metadata": (
+                json.loads(row["metadata"]) if row["metadata"] else None
+            ),
+            "create_time": row["create_time"],
+            "update_time": row["update_time"],
+        }
+
+    @staticmethod
+    def _rrf_add(
+        candidates: dict[int, float],
+        results: list[tuple[int, float]],
+    ) -> None:
+        """将单路检索结果按 RRF 算法累加到候选字典
+
+        供 unified_search 的 FTS/向量/嵌入/实体四路召回复用。
+
+        参数:
+            candidates: 候选字典（doc_id -> 累计分数），原地修改
+            results: 单路检索结果列表 (doc_id, score)
+        """
+        for rank, (doc_id, _) in enumerate(results):
+            candidates[doc_id] = candidates.get(doc_id, 0.0) + (
+                1.0 / (_RRF_K + rank + 1)
+            )
 
     async def _index_doc(
         self,

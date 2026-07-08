@@ -53,7 +53,7 @@ class AdminCommandsHelper:
     """
 
     @staticmethod
-    def _format_status_line(
+    def AdminCommandsHelper._format_status_line(
         name: str, enabled: bool, source: str
     ) -> str:
         """格式化状态行
@@ -71,7 +71,7 @@ class AdminCommandsHelper:
         return f"{mark} {name}{source_tag}"
 
     @staticmethod
-    def _parse_state(state: str) -> bool | None:
+    def AdminCommandsHelper._parse_state(state: str) -> bool | None:
         """解析开关状态文本
 
         参数:
@@ -86,11 +86,6 @@ class AdminCommandsHelper:
         if state in ("off", "false", "0", "关", "禁用"):
             return False
         return None
-
-
-# 向后兼容别名
-_format_status_line = AdminCommandsHelper._format_status_line
-_parse_state = AdminCommandsHelper._parse_state
 
 
 def setup_admin_matchers() -> None:
@@ -170,7 +165,7 @@ def setup_admin_matchers() -> None:
         lines: list[str] = ["=== AI功能状态 ==="]
         for s in statuses:
             lines.append(
-                _format_status_line(s.name, s.enabled, s.source)
+                AdminCommandsHelper._format_status_line(s.name, s.enabled, s.source)
             )
 
         report = runtime_switch.health_check()
@@ -199,7 +194,7 @@ def setup_admin_matchers() -> None:
     ) -> None:
         """设置全局开关"""
         feature = (feature or "").strip().lower()
-        enabled = _parse_state(state)
+        enabled = AdminCommandsHelper._parse_state(state)
         if enabled is None:
             await MessageUtils.build_message(
                 "状态值无效，请用 on/off"
@@ -229,7 +224,7 @@ def setup_admin_matchers() -> None:
         """设置群组级开关"""
         group_id = (group_id or "").strip()
         feature = (feature or "").strip().lower()
-        enabled = _parse_state(state)
+        enabled = AdminCommandsHelper._parse_state(state)
 
         if not group_id:
             await MessageUtils.build_message(
@@ -265,7 +260,7 @@ def setup_admin_matchers() -> None:
         """设置用户级开关"""
         user_id = (user_id or "").strip()
         feature = (feature or "").strip().lower()
-        enabled = _parse_state(state)
+        enabled = AdminCommandsHelper._parse_state(state)
 
         if not user_id:
             await MessageUtils.build_message(

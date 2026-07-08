@@ -20,7 +20,6 @@
 """
 
 from dataclasses import dataclass
-from typing import Any
 
 from liuying.models._user import UserLevel
 from liuying.models.ban_console import BanConsole
@@ -64,15 +63,11 @@ class AclChecker:
     """超级管理员等级（仅超级用户可达）"""
 
     @staticmethod
-    async def check_superuser(
-        user_id: str,
-        bot: Any = None,
-    ) -> bool:
+    async def check_superuser(user_id: str) -> bool:
         """检查用户是否超级用户
 
         参数:
             user_id: 用户ID
-            bot: Bot对象，此参数仅保留兼容性，不再使用
 
         返回:
             bool: 是否超级用户
@@ -102,7 +97,6 @@ class AclChecker:
         user_id: str,
         level: int | None = None,
         *,
-        bot: Any = None,
         bot_id: str | None = None,
         group_id: str | None = None,
     ) -> bool:
@@ -113,7 +107,6 @@ class AclChecker:
         参数:
             user_id: 用户ID
             level: 需要的管理员等级，None时用基础管理员等级
-            bot: Bot对象
             bot_id: 机器人ID
             group_id: 群组ID
 
@@ -122,7 +115,7 @@ class AclChecker:
         """
         if level is None:
             level = AclChecker.ADMIN_LEVEL_BASIC
-        if await AclChecker.check_superuser(user_id, bot):
+        if await AclChecker.check_superuser(user_id):
             return True
         user_level = await AclChecker.get_user_level(
             user_id, bot_id, group_id
@@ -154,7 +147,6 @@ class AclChecker:
         user_id: str,
         level: int | None = None,
         *,
-        bot: Any = None,
         bot_id: str | None = None,
         group_id: str | None = None,
         check_blacklist_flag: bool = True,
@@ -166,7 +158,6 @@ class AclChecker:
         参数:
             user_id: 用户ID
             level: 需要的管理员等级，None时用基础管理员等级
-            bot: Bot对象
             bot_id: 机器人ID
             group_id: 群组ID
             check_blacklist_flag: 是否检查黑名单
@@ -190,7 +181,7 @@ class AclChecker:
                     is_blacklisted=True,
                 )
 
-        is_super = await AclChecker.check_superuser(user_id, bot)
+        is_super = await AclChecker.check_superuser(user_id)
         if is_super:
             return PermissionResult(
                 allowed=True,

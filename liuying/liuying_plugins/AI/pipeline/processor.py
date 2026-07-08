@@ -15,7 +15,7 @@ from nonebot_plugin_alconna import Image
 from liuying.models.ban_console import BanConsole
 from liuying.utils.log import logger
 
-from ..agent.runner import AgentResult, run_agent
+from ..agent.runner import AgentResult, AgentRunner
 from ..config import get_config
 from ..core.context import ContextPolicy, context_manager
 from ..core.emotion import emotion_manager
@@ -26,9 +26,8 @@ from ..core.group import (
     group_social,
 )
 from ..core.llm import (
+    TokenTrackingHelper,
     llm_helper,
-    start_conversation_tracking,
-    stop_conversation_tracking,
 )
 from ..core.memory import memory_manager
 from ..core.persona import persona_manager
@@ -40,7 +39,7 @@ from ..core.safety import (
 from ..core.vision import summarize_image, vision_router
 from ..models.conversation_record import ConversationRecord
 from .helpers import ReplyPipeline
-from .humanize import build_group_chat_style_prompt
+from .humanize import HumanizeToolkit
 from .sticker import sticker_manager
 from .types import ReplyContext, ReplyResult
 
@@ -216,7 +215,7 @@ class ReplyProcessor:
             ctx.group_id
             and get_config("FRAGMENT_STYLE", "prompt") == "prompt"
         ):
-            parts.append(build_group_chat_style_prompt())
+            parts.append(HumanizeToolkit.build_group_chat_style_prompt())
 
         anti_loop = ContextPolicy.build_anti_loop_hint(history)
         if anti_loop:
@@ -431,12 +430,12 @@ class ReplyProcessor:
 
         if get_config("AGENT_ENABLED", True):
             try:
-                result = await run_agent(
+                result = await AgentRunner.run_agent(
                     use_messages,
                     llm_helper,
                     user_id=ctx.user_id,
                     group_id=ctx.group_id,
-                    use_llm_planning=get_config("AGENT_ENABLED", True),
+                    use_llm_planning=True,
                     persona_name=ctx.persona_name,
                 )
                 if (
@@ -584,9 +583,11 @@ class ReplyProcessor:
     async def _decide_tts(
         self, text: str, ctx: ReplyContext
     ) -> bytes | None:
-        """TTS决策（占位）
+        """TTS决策
 
-        阶段4实现完整TTS服务。
+        根据配置概率自动将回复文本合成语音。
+        仅在 TTS_ENABLED 与 TTS_AUTO_ENABLED 均开启时触发，
+        文本长度需达到 _TTS_AUTO_TEXT_MIN_LEN 阈值。
 
         参数:
             text: 回复文本
@@ -675,16 +676,10 @@ class ReplyProcessor:
             )
 
         # 解析用户当前激活的人格名，确保人设间数据隔离
-        try:
-            ctx.persona_name = await persona_manager.get_user_persona_name(
-                ctx.user_id
-            )
-        except Exception as e:
-            logger.debug(
-                f"获取用户人格失败，回退默认: {e}",
-                command="AI",
-                e=e,
-            )
+        # get_user_persona_name 内部已捕获异常并回退默认人格，无需外层兜底
+        ctx.persona_name = await persona_manager.get_user_persona_name(
+            ctx.user_id
+        )
 
         history = await self._load_history(ctx)
         system_prompt = await self._build_system_prompt(ctx, history)
@@ -693,13 +688,15 @@ class ReplyProcessor:
         )
 
         # 开启会话级 token 用量追踪，统计本轮所有 LLM 调用消耗
-        track_token = start_conversation_tracking()
+        track_token = TokenTrackingHelper.start_conversation_tracking()
         try:
             reply_text, agent_result = await self._generate_reply(
                 messages, ctx
             )
         finally:
-            usage = stop_conversation_tracking(track_token)
+            usage = TokenTrackingHelper.stop_conversation_tracking(
+                track_token
+            )
 
         # 按实际消耗扣费（失败不影响已生成回复的发送）
         try:

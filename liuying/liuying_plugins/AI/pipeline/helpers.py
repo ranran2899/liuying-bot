@@ -16,12 +16,7 @@ from ..core.context import ContextPolicy, context_manager
 from ..core.emotion import emotion_manager
 from ..core.memory import memory_manager
 from ..models.conversation_record import ConversationRecord
-from .humanize import (
-    compute_gap_delay,
-    compute_typing_delay,
-    fragment_reply,
-    maybe_inject_typo,
-)
+from .humanize import HumanizeToolkit
 from .types import ReplyContext
 
 __all__ = ["ReplyPipeline", "reply_pipeline"]
@@ -112,14 +107,14 @@ class ReplyPipeline:
         if not text:
             return text, 0.0
 
-        text, _correction = maybe_inject_typo(
+        text, _correction = HumanizeToolkit.maybe_inject_typo(
             text, get_config("HUMANIZE_TYPO_PROBABILITY", 0.0)
         )
 
         typing_delay = 0.0
         if get_config("HUMANIZE_TYPING_ENABLED", True):
             is_night = context_manager.is_night_time()
-            typing_delay = compute_typing_delay(
+            typing_delay = HumanizeToolkit.compute_typing_delay(
                 text,
                 cps=get_config("HUMANIZE_TYPING_CPS", 7.0),
                 max_delay=get_config(
@@ -154,13 +149,15 @@ class ReplyPipeline:
             return [text], []
 
         max_chars = get_config("FRAGMENT_MAX_CHARS", 40)
-        segments = fragment_reply(text, max_segment_chars=max_chars)
+        segments = HumanizeToolkit.fragment_reply(
+            text, max_segment_chars=max_chars
+        )
         if len(segments) <= 1:
             return [text], []
 
         gap_delays: list[float] = []
         for i in range(len(segments) - 1):
-            gap = compute_gap_delay(segments[i + 1])
+            gap = HumanizeToolkit.compute_gap_delay(segments[i + 1])
             gap_delays.append(gap)
         gap_delays.append(0.0)
 

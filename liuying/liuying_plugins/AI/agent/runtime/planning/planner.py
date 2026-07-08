@@ -194,8 +194,16 @@ class TurnPlanner:
                 "用户发送了图片，当前模型可能不支持视觉，降级到描述注入",
                 False,
             )
-        except Exception:
-            return ("用户发送了图片，需要视觉理解", True)
+        except Exception as e:
+            logger.debug(
+                f"视觉能力检测失败，降级到描述注入: {e}",
+                command="AI",
+                e=e,
+            )
+            return (
+                "用户发送了图片，视觉能力检测失败，降级到描述注入",
+                False,
+            )
 
     async def plan(
         self,

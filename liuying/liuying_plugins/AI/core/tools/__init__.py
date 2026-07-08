@@ -16,18 +16,10 @@ from .web_fetch import (
     web_fetch,
 )
 
-# 向后兼容别名：散落函数名指向 MessageExtractor 静态方法
-extract_image_segments = MessageExtractor.extract_image_segments
-extract_message_text = MessageExtractor.extract_message_text
-fetch_image_bytes = MessageExtractor.fetch_image_bytes
-
 __all__ = [
     "MessageExtractor",
     "WebFetchService",
     "WebPageContent",
-    "extract_image_segments",
-    "extract_message_text",
-    "fetch_image_bytes",
     "message_extractor",
     "web_fetch",
 ]

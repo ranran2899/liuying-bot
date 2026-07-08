@@ -27,17 +27,6 @@ from .repeat_follow import (
 )
 from .social import GroupSocialService, group_social
 
-# 向后兼容别名：将散落函数名指向 GroupMuteTracker 静态方法
-get_group_mute_until = GroupMuteTracker.get_group_mute_until
-is_group_muted = GroupMuteTracker.is_group_muted
-refresh_bot_group_mute_state = (
-    GroupMuteTracker.refresh_bot_group_mute_state
-)
-set_group_mute_until = GroupMuteTracker.set_group_mute_until
-update_group_mute_from_notice = (
-    GroupMuteTracker.update_group_mute_from_notice
-)
-
 __all__ = [
     "GroupMemberInfo",
     "GroupMemberService",
@@ -51,16 +40,11 @@ __all__ = [
     "build_group_style_prompt_block",
     "extract_group_knowledge",
     "extract_group_style",
-    "get_group_mute_until",
     "group_member_service",
     "group_mute_tracker",
     "group_profile",
     "group_social",
-    "is_group_muted",
     "profile_service",
-    "refresh_bot_group_mute_state",
     "repeat_follow",
-    "set_group_mute_until",
     "summarize_conversation",
-    "update_group_mute_from_notice",
 ]

@@ -327,12 +327,5 @@ class TokenLedger:
         return await TokenLedgerRecord.prune_old_records(days)
 
 
-# 向后兼容别名：保持模块级函数可被直接导入
-start_conversation_tracking = TokenTrackingHelper.start_conversation_tracking
-stop_conversation_tracking = TokenTrackingHelper.stop_conversation_tracking
-set_token_context = TokenTrackingHelper.set_token_context
-reset_token_context = TokenTrackingHelper.reset_token_context
-get_token_context = TokenTrackingHelper.get_token_context
-
 token_ledger = TokenLedger()
 """Token账本单例"""
