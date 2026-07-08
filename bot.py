@@ -9,7 +9,7 @@ from nonebot.adapters.qq import Adapter as QQAdapter
 
 # from nonebot.adapters.mail import Adapter as MailAdapter
 
-# 初始化 NoneBot 框架
+# 初始化 NoneBot
 
 nonebot.init()
 
