@@ -31,12 +31,8 @@ def _group_to_view(group: GroupConsole) -> dict[str, Any]:
 
 
 def build_group_router() -> APIRouter:
-    """构建群组管理路由
-
-    Returns:
-        APIRouter: 群组管理路由器
-    """
-    router = APIRouter(prefix="/groups", tags=["本体-群组管理"])
+    """构建群组管理路由"""
+    router = APIRouter(prefix="/groups", tags=["WebUI-群组管理"])
 
     @router.get("")
     async def list_groups(
@@ -49,21 +45,16 @@ def build_group_router() -> APIRouter:
             status: 状态过滤（True启用 False禁用 None全部）
             platform: 平台过滤
         """
-        try:
-            query = GroupConsole.filter()
-            if status is not None:
-                query = query.filter(status=status)
-            if platform:
-                query = query.filter(platform=platform)
-            groups = await query.all()
-            return {
-                "groups": [_group_to_view(g) for g in groups],
-                "count": len(groups),
-            }
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=str(e)
-            ) from e
+        query = GroupConsole.filter()
+        if status is not None:
+            query = query.filter(status=status)
+        if platform:
+            query = query.filter(platform=platform)
+        groups = await query.all()
+        return {
+            "groups": [_group_to_view(g) for g in groups],
+            "count": len(groups),
+        }
 
     @router.post("/level")
     async def set_group_level(
@@ -80,24 +71,13 @@ def build_group_router() -> APIRouter:
         try:
             level = int(body.get("level", 5))
         except (TypeError, ValueError):
-            raise HTTPException(
-                status_code=400, detail="level 必须为整数"
-            )
+            raise HTTPException(status_code=400, detail="level 必须为整数")
         if not group_id:
-            raise HTTPException(
-                status_code=400, detail="group_id 不能为空"
-            )
+            raise HTTPException(status_code=400, detail="group_id 不能为空")
         if not 0 <= level <= 10:
-            raise HTTPException(
-                status_code=400, detail="level 范围 0-10"
-            )
-        try:
-            await GroupConsole.set_group_level(group_id, level)
-            return {"ok": True, "group_id": group_id, "level": level}
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=str(e)
-            ) from e
+            raise HTTPException(status_code=400, detail="level 范围 0-10")
+        await GroupConsole.set_group_level(group_id, level)
+        return {"ok": True, "group_id": group_id, "level": level}
 
     @router.post("/status")
     async def set_group_status(
@@ -113,20 +93,9 @@ def build_group_router() -> APIRouter:
         group_id = str(body.get("group_id", "")).strip()
         status = bool(body.get("status", True))
         if not group_id:
-            raise HTTPException(
-                status_code=400, detail="group_id 不能为空"
-            )
-        try:
-            await GroupConsole.set_status(group_id, status)
-            return {
-                "ok": True,
-                "group_id": group_id,
-                "status": status,
-            }
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=str(e)
-            ) from e
+            raise HTTPException(status_code=400, detail="group_id 不能为空")
+        await GroupConsole.set_status(group_id, status)
+        return {"ok": True, "group_id": group_id, "status": status}
 
     @router.post("/super")
     async def toggle_super_group(
@@ -140,21 +109,14 @@ def build_group_router() -> APIRouter:
         """
         group_id = str(body.get("group_id", "")).strip()
         if not group_id:
-            raise HTTPException(
-                status_code=400, detail="group_id 不能为空"
-            )
-        try:
-            await GroupConsole.toggle_super_group(group_id)
-            group = await GroupConsole.get_group(group_id)
-            return {
-                "ok": True,
-                "group_id": group_id,
-                "is_super": group.is_super if group else False,
-            }
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=str(e)
-            ) from e
+            raise HTTPException(status_code=400, detail="group_id 不能为空")
+        await GroupConsole.toggle_super_group(group_id)
+        group = await GroupConsole.get_group(group_id)
+        return {
+            "ok": True,
+            "group_id": group_id,
+            "is_super": group.is_super if group else False,
+        }
 
     @router.post("/proactive")
     async def set_proactive(
@@ -170,19 +132,8 @@ def build_group_router() -> APIRouter:
         group_id = str(body.get("group_id", "")).strip()
         allowed = bool(body.get("allowed", True))
         if not group_id:
-            raise HTTPException(
-                status_code=400, detail="group_id 不能为空"
-            )
-        try:
-            await GroupConsole.set_proactive_status(group_id, allowed)
-            return {
-                "ok": True,
-                "group_id": group_id,
-                "proactive_allowed": allowed,
-            }
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=str(e)
-            ) from e
+            raise HTTPException(status_code=400, detail="group_id 不能为空")
+        await GroupConsole.set_proactive_status(group_id, allowed)
+        return {"ok": True, "group_id": group_id, "proactive_allowed": allowed}
 
     return router

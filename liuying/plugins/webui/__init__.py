@@ -52,7 +52,7 @@ _PLUGIN_PRIORITY = 4
 
 
 @PriorityLifecycle.on_startup(priority=_PLUGIN_PRIORITY)
-async def _init_bot_webui_plugin() -> None:
+async def _init_webui_plugin() -> None:
     """本体 WebUI 插件初始化
 
     通过 PriorityLifecycle 注册，优先级=4，确保在本体核心（priority=2）
@@ -61,29 +61,11 @@ async def _init_bot_webui_plugin() -> None:
     启用条件：WEBUI_ENABLED 配置为 True。
     """
     if not get_config("WEBUI_ENABLED", False):
-        logger.info(
-            "本体 WebUI 已禁用（WEBUI_ENABLED=False）",
-            command="WebUI",
-        )
+        logger.info("本体 WebUI 已禁用（WEBUI_ENABLED=False）", command="WebUI")
         return
 
-    try:
-        driver = get_driver()
-    except Exception as e:
-        logger.warning(
-            f"本体 WebUI 获取 driver 失败: {e}",
-            command="WebUI",
-            e=e,
-        )
-        return
-
-    server_app = getattr(driver, "server_app", None)
-    if server_app is None:
-        logger.warning(
-            "当前驱动不支持 server_app，本体 WebUI 未挂载",
-            command="WebUI",
-        )
-        return
+    driver = get_driver()
+    server_app = driver.server_app
 
     account = str(get_config("WEBUI_ACCOUNT", "admin") or "admin")
     token = str(get_config("WEBUI_TOKEN", "") or "")
@@ -96,26 +78,12 @@ async def _init_bot_webui_plugin() -> None:
         route_prefix=route_prefix,
     )
 
-    try:
-        router = build_webui_router(prefix=route_prefix)
-        server_app.include_router(router)
-        logger.info(
-            f"本体 WebUI 路由已挂载到 {route_prefix}/*",
-            command="WebUI",
-        )
-    except Exception as e:
-        logger.warning(
-            f"本体 WebUI 路由挂载失败: {e}",
-            command="WebUI",
-            e=e,
-        )
+    router = build_webui_router(prefix=route_prefix)
+    server_app.include_router(router)
+    logger.info(f"本体 WebUI 路由已挂载到 {route_prefix}/*", command="WebUI")
 
 
 @PriorityLifecycle.on_shutdown(priority=_PLUGIN_PRIORITY)
-async def _shutdown_bot_webui_plugin() -> None:
+async def _shutdown_webui_plugin() -> None:
     """本体 WebUI 插件关闭清理"""
     logger.info("本体 WebUI 插件已关闭", command="WebUI")
-
-
-# 保留 driver 引用，便于其他模块通过本插件获取 driver 实例
-_ = get_driver

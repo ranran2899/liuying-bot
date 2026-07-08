@@ -105,8 +105,6 @@ def require_auth(account: str = "", token: str = "") -> None:
     校验请求方提供的账号与令牌是否匹配配置，未授权时抛出 401/403。
     通过 FastAPI Depends 挂载到所有写操作路由。
 
-    参数名使用 account/token 而非 user_id 等，避免与路由自身的业务参数同名冲突。
-
     Args:
         account: 请求方提供的账号（query参数）
         token: 请求方提供的令牌（query参数）
@@ -115,21 +113,12 @@ def require_auth(account: str = "", token: str = "") -> None:
         HTTPException: 缺少参数时 401，账号或令牌不匹配时 403
     """
     if not account or not token:
-        raise HTTPException(
-            status_code=401,
-            detail="缺少 account 或 token 参数",
-        )
+        raise HTTPException(status_code=401, detail="缺少 account 或 token 参数")
     expected_account, expected_token = _get_credentials()
     if not expected_token:
-        raise HTTPException(
-            status_code=403,
-            detail="服务端未配置 WEBUI_TOKEN，无法鉴权",
-        )
+        raise HTTPException(status_code=403, detail="服务端未配置 WEBUI_TOKEN，无法鉴权")
     if not (
         hmac.compare_digest(account, expected_account)
         and hmac.compare_digest(token, expected_token)
     ):
-        raise HTTPException(
-            status_code=403,
-            detail="账号或令牌错误",
-        )
+        raise HTTPException(status_code=403, detail="账号或令牌错误")

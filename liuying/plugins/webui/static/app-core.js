@@ -288,7 +288,7 @@ function renderView() {
 function toggleTheme() {
   state.theme = state.theme === "dark" ? "light" : "dark";
   document.documentElement.setAttribute("data-theme", state.theme);
-  localStorage.setItem("bot_webui_theme", state.theme);
+  localStorage.setItem("webui_theme", state.theme);
   render();
 }
 
@@ -301,8 +301,8 @@ function switchAccount() {
   state.account = "";
   state.token = "";
   state.logged = false;
-  localStorage.removeItem("bot_webui_account");
-  localStorage.removeItem("bot_webui_token");
+  localStorage.removeItem("webui_account");
+  localStorage.removeItem("webui_token");
   render();
 }
 
@@ -312,11 +312,11 @@ const VIEWS = {};
 // ========== 初始化 ==========
 
 async function bootstrap() {
-  const savedTheme = localStorage.getItem("bot_webui_theme") || "dark";
+  const savedTheme = localStorage.getItem("webui_theme") || "dark";
   state.theme = savedTheme;
   document.documentElement.setAttribute("data-theme", savedTheme);
-  const savedAccount = localStorage.getItem("bot_webui_account") || "";
-  const savedToken = localStorage.getItem("bot_webui_token") || "";
+  const savedAccount = localStorage.getItem("webui_account") || "";
+  const savedToken = localStorage.getItem("webui_token") || "";
   state.account = savedAccount;
   state.token = savedToken;
   if (state.account && state.token) {

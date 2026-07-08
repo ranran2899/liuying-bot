@@ -11,7 +11,7 @@ from liuying.configs.utils import RegisterConfig
 
 __all__ = ["PluginConfig", "get_config", "set_config"]
 
-_MODULE = "BOT_WEBUI"
+_MODULE = "WEBUI"
 """配置模块名"""
 
 

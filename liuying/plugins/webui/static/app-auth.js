@@ -45,8 +45,8 @@ async function doLogin() {
     state.account = account;
     state.token = token;
     state.logged = true;
-    localStorage.setItem("bot_webui_account", account);
-    localStorage.setItem("bot_webui_token", token);
+    localStorage.setItem("webui_account", account);
+    localStorage.setItem("webui_token", token);
     msg.textContent = "登录成功，正在加载…";
     await loadView();
     render();

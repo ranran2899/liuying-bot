@@ -93,7 +93,7 @@ def build_webui_router(prefix: str = "/bot") -> APIRouter:
     返回:
         APIRouter: WebUI主路由器
     """
-    router = APIRouter(prefix=prefix, tags=["Bot-WebUI"])
+    router = APIRouter(prefix=prefix, tags=["WebUI"])
 
     # 挂载各功能子路由
     router.include_router(build_health_router())

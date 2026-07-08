@@ -17,7 +17,7 @@ def build_health_router() -> APIRouter:
     Returns:
         APIRouter: 健康检查路由器
     """
-    router = APIRouter(prefix="/health", tags=["本体-健康检查"])
+    router = APIRouter(prefix="/health", tags=["WebUI-健康检查"])
 
     @router.get("")
     async def health() -> dict[str, str]:
