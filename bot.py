@@ -19,7 +19,7 @@ driver.register_adapter(OneBotV11Adapter)
 driver.register_adapter(OneBotV12Adapter)
 driver.register_adapter(QQAdapter)
 driver.register_adapter(MinecraftAdapter)
-# driver.register_adapter(MailAdapter) # 暂时不支持
+# driver.register_adapter(MailAdapter)
 
 from liuying.services.liuying_db import session_manager
 
