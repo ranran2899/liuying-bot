@@ -88,7 +88,7 @@ function renderTasks() {
     <div class="card">
       <h2>定时任务（${tasks.length}/${data.count}）</h2>
       <p class="muted" style="font-size:12px;margin-top:0">
-        流萤内置调度器任务列表。暂停/恢复/执行/移除操作需超级用户权限。
+        流萤内置调度器任务列表。暂停/恢复/执行/移除操作需登录鉴权。
         调度器状态：${data.started ? '<span class="tag ok">运行中</span>' : '<span class="tag">未启动</span>'}
       </p>
       <table><thead><tr><th>任务</th><th>状态</th><th>触发器</th><th>分组</th><th>运行次数</th><th>上次运行</th><th>描述</th><th>操作</th></tr></thead>

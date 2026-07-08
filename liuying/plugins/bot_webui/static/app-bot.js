@@ -77,7 +77,7 @@ function renderBots() {
   return `<div class="card">
     <h2>机器人账号（${data.count}，在线 ${data.online_count}）</h2>
     <p class="muted" style="font-size:12px;margin-top:0">
-      管理 BotConsole 账号状态。插件/被动列分别表示 可用/禁用 数量。切换状态需超级用户权限。
+      管理 BotConsole 账号状态。插件/被动列分别表示 可用/禁用 数量。切换状态需登录鉴权。
     </p>
     <table><thead><tr><th>账号ID</th><th>连接</th><th>状态</th><th>平台</th><th>创建时间</th><th>插件(用/禁)</th><th>被动(用/禁)</th><th>切换</th></tr></thead>
     <tbody>${rows}</tbody></table>
@@ -149,7 +149,7 @@ function renderPluginTable() {
       </td>
     </tr>`).join("");
     return `<h2>机器人 ${escapeHtml(state.pluginBotId)} 的插件（${plugins.length}）</h2>
-      <p class="muted" style="font-size:12px;margin-top:0">为该机器人单独启用/禁用插件。操作需超级用户权限。</p>
+      <p class="muted" style="font-size:12px;margin-top:0">为该机器人单独启用/禁用插件。操作需登录鉴权。</p>
       <div class="row" style="margin-bottom:10px">
         <button class="btn small primary" onclick="toggleAllPlugins(true)">全部启用</button>
         <button class="btn small danger" onclick="toggleAllPlugins(false)">全部禁用</button>
@@ -252,7 +252,7 @@ function renderGroups() {
     <div class="card">
       <h2>群组列表（${filtered.length}/${groups.length}）</h2>
       <p class="muted" style="font-size:12px;margin-top:0">
-        管理群组权限等级与状态。等级直接修改生效，其余操作需超级用户权限。
+        管理群组权限等级与状态。等级直接修改生效，其余操作需登录鉴权。
       </p>
       <table><thead><tr><th>群号</th><th>群名</th><th>平台</th><th>人数</th><th>等级</th><th>状态</th><th>类型</th><th>主动消息</th><th>操作</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="9" class="muted">暂无群组</td></tr>'}</tbody></table>

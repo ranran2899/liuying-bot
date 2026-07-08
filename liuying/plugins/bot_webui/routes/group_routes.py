@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 
 from liuying.models._group import GroupConsole
 
-from ..deps import require_superuser
+from ..deps import require_auth
 
 __all__ = ["build_group_router"]
 
@@ -68,7 +68,7 @@ def build_group_router() -> APIRouter:
     @router.post("/level")
     async def set_group_level(
         body: dict = Body(default_factory=dict),
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """设置群组权限等级
 
@@ -102,7 +102,7 @@ def build_group_router() -> APIRouter:
     @router.post("/status")
     async def set_group_status(
         body: dict = Body(default_factory=dict),
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """设置群组状态（启用/禁用）
 
@@ -131,7 +131,7 @@ def build_group_router() -> APIRouter:
     @router.post("/super")
     async def toggle_super_group(
         body: dict = Body(default_factory=dict),
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """切换超级群组状态
 
@@ -159,7 +159,7 @@ def build_group_router() -> APIRouter:
     @router.post("/proactive")
     async def set_proactive(
         body: dict = Body(default_factory=dict),
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """设置群聊主动消息允许状态
 

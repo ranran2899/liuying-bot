@@ -11,7 +11,7 @@ from nonebot import get_bots
 
 from liuying.models._bot import BotConsole
 
-from ..deps import require_superuser
+from ..deps import require_auth
 
 __all__ = ["build_bot_router"]
 
@@ -85,7 +85,7 @@ def build_bot_router() -> APIRouter:
     async def set_bot_status(
         bot_id: str,
         status: bool,
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """切换机器人账号状态
 

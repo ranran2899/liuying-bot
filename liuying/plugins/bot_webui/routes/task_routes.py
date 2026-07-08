@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 
 from liuying.utils.apscheduler.manager import task_manager
 
-from ..deps import require_superuser
+from ..deps import require_auth
 
 __all__ = ["build_task_router"]
 
@@ -53,7 +53,7 @@ def build_task_router() -> APIRouter:
     @router.post("/pause")
     async def pause_task(
         body: dict = Body(default_factory=dict),
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """暂停指定定时任务
 
@@ -76,7 +76,7 @@ def build_task_router() -> APIRouter:
     @router.post("/resume")
     async def resume_task(
         body: dict = Body(default_factory=dict),
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """恢复指定定时任务
 
@@ -99,7 +99,7 @@ def build_task_router() -> APIRouter:
     @router.post("/run")
     async def run_task(
         body: dict = Body(default_factory=dict),
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """立即执行指定定时任务
 
@@ -126,7 +126,7 @@ def build_task_router() -> APIRouter:
     @router.delete("")
     async def remove_task(
         task_id: str,
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """移除指定定时任务
 

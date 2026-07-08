@@ -4,8 +4,8 @@
 const API = "/bot";
 
 let state = {
-  // 鉴权：流萤采用超级用户 QQ 作为 query 参数（非 cookie 登录）
-  logged: false, qq: "",
+  // 鉴权：使用账号 + 令牌作为 query 参数（非 cookie 登录）
+  logged: false, account: "", token: "",
   // 视图与加载状态
   view: "dashboard", loading: false, alert: null,
   // 主题与移动端导航
@@ -28,10 +28,11 @@ const _apiInflight = new Map();
 async function api(path, opts = {}) {
   const method = (opts.method || "GET").toUpperCase();
   const headers = { ...(opts.headers || {}) };
-  // 自动注入超级用户 QQ 作为 auth_uid query 参数（写操作鉴权需要）
+  // 自动注入账号和令牌作为 query 参数（写操作鉴权需要）
   const params = { ...(opts.params || {}) };
-  if (state.qq && (method !== "GET" || opts.auth)) {
-    if (!params.auth_uid) params.auth_uid = state.qq;
+  if (state.account && state.token && (method !== "GET" || opts.auth)) {
+    if (!params.account) params.account = state.account;
+    if (!params.token) params.token = state.token;
   }
   // 构造完整 URL
   const url = new URL(API + path, location.origin);
@@ -182,8 +183,8 @@ async function loadView() {
 
 function render() {
   const root = document.getElementById("app");
-  // 未填写超级用户 QQ 时显示登录页
-  if (!state.qq) { root.innerHTML = renderLogin(); return; }
+  // 未登录时显示登录页
+  if (!state.account || !state.token) { root.innerHTML = renderLogin(); return; }
   // 全量重绘时保留输入框焦点与光标位置
   const active = document.activeElement;
   let focusSnap = null;
@@ -246,8 +247,8 @@ function renderLayout() {
         </div>
         <div class="row">
           <button class="btn small" onclick="toggleTheme()" title="切换主题" aria-label="切换深色/浅色主题">${themeIcon}</button>
-          <span class="muted" title="当前超级用户QQ">QQ ${escapeHtml(state.qq)}</span>
-          <button class="btn small" onclick="switchAccount()">切换QQ</button>
+          <span class="muted" title="当前登录账号">${escapeHtml(state.account)}</span>
+          <button class="btn small" onclick="switchAccount()">退出登录</button>
         </div>
       </div>
       ${state.alert ? `<div class="alert ${state.alert.kind}" role="alert">${escapeHtml(state.alert.text)}</div>` : ''}
@@ -297,8 +298,11 @@ function toggleMobileNav() {
 }
 
 function switchAccount() {
-  state.qq = "";
-  localStorage.removeItem("bot_webui_uid");
+  state.account = "";
+  state.token = "";
+  state.logged = false;
+  localStorage.removeItem("bot_webui_account");
+  localStorage.removeItem("bot_webui_token");
   render();
 }
 
@@ -311,9 +315,11 @@ async function bootstrap() {
   const savedTheme = localStorage.getItem("bot_webui_theme") || "dark";
   state.theme = savedTheme;
   document.documentElement.setAttribute("data-theme", savedTheme);
-  const savedUid = localStorage.getItem("bot_webui_uid") || "";
-  state.qq = savedUid;
-  if (state.qq) {
+  const savedAccount = localStorage.getItem("bot_webui_account") || "";
+  const savedToken = localStorage.getItem("bot_webui_token") || "";
+  state.account = savedAccount;
+  state.token = savedToken;
+  if (state.account && state.token) {
     try { await loadView(); }
     catch (e) { /* 加载失败不阻塞界面 */ }
   }

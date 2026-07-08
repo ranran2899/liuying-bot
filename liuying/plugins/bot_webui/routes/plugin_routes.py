@@ -11,7 +11,7 @@ from liuying.models._bot import BotConsole
 from liuying.models.plugin_info import PluginInfo
 from liuying.utils.enum import PluginType
 
-from ..deps import require_superuser
+from ..deps import require_auth
 
 __all__ = ["build_plugin_router"]
 
@@ -120,7 +120,7 @@ def build_plugin_router() -> APIRouter:
     @router.post("/toggle")
     async def toggle_plugin(
         body: dict = Body(default_factory=dict),
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """启用/禁用指定机器人的插件
 
@@ -160,7 +160,7 @@ def build_plugin_router() -> APIRouter:
     @router.post("/toggle_all")
     async def toggle_all_plugins(
         body: dict = Body(default_factory=dict),
-        _: None = Depends(require_superuser),
+        _: None = Depends(require_auth),
     ) -> dict[str, Any]:
         """启用/禁用指定机器人的全部插件
 
