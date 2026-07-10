@@ -50,18 +50,24 @@ class ApiDataSource:
         """
         now = datetime.now()
         platform = PlatformUtils.get_platform(bot) or ""
+        nickname = bot.self_id
+        ava_url = ""
         if platform == "qq":
-            login_info = await bot.get_login_info()
-            nickname = login_info["nickname"]
-            ava_url = (
-                PlatformUtils.get_user_avatar_url(
-                    bot.self_id, "qq", BotConfig.get_qbot_uid(bot.self_id)
+            if hasattr(bot, "get_login_info"):
+                try:
+                    login_info = await bot.get_login_info()
+                    nickname = login_info.get("nickname") or bot.self_id
+                except Exception as e:
+                    logger.warning("调用接口get_login_info失败", command="WebUi", e=e)
+            try:
+                ava_url = (
+                    PlatformUtils.get_user_avatar_url(
+                        bot.self_id, "qq", BotConfig.get_qbot_uid(bot.self_id)
+                    )
+                    or ""
                 )
-                or ""
-            )
-        else:
-            nickname = bot.self_id
-            ava_url = ""
+            except Exception as e:
+                logger.warning("获取bot头像失败", command="WebUi", e=e)
         bot_info = BotInfo(
             self_id=bot.self_id, nickname=nickname, ava_url=ava_url, platform=platform
         )

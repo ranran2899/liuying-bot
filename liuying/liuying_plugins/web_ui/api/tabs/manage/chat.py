@@ -18,9 +18,11 @@ driver = nonebot.get_driver()
 
 ws_conn: WebSocket | None = None
 
-ID2NAME = {}
+# 群成员名缓存，限制最大群数避免内存泄漏
+ID2NAME: dict[str, dict[str, str]] = {}
+ID2NAME_MAX_GROUPS = 100
 
-ID_LIST = []
+ID_LIST: list = []
 
 ws_router = APIRouter()
 
@@ -36,14 +38,21 @@ async def _():
 
 @ws_router.websocket("/chat")
 async def _(websocket: WebSocket):
+    """聊天 WebSocket 端点
+
+    仅允许单个客户端连接，新连接覆盖旧连接。
+    """
     global ws_conn
     await websocket.accept()
-    if not ws_conn or ws_conn.client_state != WebSocketState.CONNECTED:
-        ws_conn = websocket
-        try:
-            while websocket.client_state == WebSocketState.CONNECTED:
-                await websocket.receive()
-        except WebSocketDisconnect:
+    # 若已有连接，先关闭旧连接
+    if ws_conn and ws_conn.client_state == WebSocketState.CONNECTED:
+        await ws_conn.close()
+    ws_conn = websocket
+    try:
+        while websocket.client_state == WebSocketState.CONNECTED:
+            await websocket.receive()
+    except WebSocketDisconnect:
+        if ws_conn is websocket:
             ws_conn = None
 
 
@@ -51,6 +60,15 @@ async def message_handle(
     message: UniMsg,
     group_id: str | None,
 ):
+    """处理消息段，转换为前端可渲染的消息项列表
+
+    参数:
+        message: UniMsg 消息对象
+        group_id: 群 ID，私聊为 None
+
+    返回:
+        list[MessageItem]: 消息项列表
+    """
     time = str(datetime.now().replace(microsecond=0))
     messages = []
     for m in message:
@@ -64,27 +82,46 @@ async def message_handle(
                 if m.target == "0":
                     uname = "全体成员"
                 else:
-                    uname = m.target
-                    if group_id not in ID2NAME:
-                        ID2NAME[group_id] = {}
-                    if m.target in ID2NAME[group_id]:
-                        uname = ID2NAME[group_id][m.target]
-                    elif group_user := await GroupInfoUser.filter(
-                        user_id=m.target, group_id=group_id
-                    ).first():
-                        uname = group_user.user_name
-                        if m.target not in ID2NAME[group_id]:
-                            ID2NAME[group_id][m.target] = uname
+                    uname = await _resolve_at_name(group_id, m.target)
                 messages.append(MessageItem(type="at", msg=f"@{uname}", time=time))
         elif isinstance(m, Hyper):
             messages.append(MessageItem(type="text", msg="[分享消息]", time=time))
     return messages
 
 
+async def _resolve_at_name(group_id: str, target: str) -> str:
+    """解析 @ 目标的昵称，带缓存
+
+    参数:
+        group_id: 群 ID
+        target: 被 @ 的用户 ID
+
+    返回:
+        str: 用户昵称，未找到时返回原始 ID
+    """
+    global ID2NAME
+    # 清理过期缓存
+    if len(ID2NAME) > ID2NAME_MAX_GROUPS:
+        for key in list(ID2NAME.keys())[:20]:
+            del ID2NAME[key]
+    if group_id not in ID2NAME:
+        ID2NAME[group_id] = {}
+    if target in ID2NAME[group_id]:
+        return ID2NAME[group_id][target]
+    group_user = await GroupInfoUser.filter(
+        user_id=target, group_id=group_id
+    ).first()
+    if group_user:
+        ID2NAME[group_id][target] = group_user.user_name
+        return group_user.user_name
+    return target
+
+
 @matcher.handle()
 async def _(
     message: UniMsg, event: MessageEvent, session: Uninfo, uname: str = UserName()
 ):
+    """消息处理器，转发消息到 WebSocket 客户端"""
     global ws_conn, ID2NAME, ID_LIST
     if ws_conn and ws_conn.client_state == WebSocketState.CONNECTED:
         msg_id = event.message_id

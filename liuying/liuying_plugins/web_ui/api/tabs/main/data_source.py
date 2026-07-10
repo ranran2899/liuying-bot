@@ -72,10 +72,11 @@ class ApiDataSource:
             TemplateBaseInfo: bot信息
         """
         login_info = None
-        try:
-            login_info = await bot.get_login_info()
-        except Exception as e:
-            logger.warning("调用接口get_login_info失败", command="WebUi", e=e)
+        if hasattr(bot, "get_login_info"):
+            try:
+                login_info = await bot.get_login_info()
+            except Exception as e:
+                logger.warning("调用接口get_login_info失败", command="WebUi", e=e)
         return TemplateBaseInfo(
             bot=bot,
             self_id=bot.self_id,
@@ -385,10 +386,12 @@ class ApiDataSource:
             return None
         block_tasks = []
         block_plugins = []
-        all_plugins = await PluginInfo.filter(
+        all_plugins_obj = await PluginInfo.filter(
             load_status=True, plugin_type=PluginType.NORMAL
-        ).values("module", "name")
-        all_task = await TaskInfo.filter().values("module", "name")
+        ).all()
+        all_plugins = [{"module": p.module, "name": p.name} for p in all_plugins_obj]
+        all_task_obj = await TaskInfo.filter().all()
+        all_task = [{"module": t.module, "name": t.name} for t in all_task_obj]
         if bot_data.block_tasks:
             tasks = CommonUtils.convert_module_format(bot_data.block_tasks)
             block_tasks = [t["module"] for t in all_task if t["module"] in tasks]

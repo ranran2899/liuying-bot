@@ -16,9 +16,9 @@ app.add_middleware(
 )
 
 
-AVA_URL = "http://q1.qlogo.cn/g?b=qq&nk={}&s=160"
+AVA_URL = "https://q1.qlogo.cn/g?b=qq&nk={}&s=160"
 
-GROUP_AVA_URL = "http://p.qlogo.cn/gh/{}/{}/640/"
+GROUP_AVA_URL = "https://p.qlogo.cn/gh/{}/{}/640/"
 
 
 class QueryDateType(StrEnum):

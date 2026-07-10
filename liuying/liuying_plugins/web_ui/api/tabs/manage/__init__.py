@@ -192,7 +192,12 @@ async def _(param: HandleRequest) -> Result:
     description="忽略请求",
 )
 async def _(param: HandleRequest) -> Result:
-    await FgRequest.ignore(param.id)
+    try:
+        await FgRequest.ignore(param.id)
+    except NotFoundError:
+        return Result.warning_("未找到此Id请求...")
+    except ActionFailed:
+        return Result.warning_("请求失败，可能该请求已失效或请求数据错误...")
     return Result.ok(info="成功处理了请求!")
 
 
