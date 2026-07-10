@@ -32,9 +32,9 @@ Config.add_plugin_config(
 Config.add_plugin_config(
     "hook",
     "BEHAVIOR_LOG_TO_DB",
-    False,
+    True,
     help="是否记录行为日志到数据库",
-    default_value=False,
+    default_value=True,
     type=bool,
 )
 
