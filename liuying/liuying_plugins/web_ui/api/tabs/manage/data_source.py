@@ -1,5 +1,4 @@
 import nonebot
-from sqlalchemy import func
 
 from liuying.models._group import GroupConsole
 from liuying.models.ban_console import BanConsole
@@ -110,25 +109,16 @@ class ApiDataSource:
         fd = [x for x in friend_list if x.user_id == user_id]
         if not fd:
             return None
-        # 使用 label() 创建命名列对象，避免 SQLAlchemy 2.0 字符串列引用错误
-        plugin_col = Statistics.plugin_name
-        count_col = func.count(Statistics.id).label("count")
-        like_plugin_list = await (
-            Statistics.filter(user_id=user_id)
-            .annotate(count=count_col)
-            .group_by(plugin_col)
-            .order_by(count_col.desc())
-            .limit(5)
-            .values(plugin_col, count_col)
-            .all()
+        like_plugin_list = await Statistics.get_plugin_usage_count(
+            user_id=user_id, limit=5
         )
         like_plugin = {}
         module_list = [x[0] for x in like_plugin_list]
         plugins = await PluginInfo.filter(module__in=module_list).all()
         module2name = {p.module: p.name for p in plugins}
-        for data in like_plugin_list:
-            name = module2name.get(data[0]) or data[0]
-            like_plugin[name] = data[1]
+        for module, count in like_plugin_list:
+            name = module2name.get(module) or module
+            like_plugin[name] = count
         user = fd[0]
         return UserDetail(
             user_id=user_id,
@@ -136,8 +126,8 @@ class ApiDataSource:
             nickname=user.user_name,
             remark="",
             is_ban=await BanConsole.is_ban(user_id),
-            chat_count=await ChatHistory.filter(user_id=user_id).count(),
-            call_count=await Statistics.filter(user_id=user_id).count(),
+            chat_count=await ChatHistory.count_records(user_id=user_id),
+            call_count=await Statistics.count_records(user_id=user_id),
             like_plugin=like_plugin,
         )
 
@@ -151,24 +141,15 @@ class ApiDataSource:
         返回:
             dict[str, int]: 插件与调用次数
         """
-        # 使用 label() 创建命名列对象，避免 SQLAlchemy 2.0 字符串列引用错误
-        plugin_col = Statistics.plugin_name
-        count_col = func.count(Statistics.id).label("count")
-        like_plugin_list = await (
-            Statistics.filter(group_id=group_id)
-            .annotate(count=count_col)
-            .group_by(plugin_col)
-            .order_by(count_col.desc())
-            .limit(5)
-            .values(plugin_col, count_col)
-            .all()
+        like_plugin_list = await Statistics.get_plugin_usage_count(
+            group_id=group_id, limit=5
         )
         like_plugin = {}
         plugins = await PluginInfo.get_plugins()
         module2name = {p.module: p.name for p in plugins}
-        for data in like_plugin_list:
-            name = module2name.get(data[0]) or data[0]
-            like_plugin[name] = data[1]
+        for module, count in like_plugin_list:
+            name = module2name.get(module) or module
+            like_plugin[name] = count
         return like_plugin
 
     @classmethod
@@ -272,8 +253,8 @@ class ApiDataSource:
             name=group.group_name,
             member_count=group.member_count,
             max_member_count=group.max_member_count,
-            chat_count=await ChatHistory.filter(group_id=group_id).count(),
-            call_count=await Statistics.filter(group_id=group_id).count(),
+            chat_count=await ChatHistory.count_records(group_id=group_id),
+            call_count=await Statistics.count_records(group_id=group_id),
             like_plugin=like_plugin,
             level=group.level,
             status=group.status,

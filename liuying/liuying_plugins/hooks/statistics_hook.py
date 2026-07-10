@@ -133,7 +133,7 @@ class StatisticsQueue:
                 )
                 for r in records
             ]
-            await Statistics.filter().bulk_create(statistics_list)
+            await Statistics.bulk_add(statistics_list)
             logger.debug(f"批量添加调用记录 {len(records)} 条", LOG_COMMAND)
         except Exception as e:
             logger.error("批量写入统计记录失败", LOG_COMMAND, e=e)

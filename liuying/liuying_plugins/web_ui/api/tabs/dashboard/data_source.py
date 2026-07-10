@@ -48,7 +48,6 @@ class ApiDataSource:
         返回:
             BotInfo: Bot信息
         """
-        now = datetime.now()
         platform = PlatformUtils.get_platform(bot) or ""
         nickname = bot.self_id
         ava_url = ""
@@ -82,14 +81,12 @@ class ApiDataSource:
             logger.warning("获取bot好友/群组信息失败...", command="WebUi", e=e)
             bot_info.group_count = 0
             bot_info.friend_count = 0
-        bot_info.day_call = await Statistics.filter(
-            create_time__gte=now - timedelta(hours=now.hour, minutes=now.minute),
-            bot_id=bot.self_id,
-        ).count()
-        bot_info.received_messages = await ChatHistory.filter(
-            bot_id=bot_info.self_id,
-            create_time__gte=now - timedelta(hours=now.hour, minutes=now.minute),
-        ).count()
+        bot_info.day_call = await Statistics.count_records(
+            bot_id=bot.self_id, days=1
+        )
+        bot_info.received_messages = await ChatHistory.count_records(
+            bot_id=bot_info.self_id, days=1
+        )
         bot_info.connect_time = bot_live.get(bot.self_id) or 0
         if bot_info.connect_time:
             connect_date = datetime.fromtimestamp(CONNECT_TIME)
@@ -118,27 +115,11 @@ class ApiDataSource:
         返回:
             QueryChatCallCount: 数据内容
         """
-        now = datetime.now()
-        # 始终用 filter() 创建 QueryWrapper，避免直接对模型类调用 .count()
-        chat_query = ChatHistory.filter()
-        if bot_id:
-            chat_query = chat_query.filter(bot_id=bot_id)
-        chat_all_count = await chat_query.count()
-        chat_day_count = await chat_query.filter(
-            create_time__gte=now - timedelta(hours=now.hour, minutes=now.minute)
-        ).count()
-        call_query = Statistics.filter()
-        if bot_id:
-            call_query = call_query.filter(bot_id=bot_id)
-        call_all_count = await call_query.count()
-        call_day_count = await call_query.filter(
-            create_time__gte=now - timedelta(hours=now.hour, minutes=now.minute)
-        ).count()
         return QueryChatCallCount(
-            chat_num=chat_all_count,
-            chat_day=chat_day_count,
-            call_num=call_all_count,
-            call_day=call_day_count,
+            chat_num=await ChatHistory.count_records(bot_id=bot_id),
+            chat_day=await ChatHistory.count_records(bot_id=bot_id, days=1),
+            call_num=await Statistics.count_records(bot_id=bot_id),
+            call_day=await Statistics.count_records(bot_id=bot_id, days=1),
         )
 
     @classmethod
@@ -153,43 +134,13 @@ class ApiDataSource:
         返回:
             AllChatAndCallCount: 数据内容
         """
-        now = datetime.now()
-        # 始终用 filter() 创建 QueryWrapper，避免直接对模型类调用 .count()
-        chat_query = ChatHistory.filter()
-        if bot_id:
-            chat_query = chat_query.filter(bot_id=bot_id)
-        chat_week_count = await chat_query.filter(
-            create_time__gte=now - timedelta(days=7, hours=now.hour, minutes=now.minute)
-        ).count()
-        chat_month_count = await chat_query.filter(
-            create_time__gte=now
-            - timedelta(days=30, hours=now.hour, minutes=now.minute)
-        ).count()
-        chat_year_count = await chat_query.filter(
-            create_time__gte=now
-            - timedelta(days=365, hours=now.hour, minutes=now.minute)
-        ).count()
-        call_query = Statistics.filter()
-        if bot_id:
-            call_query = call_query.filter(bot_id=bot_id)
-        call_week_count = await call_query.filter(
-            create_time__gte=now - timedelta(days=7, hours=now.hour, minutes=now.minute)
-        ).count()
-        call_month_count = await call_query.filter(
-            create_time__gte=now
-            - timedelta(days=30, hours=now.hour, minutes=now.minute)
-        ).count()
-        call_year_count = await call_query.filter(
-            create_time__gte=now
-            - timedelta(days=365, hours=now.hour, minutes=now.minute)
-        ).count()
         return AllChatAndCallCount(
-            chat_week=chat_week_count,
-            chat_month=chat_month_count,
-            chat_year=chat_year_count,
-            call_week=call_week_count,
-            call_month=call_month_count,
-            call_year=call_year_count,
+            chat_week=await ChatHistory.count_records(bot_id=bot_id, days=7),
+            chat_month=await ChatHistory.count_records(bot_id=bot_id, days=30),
+            chat_year=await ChatHistory.count_records(bot_id=bot_id, days=365),
+            call_week=await Statistics.count_records(bot_id=bot_id, days=7),
+            call_month=await Statistics.count_records(bot_id=bot_id, days=30),
+            call_year=await Statistics.count_records(bot_id=bot_id, days=365),
         )
 
     @classmethod

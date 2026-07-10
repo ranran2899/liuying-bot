@@ -1,11 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 import time
 
 import nonebot
 from nonebot.adapters import Bot
 from nonebot.drivers import Driver
-from sqlalchemy import func
 
 from liuying.models._bot import BotConsole
 from liuying.models._group import GroupConsole
@@ -104,12 +103,10 @@ class ApiDataSource:
         参数:
             select_bot: bot
         """
-        now = datetime.now()
         # 今日累计接收消息
-        select_bot.received_messages = await ChatHistory.filter(
-            bot_id=select_bot.self_id,
-            create_time__gte=now - timedelta(hours=now.hour),
-        ).count()
+        select_bot.received_messages = await ChatHistory.count_records(
+            bot_id=select_bot.self_id, days=1
+        )
         # 群聊数量
         try:
             select_bot.group_count = len(
@@ -130,10 +127,7 @@ class ApiDataSource:
             connect_date = datetime.fromtimestamp(select_bot.connect_time)
             select_bot.connect_date = connect_date.strftime("%Y-%m-%d %H:%M:%S")
         select_bot.version = cls.__get_bot_version()
-        day_call = await Statistics.filter(
-            create_time__gte=now - timedelta(hours=now.hour)
-        ).count()
-        select_bot.day_call = day_call
+        select_bot.day_call = await Statistics.count_records(days=1)
         select_bot.connect_count = await BotConnectLog.filter(
             bot_id=select_bot.self_id
         ).count()
@@ -174,31 +168,12 @@ class ApiDataSource:
         返回:
             QueryCount: 数据内容
         """
-        now = datetime.now()
-        query = ChatHistory
-        if bot_id:
-            query = query.filter(bot_id=bot_id)
-        all_count = await query.count()
-        day_count = await query.filter(
-            create_time__gte=now - timedelta(hours=now.hour, minutes=now.minute)
-        ).count()
-        week_count = await query.filter(
-            create_time__gte=now - timedelta(days=7, hours=now.hour, minutes=now.minute)
-        ).count()
-        month_count = await query.filter(
-            create_time__gte=now
-            - timedelta(days=30, hours=now.hour, minutes=now.minute)
-        ).count()
-        year_count = await query.filter(
-            create_time__gte=now
-            - timedelta(days=365, hours=now.hour, minutes=now.minute)
-        ).count()
         return QueryCount(
-            num=all_count,
-            day=day_count,
-            week=week_count,
-            month=month_count,
-            year=year_count,
+            num=await ChatHistory.count_records(bot_id=bot_id),
+            day=await ChatHistory.count_records(bot_id=bot_id, days=1),
+            week=await ChatHistory.count_records(bot_id=bot_id, days=7),
+            month=await ChatHistory.count_records(bot_id=bot_id, days=30),
+            year=await ChatHistory.count_records(bot_id=bot_id, days=365),
         )
 
     @classmethod
@@ -211,78 +186,13 @@ class ApiDataSource:
         返回:
             QueryCount: 数据内容
         """
-        now = datetime.now()
-        query = Statistics
-        if bot_id:
-            query = query.filter(bot_id=bot_id)
-        all_count = await query.count()
-        day_count = await query.filter(
-            create_time__gte=now - timedelta(hours=now.hour, minutes=now.minute)
-        ).count()
-        week_count = await query.filter(
-            create_time__gte=now - timedelta(days=7, hours=now.hour, minutes=now.minute)
-        ).count()
-        month_count = await query.filter(
-            create_time__gte=now
-            - timedelta(days=30, hours=now.hour, minutes=now.minute)
-        ).count()
-        year_count = await query.filter(
-            create_time__gte=now
-            - timedelta(days=365, hours=now.hour, minutes=now.minute)
-        ).count()
         return QueryCount(
-            num=all_count,
-            day=day_count,
-            week=week_count,
-            month=month_count,
-            year=year_count,
+            num=await Statistics.count_records(bot_id=bot_id),
+            day=await Statistics.count_records(bot_id=bot_id, days=1),
+            week=await Statistics.count_records(bot_id=bot_id, days=7),
+            month=await Statistics.count_records(bot_id=bot_id, days=30),
+            year=await Statistics.count_records(bot_id=bot_id, days=365),
         )
-
-    @classmethod
-    def __get_query(
-        cls,
-        base_query: type[ChatHistory | Statistics],
-        date_type: QueryDateType | None = None,
-        bot_id: str | None = None,
-    ):
-        """构建日期查询条件
-
-        参数:
-            date_type: 日期类型.
-            bot_id: bot id.
-        """
-        # 始终用 filter() 创建 QueryWrapper，避免直接对模型类调用链式方法
-        query = base_query.filter()
-        now = datetime.now()
-        if bot_id:
-            query = query.filter(bot_id=bot_id)
-        if date_type == QueryDateType.DAY:
-            query = query.filter(
-                create_time__gte=now
-                - timedelta(hours=now.hour, minutes=now.minute, seconds=now.second)
-            )
-        if date_type == QueryDateType.WEEK:
-            query = query.filter(
-                create_time__gte=now
-                - timedelta(
-                    days=7, hours=now.hour, minutes=now.minute, seconds=now.second
-                )
-            )
-        if date_type == QueryDateType.MONTH:
-            query = query.filter(
-                create_time__gte=now
-                - timedelta(
-                    days=30, hours=now.hour, minutes=now.minute, seconds=now.second
-                )
-            )
-        if date_type == QueryDateType.YEAR:
-            query = query.filter(
-                create_time__gte=now
-                - timedelta(
-                    days=365, hours=now.hour, minutes=now.minute, seconds=now.second
-                )
-            )
-        return query
 
     @classmethod
     async def get_active_group(
@@ -297,18 +207,15 @@ class ApiDataSource:
         返回:
             list[ActiveGroup]: 活跃群组列表
         """
-        query = cls.__get_query(ChatHistory, date_type, bot_id)
-        # 使用 label() 创建命名列对象，避免 SQLAlchemy 2.0 字符串列引用错误
-        group_col = ChatHistory.group_id
-        count_col = func.count(ChatHistory.id).label("count")
-        data_list = await (
-            query.annotate(count=count_col)
-            .filter(group_id__isnull=False)
-            .group_by(group_col)
-            .order_by(count_col.desc())
-            .limit(5)
-            .values(group_col, count_col)
-            .all()
+        days_map = {
+            QueryDateType.DAY: 1,
+            QueryDateType.WEEK: 7,
+            QueryDateType.MONTH: 30,
+            QueryDateType.YEAR: 365,
+        }
+        days = days_map.get(date_type)
+        data_list = await ChatHistory.get_active_groups(
+            bot_id=bot_id, days=days, limit=5
         )
         id2name = {}
         if data_list:
@@ -346,30 +253,27 @@ class ApiDataSource:
         返回:
             list[HotPlugin]: 热门插件列表
         """
-        query = cls.__get_query(Statistics, date_type, bot_id)
-        # 使用 label() 创建命名列对象，避免 SQLAlchemy 2.0 字符串列引用错误
-        plugin_col = Statistics.plugin_name
-        count_col = func.count(Statistics.id).label("count")
-        data_list = await (
-            query.annotate(count=count_col)
-            .group_by(plugin_col)
-            .order_by(count_col.desc())
-            .limit(5)
-            .values(plugin_col, count_col)
-            .all()
+        days_map = {
+            QueryDateType.DAY: 1,
+            QueryDateType.WEEK: 7,
+            QueryDateType.MONTH: 30,
+            QueryDateType.YEAR: 365,
+        }
+        days = days_map.get(date_type)
+        data_list = await Statistics.get_plugin_usage_count(
+            bot_id=bot_id, days=days, limit=5
         )
-        hot_plugin_list = []
         module_list = [x[0] for x in data_list]
         plugins = await PluginInfo.filter(module__in=module_list).all()
         module2name = {p.module: p.name for p in plugins}
-        for data in data_list:
-            module = data[0]
-            name = module2name.get(module) or module
-            hot_plugin_list.append(HotPlugin(module=module, name=name, count=data[1]))
-        hot_plugin_list = sorted(hot_plugin_list, key=lambda x: x.count, reverse=True)
-        if len(hot_plugin_list) > 5:
-            hot_plugin_list = hot_plugin_list[:5]
-        return hot_plugin_list
+        return [
+            HotPlugin(
+                module=module,
+                name=module2name.get(module) or module,
+                count=count,
+            )
+            for module, count in data_list
+        ]
 
     @classmethod
     async def get_bot_block_module(cls, bot_id: str) -> BotBlockModule | None:

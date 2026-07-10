@@ -1,9 +1,6 @@
-from collections import Counter
-from datetime import datetime, timedelta
 from typing import ClassVar, Literal, TypeAlias
 
-from liuying.models._group import GroupConsole
-from liuying.models._group import GroupInfoUser
+from liuying.models._group import GroupConsole, GroupInfoUser
 from liuying.models.plugin_info import PluginInfo
 from liuying.models.statistics import Statistics
 from liuying.utils.drawing_tool import DrawingTool, create_text_image
@@ -121,25 +118,17 @@ class StatisticsManage:
         返回:
             bytes | str: 图像字节数据或错误消息
         """
-        query = Statistics.filter()
-
-        if user_id:
-            query = query.filter(user_id=user_id)
-        if group_id:
-            query = query.filter(group_id=group_id)
-        if plugin_name:
-            query = query.filter(plugin_name=plugin_name)
-        if day:
-            start_time = datetime.now() - timedelta(days=day)
-            query = query.where_gte("create_time", start_time)
-
-        data_list = await query.all()
-        plugin_count = Counter(data.plugin_name for data in data_list)
+        plugin_count = await Statistics.get_plugin_usage_count(
+            user_id=user_id,
+            group_id=group_id,
+            plugin_name=plugin_name,
+            days=day,
+        )
 
         if not plugin_count:
             return "统计数据为空..."
 
-        return await cls._build_image(list(plugin_count.items()), title)
+        return await cls._build_image(plugin_count, title)
 
     @classmethod
     async def _build_image(
