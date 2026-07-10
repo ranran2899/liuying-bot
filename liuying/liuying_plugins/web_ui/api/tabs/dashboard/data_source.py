@@ -89,7 +89,7 @@ class ApiDataSource:
         )
         bot_info.connect_time = bot_live.get(bot.self_id) or 0
         if bot_info.connect_time:
-            connect_date = datetime.fromtimestamp(CONNECT_TIME)
+            connect_date = datetime.fromtimestamp(bot_info.connect_time)
             bot_info.connect_date = connect_date.strftime("%Y-%m-%d %H:%M:%S")
         return bot_info
 

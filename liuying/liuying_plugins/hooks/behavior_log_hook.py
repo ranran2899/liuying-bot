@@ -1,3 +1,5 @@
+"""用户行为日志钩子"""
+
 import asyncio
 from contextlib import suppress
 import time
@@ -220,4 +222,5 @@ async def _(
             "error_msg": error_msg,
             "platform": PlatformUtils.get_platform(session),
             "bot_id": bot.self_id,
-        })
+        }
+)

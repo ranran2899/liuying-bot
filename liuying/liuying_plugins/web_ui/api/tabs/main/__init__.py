@@ -55,10 +55,10 @@ async def _(bot_id: str | None = None) -> Result[list[BaseInfo]]:
     try:
         result = await ApiDataSource.get_base_info(bot_id)
         if not result:
-            Result.warning_("无Bot连接...")
+            return Result.warning_("无Bot连接...")
         return Result.ok(result, "拿到信息啦!")
     except Exception as e:
-        logger.error(f"{router.prefix}/get_base_info 调用错误", "WebUi", e=e)
+        logger.error(f"{router.prefix}/get_base_info 调用错误", command="WebUi", e=e)
         return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
 
 
@@ -73,7 +73,9 @@ async def _(bot_id: str | None = None) -> Result[QueryCount]:
     try:
         return Result.ok(await ApiDataSource.get_all_chat_count(bot_id), "拿到信息啦!")
     except Exception as e:
-        logger.error(f"{router.prefix}/get_all_chat_count 调用错误", "WebUi", e=e)
+        logger.error(
+            f"{router.prefix}/get_all_chat_count 调用错误", command="WebUi", e=e
+        )
         return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
 
 
@@ -88,12 +90,14 @@ async def _(bot_id: str | None = None) -> Result[QueryCount]:
     try:
         return Result.ok(await ApiDataSource.get_all_call_count(bot_id), "拿到信息啦!")
     except Exception as e:
-        logger.error(f"{router.prefix}/get_all_call_count 调用错误", "WebUi", e=e)
+        logger.error(
+            f"{router.prefix}/get_all_call_count 调用错误", command="WebUi", e=e
+        )
         return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
 
 
 @router.get(
-    "get_fg_count",
+    "/get_fg_count",
     dependencies=[authentication()],
     response_model=Result[dict[str, int]],
     response_class=JSONResponse,
@@ -110,7 +114,7 @@ async def _(bot_id: str) -> Result[dict[str, int]]:
     except (ValueError, KeyError):
         return Result.warning_("指定Bot未连接...")
     except Exception as e:
-        logger.error(f"{router.prefix}/get_fg_count 调用错误", "WebUi", e=e)
+        logger.error(f"{router.prefix}/get_fg_count 调用错误", command="WebUi", e=e)
         return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
 
 
@@ -164,7 +168,7 @@ async def _(
             await ApiDataSource.get_active_group(date_type, bot_id), "拿到信息啦!"
         )
     except Exception as e:
-        logger.error(f"{router.prefix}/get_active_group 调用错误", "WebUi", e=e)
+        logger.error(f"{router.prefix}/get_active_group 调用错误", command="WebUi", e=e)
         return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
 
 
@@ -183,7 +187,7 @@ async def _(
             await ApiDataSource.get_hot_plugin(date_type, bot_id), "拿到信息啦!"
         )
     except Exception as e:
-        logger.error(f"{router.prefix}/get_hot_plugin 调用错误", "WebUi", e=e)
+        logger.error(f"{router.prefix}/get_hot_plugin 调用错误", command="WebUi", e=e)
         return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
 
 
@@ -215,7 +219,9 @@ async def _(bot_id: str) -> Result[BotBlockModule]:
             await ApiDataSource.get_bot_block_module(bot_id), "拿到信息啦!"
         )
     except Exception as e:
-        logger.error(f"{router.prefix}/get_bot_block_module 调用错误", "WebUi", e=e)
+        logger.error(
+            f"{router.prefix}/get_bot_block_module 调用错误", command="WebUi", e=e
+        )
         return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
 
 
@@ -236,7 +242,9 @@ async def _(param: BotManageUpdateParam):
         await bot_data.save(update_fields=["block_plugins", "block_tasks"])
         return Result.ok()
     except Exception as e:
-        logger.error(f"{router.prefix}/update_bot_manage 调用错误", "WebUi", e=e)
+        logger.error(
+            f"{router.prefix}/update_bot_manage 调用错误", command="WebUi", e=e
+        )
         return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
 
 
