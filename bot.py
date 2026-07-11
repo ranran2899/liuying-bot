@@ -22,9 +22,10 @@ driver.register_adapter(MinecraftAdapter)
 # driver.register_adapter(MailAdapter)
 
 from liuying.services.liuying_db import session_manager
+from liuying.utils.manager.priority_manager import PriorityLifecycle
 
-# 注册数据库断开连接函数
-driver.on_shutdown(session_manager.disconnect)
+# 注册数据库断开连接函数，使用较大优先级确保在其他插件关闭之后执行
+PriorityLifecycle.on_shutdown(priority=999)(session_manager.disconnect)
 
 
 # 加载内置插件和本地插件

@@ -2,28 +2,94 @@
 
 提供多数据库连接的会话创建、获取、生命周期管理与监控能力。
 所有会话管理逻辑封装在 ``SessionManager`` 类中，通过单例
-``session_manager`` 暴露，避免散装函数导入。
+``session_manager`` 暴露。
 """
 
 import asyncio
 from collections.abc import Callable
 import contextlib
+import re
 import traceback
 from typing import Any
+from urllib.parse import urlparse
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
+    create_async_engine,
 )
 
 from liuying.utils.log import logger
 
 from .config import ENABLE_SESSION_TRACING, LOG_COMMAND
-from .connection_registry import connection_registry
 from .monitoring import leak_detector, pool_monitor
 from .sync import sync_manager
+
+_NAME_NORMALIZE_PATTERN = re.compile(r"[^a-z0-9_]+")
+
+
+def _normalize_db_name(name: str) -> str:
+    """规范化数据库名称
+
+    转换为小写，将非字母数字下划线字符替换为下划线，并去除首尾下划线。
+    空字符串或纯符号字符串返回 'default'。
+
+    参数:
+        name: 原始数据库名称
+
+    返回:
+        str: 规范化后的名称
+    """
+    normalized = _NAME_NORMALIZE_PATTERN.sub("_", name.lower()).strip("_")
+    return normalized or "default"
+
+
+def _register_sqlite_pragma(engine: AsyncEngine) -> None:
+    """注册 SQLite PRAGMA 事件监听器
+
+    在每个新连接建立时设置：
+    - ``journal_mode=WAL``：允许多读单写并发，避免读写互斥
+    - ``busy_timeout=30000``：写锁竞争时等待 30 秒而非立即失败
+    - ``synchronous=NORMAL``：WAL 模式下的推荐同步级别
+    """
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragma(dbapi_conn, connection_record) -> None:
+        """连接建立时设置 PRAGMA"""
+        underlying = dbapi_conn
+        while hasattr(underlying, "_connection") and underlying._connection is not None:
+            underlying = underlying._connection
+        try:
+            underlying.execute("PRAGMA journal_mode=WAL")
+            underlying.execute("PRAGMA busy_timeout=30000")
+            underlying.execute("PRAGMA synchronous=NORMAL")
+        except Exception as e:
+            logger.debug(
+                f"设置 SQLite PRAGMA 失败（连接仍可用）: {e}",
+                LOG_COMMAND,
+            )
+
+
+def _create_engine(db_url: str, config_params: dict) -> AsyncEngine:
+    """根据 URL 创建异步引擎
+
+    对 SQLite 额外注册 PRAGMA 事件监听器，从根源上避免并发写入时
+    ``database is locked`` 错误。
+
+    参数:
+        db_url: 数据库连接 URL
+        config_params: SQLAlchemy 引擎配置参数
+
+    返回:
+        AsyncEngine: 异步引擎实例
+    """
+    engine = create_async_engine(db_url, **config_params)
+    scheme = urlparse(db_url).scheme
+    if scheme.startswith("sqlite"):
+        _register_sqlite_pragma(engine)
+    return engine
 
 
 class SessionManager:
@@ -51,24 +117,22 @@ class SessionManager:
     async def init(self, db_url: str, config_params: dict, db_name: str = "default"):
         """初始化指定名称的数据库连接
 
-        使用 ``connection_registry`` 注册的工厂创建 engine。
-        db_name 会经过 ``normalize_db_name`` 规范化。
+        创建异步引擎并注册会话工厂，db_name 会经过规范化处理。
+        对 SQLite 额外注册 PRAGMA 事件监听器。
 
         参数:
             db_url: 数据库连接字符串
             config_params: 配置参数
             db_name: 数据库名称
         """
-        normalized_name = connection_registry.normalize_db_name(db_name)
-        engine = connection_registry.create_engine(db_url, config_params)
+        normalized_name = _normalize_db_name(db_name)
+        engine = _create_engine(db_url, config_params)
         sessionmaker_obj = async_sessionmaker(
             bind=engine, autocommit=False, autoflush=False, expire_on_commit=False
         )
-
         self.engines[normalized_name] = engine
         self.sessionmakers[normalized_name] = sessionmaker_obj
         self.db_tables_created[normalized_name] = False
-
         pool_monitor.register_engine(normalized_name, engine)
 
     async def start_monitoring(self):
@@ -93,14 +157,11 @@ class SessionManager:
         """
         if db_name == "default":
             return
-
         if self.db_tables_created.get(db_name, False):
             return
-
         async with self._table_creation_lock:
             if self.db_tables_created.get(db_name, False):
                 return
-
             if db_name in self.engines:
                 # 循环依赖：base_model 导入 session_manager，session 按需导入 Base
                 from .base_model import Base
@@ -165,7 +226,6 @@ class SessionManager:
         """
         if db_name not in self.engines:
             return None
-
         pool = self.engines[db_name].pool
         return {
             "db_name": db_name,
@@ -183,7 +243,7 @@ class SessionManager:
             db_name: 数据库名称
 
         返回:
-            dict | None: 连接池状态信息，如果数据库不存在则返回None
+            dict | None: 连接池状态信息
         """
         return self._get_pool_info(db_name)
 
@@ -205,11 +265,9 @@ class SessionManager:
             dict: 健康检查结果
         """
         result: dict[str, Any] = {"db_name": db_name, "healthy": False, "error": None}
-
         if db_name not in self.engines:
             result["error"] = f"数据库 {db_name} 尚未初始化"
             return result
-
         try:
             async with self.get_session(db_name) as session:
                 await session.execute(text("SELECT 1"))
@@ -218,7 +276,6 @@ class SessionManager:
         except Exception as e:
             result["error"] = str(e)
             logger.warning(f"数据库 {db_name} 健康检查失败: {e}", LOG_COMMAND)
-
         return result
 
     async def health_check_all(self) -> dict[str, dict[str, Any]]:
@@ -276,6 +333,13 @@ class DatabaseSessionManager:
         db_name: str = "default",
         session_manager: SessionManager | None = None,
     ):
+        """初始化会话管理器
+
+        参数:
+            sessionmaker: 异步会话工厂
+            db_name: 数据库名称
+            session_manager: 所属会话管理器
+        """
         self.sessionmaker = sessionmaker
         self.db_name = db_name
         self.session_manager = session_manager
@@ -288,14 +352,12 @@ class DatabaseSessionManager:
             await self.session_manager.ensure_tables_created(self.db_name)
         self.session = self.sessionmaker()
         self._session_id = id(self.session)
-
         trace_info = (
             "".join(traceback.format_stack()[-5:-2])
             if ENABLE_SESSION_TRACING
             else "追踪已禁用"
         )
         leak_detector.register_session(self.db_name, self._session_id, trace_info)
-
         return self.session
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -333,7 +395,6 @@ async def nested_transaction(session: AsyncSession):
     """事务保存点（嵌套事务）上下文管理器
 
     在已有会话中创建保存点，异常时仅回滚到保存点而非整个事务。
-    适用于复杂业务中需要部分回滚的场景。
 
     参数:
         session: 已有的数据库会话

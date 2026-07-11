@@ -48,8 +48,8 @@ class MySQLConfig:
 class SQLiteConfig:
     """SQLite连接池配置
 
-    注意：``journal_mode`` 与 ``busy_timeout`` 由 ``connection_registry``
-    的 PRAGMA 事件监听器设置，不通过 ``connect_args`` 传递（后者不是
+    注意：``journal_mode`` 与 ``busy_timeout`` 由 ``session`` 模块的
+    PRAGMA 事件监听器设置，不通过 ``connect_args`` 传递（后者不是
     ``sqlite3.connect`` 的合法参数）。
     """
 

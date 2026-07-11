@@ -17,6 +17,7 @@ from liuying.models.plugin_info import PluginInfo
 from liuying.models.statistics import Statistics
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
+from liuying.utils.manager import PriorityLifecycle
 
 Config.add_plugin_config(
     "hook",
@@ -76,13 +77,24 @@ class StatisticsQueue:
 
     @classmethod
     async def stop(cls):
-        """停止统计队列处理。"""
+        """停止统计队列处理并刷写剩余记录。"""
         cls._running = False
         if cls._task:
             cls._task.cancel()
             with suppress(asyncio.CancelledError):
                 await cls._task
             cls._task = None
+        await cls._flush_remaining()
+
+    @classmethod
+    async def _flush_remaining(cls):
+        """刷写队列中剩余的记录。"""
+        records: list[StatisticsRecord] = []
+        while not cls._queue.empty():
+            record = cls._queue.get_nowait()
+            records.append(record)
+        if records:
+            await cls._write_records(records)
 
     @classmethod
     def add(cls, record: StatisticsRecord):
@@ -139,6 +151,20 @@ class StatisticsQueue:
             logger.debug(f"批量添加调用记录 {len(records)} 条", LOG_COMMAND)
         except Exception as e:
             logger.error("批量写入统计记录失败", LOG_COMMAND, e=e)
+
+
+@PriorityLifecycle.on_startup(priority=10)
+async def _start_statistics_queue():
+    """启动统计队列处理。"""
+    await StatisticsQueue.start()
+    logger.info("统计队列已启动", LOG_COMMAND)
+
+
+@PriorityLifecycle.on_shutdown(priority=10)
+async def _stop_statistics_queue():
+    """停止统计队列并刷写剩余记录。"""
+    await StatisticsQueue.stop()
+    logger.info("统计队列已停止", LOG_COMMAND)
 
 
 @run_postprocessor

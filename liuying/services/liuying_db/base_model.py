@@ -1,4 +1,9 @@
-"""数据库模型基类模块"""
+"""数据库模型基类模块
+
+提供 SQLAlchemy 2.0 声明式基类 ``Base`` 与增强的 ORM 基类 ``Model``。
+``Model`` 封装了缓存集成、异步锁机制与完整的 CRUD 接口，外部模型
+统一继承此类获得数据库操作能力。
+"""
 
 import asyncio
 from collections.abc import Iterable
@@ -17,8 +22,7 @@ from liuying.utils.enum import DbLockType
 from liuying.utils.log import logger
 
 from .config import LOG_COMMAND, db_model
-from .query.filter import FilterMixin
-from .query.wrapper import QueryWrapper
+from .query import QueryWrapper, build_filter_statement
 from .session import session_manager
 from .utils import DbUtils
 
@@ -31,7 +35,11 @@ class Base(DeclarativeBase):
 
 
 class Model(Base):
-    """增强的ORM基类，基于SQLAlchemy 2.0.51异步"""
+    """增强的 ORM 基类，基于 SQLAlchemy 2.0 异步
+
+    提供缓存集成、异步锁机制与完整的 CRUD 接口。
+    所有业务模型应继承此类。
+    """
 
     __abstract__ = True
 
@@ -39,14 +47,22 @@ class Model(Base):
     _current_locks: ClassVar[dict[int, DbLockType]] = {}
     _task_refs: ClassVar[weakref.WeakSet[asyncio.Task]] = weakref.WeakSet()
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.__module__ not in db_model.models:
+            db_model.models.append(cls.__module__)
+        if func := getattr(cls, "_run_script", None):
+            db_model.script_methods.append((cls.__module__, func))
+
     @classmethod
-    def filter(cls, *args, **kwargs) -> QueryWrapper:
+    def filter(cls, *args, skip_none: bool = False, **kwargs) -> QueryWrapper:
         """便捷的过滤查询方法，自动处理会话管理
 
-        当前filter支持SQLAlchemy风格的查询和Django风格查询。
+        支持 SQLAlchemy 风格查询和 Django 风格查询。
 
         参数:
-            *args: SQLAlchemy过滤表达式
+            *args: SQLAlchemy 过滤表达式
+            skip_none: 为True时忽略值为None的kwargs条件
             **kwargs: 查询条件，支持以下两种风格:
                 - SQLAlchemy风格: name="test" (精确匹配)
                 - Django风格: name__contains="test" (包含匹配)
@@ -55,23 +71,11 @@ class Model(Base):
             QueryWrapper: 查询包装器
 
         使用示例:
-            # SQLAlchemy风格
             Model.filter(name="test", status=1)
-
-            # Django风格
             Model.filter(name__contains="test", status__gt=0)
-
-            # 混合使用
-            Model.filter(name__contains="test", status=1)
+            Model.filter(skip_none=True, name=None, status=1)  # 忽略name条件
         """
-        return QueryWrapper(cls, *args, **kwargs)
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if cls.__module__ not in db_model.models:
-            db_model.models.append(cls.__module__)
-        if func := getattr(cls, "_run_script", None):
-            db_model.script_methods.append((cls.__module__, func))
+        return QueryWrapper(cls, *args, skip_none=skip_none, **kwargs)
 
     @classmethod
     def get_cache_type(cls) -> str | None:
@@ -94,7 +98,6 @@ class Model(Base):
             str | None: 缓存键
         """
         key_field = cls.get_cache_key_field()
-
         match key_field:
             case tuple(fields):
                 parts = [
@@ -114,12 +117,11 @@ class Model(Base):
             lock_type: 锁类型
 
         返回:
-            asyncio.Lock | None: 异步锁
+            asyncio.Lock | None: 异步锁，未启用返回 None
         """
         enable_lock = getattr(cls, "enable_lock", None)
         if not enable_lock or lock_type not in enable_lock:
             return None
-
         lock_key = f"{cls.__name__}:{lock_type}"
         if lock_key not in cls._locks:
             cls._locks[lock_key] = asyncio.Lock()
@@ -145,7 +147,6 @@ class Model(Base):
         task = asyncio.current_task()
         task_id = id(task) if task else 0
         need_lock = cls._require_lock(lock_type)
-
         if need_lock and (lock := cls._get_lock(lock_type)):
             cls._current_locks[task_id] = lock_type
             if task:
@@ -174,14 +175,11 @@ class Model(Base):
     async def _managed_session(
         cls, session: AsyncSession | None = None, db_name: str = "default"
     ):
-        """管理数据库会话，如果提供了session则使用，否则创建新的
+        """管理数据库会话，如果提供了 session 则使用，否则创建新的
 
         参数:
             session: 可选的数据库会话
             db_name: 数据库名称
-
-        返回:
-            AsyncSession: 数据库会话
         """
         if session is not None:
             yield session
@@ -193,7 +191,7 @@ class Model(Base):
     async def _handle_integrity_error(
         cls, session: AsyncSession, kwargs: dict
     ) -> tuple[Self | None, bool]:
-        """处理完整性错误，用于get_or_create和update_or_create
+        """处理完整性错误，用于 get_or_create 和 update_or_create
 
         参数:
             session: 数据库会话
@@ -203,7 +201,7 @@ class Model(Base):
             tuple[Self | None, bool]: 模型实例和是否为新创建
         """
         await session.rollback()
-        stmt = FilterMixin.build_filter_statement(cls, **kwargs)
+        stmt = build_filter_statement(cls, **kwargs)
         result = await session.execute(stmt)
         return result.scalars().first(), False
 
@@ -212,8 +210,7 @@ class Model(Base):
         """使缓存失效
 
         统一的缓存失效入口，写操作（create/update/delete）后调用。
-        当模型声明了 ``cache_type`` 时，按 ``cache_key_field`` 删除对应缓存键，
-        保证后续读取会重新从数据库加载，维持缓存一致性。
+        当模型声明了 ``cache_type`` 时，按 ``cache_key_field`` 删除对应缓存键。
 
         参数:
             instance: 模型实例
@@ -233,7 +230,7 @@ class Model(Base):
         db_name: str = "default",
         **kwargs: Any,
     ) -> Self:
-        """创建数据（使用CREATE锁）
+        """创建数据（使用 CREATE 锁）
 
         参数:
             session: 可选的数据库会话
@@ -277,13 +274,11 @@ class Model(Base):
         """
         async with cls._managed_session(session, db_name) as sess:
             try:
-                stmt = FilterMixin.build_filter_statement(cls, **kwargs)
+                stmt = build_filter_statement(cls, **kwargs)
                 result = await sess.execute(stmt)
                 instance = result.scalars().first()
-
                 if instance:
                     return instance, False
-
                 instance = cls(**kwargs, **(defaults or {}))
                 sess.add(instance)
                 await sess.flush()
@@ -301,7 +296,7 @@ class Model(Base):
         db_name: str = "default",
         **kwargs: Any,
     ) -> tuple[Self, bool]:
-        """更新或创建数据（使用UPSERT锁）
+        """更新或创建数据（使用 UPSERT 锁）
 
         参数:
             session: 可选的数据库会话
@@ -315,13 +310,9 @@ class Model(Base):
         async with cls._managed_session(session, db_name) as sess:
             async with cls._lock_context(DbLockType.UPSERT):
                 try:
-                    stmt = (
-                        FilterMixin.build_filter_statement(cls, **kwargs)
-                        .with_for_update()
-                    )
+                    stmt = build_filter_statement(cls, **kwargs).with_for_update()
                     result = await sess.execute(stmt)
                     instance = result.scalars().first()
-
                     if instance:
                         for key, value in (defaults or {}).items():
                             setattr(instance, key, value)
@@ -333,7 +324,6 @@ class Model(Base):
                         await sess.flush()
                         await sess.refresh(instance)
                         created = True
-
                     await cls._invalidate_cache(instance)
                     return instance, created
                 except IntegrityError:
@@ -429,13 +419,11 @@ class Model(Base):
             tuple[Self, bool]: 模型实例和是否为新创建
         """
         async with cls._managed_session(session, db_name) as sess:
-            stmt = FilterMixin.build_filter_statement(cls, **kwargs).limit(1)
+            stmt = build_filter_statement(cls, **kwargs).limit(1)
             result = await sess.execute(stmt)
             instance = result.scalars().first()
-
             if instance:
                 return instance, False
-
             try:
                 instance = cls(**kwargs, **(defaults or {}))
                 sess.add(instance)
@@ -455,7 +443,7 @@ class Model(Base):
         db_name: str = "default",
         **kwargs: Any,
     ) -> Self | None:
-        """安全地获取一条记录或None，处理重复记录
+        """安全地获取一条记录或 None，处理重复记录
 
         参数:
             *args: SQLAlchemy 过滤表达式
@@ -468,8 +456,7 @@ class Model(Base):
             Self | None: 查询结果
         """
         async with cls._managed_session(session, db_name) as sess:
-            base_stmt = FilterMixin.build_filter_statement(cls, *args, **kwargs)
-
+            base_stmt = build_filter_statement(cls, *args, **kwargs)
             try:
                 result = await DbUtils.with_db_timeout(
                     sess.execute(base_stmt),
@@ -477,7 +464,6 @@ class Model(Base):
                     source="DataBaseModel",
                 )
                 records = result.scalars().all()
-
                 match records:
                     case []:
                         return None
@@ -503,7 +489,6 @@ class Model(Base):
                         return records[0]
                     case _:
                         return records[0]
-
             except TimeoutError:
                 logger.error(
                     f"数据库操作超时: {cls.__name__}.safe_get_or_none", LOG_COMMAND

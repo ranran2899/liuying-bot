@@ -31,7 +31,9 @@ from .public import init_public
 __plugin_meta__ = PluginMetadata(
     name="WebUi",
     description="WebUi API",
-    usage='"""\n    """.strip(),',
+    usage="""
+    WebUi API
+    """.strip(),
     extra=PluginExtraData(
         author="liuying",
         version="0.1",

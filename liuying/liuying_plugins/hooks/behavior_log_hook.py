@@ -223,4 +223,4 @@ async def _(
             "platform": PlatformUtils.get_platform(session),
             "bot_id": bot.self_id,
         }
-)
+    )

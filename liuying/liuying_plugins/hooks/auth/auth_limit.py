@@ -20,7 +20,7 @@ from .config import LOGGER_COMMAND, WARNING_THRESHOLD
 from .exception import SkipPluginException
 from .utils import get_group_channel_ids
 
-driver = nonebot.get_driver()
+# driver = nonebot.get_driver()
 
 DB_TIMEOUT = 5.0
 UPDATE_TIMEOUT = 10.0

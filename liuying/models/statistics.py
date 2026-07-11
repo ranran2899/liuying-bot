@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import ClassVar
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
@@ -70,16 +70,14 @@ class Statistics(Model):
         返回:
             QueryWrapper: 查询包装器
         """
-        query = cls.filter()
-        if user_id:
-            query = query.filter(user_id=user_id)
-        if group_id:
-            query = query.filter(group_id=group_id)
-        if plugin_name:
-            query = query.filter(plugin_name=plugin_name)
-        if bot_id:
-            query = query.filter(bot_id=bot_id)
-        if days:
+        query = cls.filter(
+            skip_none=True,
+            user_id=user_id,
+            group_id=group_id,
+            plugin_name=plugin_name,
+            bot_id=bot_id,
+        )
+        if days is not None:
             query = query.where_gte("create_time", cls._calc_start_time(days))
         return query
 
@@ -131,17 +129,9 @@ class Statistics(Model):
         返回:
             list[tuple[str, int]]: [(插件名称, 调用次数), ...] 按调用次数降序
         """
-        count_col = func.count(cls.id).label("count")
-        query = (
-            cls._build_query(user_id, group_id, plugin_name, bot_id, days)
-            .annotate(count=count_col)
-            .group_by(cls.plugin_name)
-            .order_by(count_col.desc())
-        )
-        if limit:
-            query = query.limit(limit)
-        rows = await query.values(cls.plugin_name, count_col).all()
-        return [(row[0], row[1]) for row in rows]
+        return await cls._build_query(
+            user_id, group_id, plugin_name, bot_id, days
+        ).group_count("plugin_name", count_column="id", limit=limit)
 
     @classmethod
     async def count_records(
