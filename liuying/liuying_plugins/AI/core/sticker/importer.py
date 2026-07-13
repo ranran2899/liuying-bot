@@ -5,7 +5,6 @@
 """
 
 import hashlib
-import json
 from pathlib import Path
 
 from liuying.utils.bed_layout import BedLayout
@@ -13,8 +12,10 @@ from liuying.utils.log import logger
 
 from ...models.sticker_item import StickerItem
 from ..constants import SOURCE_AI_STICKER
+from ..json_utils import extract_json_payload
 from ..llm import llm_helper
 from ..vision import summarize_image
+from .semantics import sticker_semantics_analyzer
 
 _DEFAULT_STICKER_ROOT = Path("data") / "ai_plugin" / "stickers"
 """默认表情包根目录"""
@@ -367,32 +368,64 @@ class StickerImporter:
                 options={"temperature": 0.2},
             )
 
-            try:
-                data = json.loads(response.strip())
-                if isinstance(data, dict):
-                    description = str(
-                        data.get("description", "")
-                    ).strip()
-                    mood_tags = [
-                        str(t)
-                        for t in data.get("mood_tags", [])
-                        if t
-                    ]
-                    semantic_tags = [
-                        str(t)
-                        for t in data.get("semantic_tags", [])
-                        if t
-                    ]
-                    await StickerItem.update_tags(
-                        item.id,
-                        mood_tags=mood_tags or None,
-                        semantic_tags=semantic_tags or None,
-                        description=description or None,
-                    )
-            except (json.JSONDecodeError, ValueError):
+            description = ""
+            semantic_tags: list[str] = []
+            parsed = extract_json_payload(response)
+            if parsed is not None:
+                description = str(
+                    parsed.get("description", "")
+                ).strip()
+                mood_tags = [
+                    str(t)
+                    for t in parsed.get("mood_tags", [])
+                    if t
+                ]
+                semantic_tags = [
+                    str(t)
+                    for t in parsed.get("semantic_tags", [])
+                    if t
+                ]
+                await StickerItem.update_tags(
+                    item.id,
+                    mood_tags=mood_tags or None,
+                    semantic_tags=semantic_tags or None,
+                    description=description or None,
+                )
+            else:
                 # 直接用视觉描述作为description
                 await StickerItem.update_tags(
                     item.id, description=summary.description
+                )
+
+            # 语义分析：补充结构化 mood/scene 标签（带缓存，不会重复调用）
+            try:
+                final_desc = (
+                    description
+                    if description
+                    else summary.description
+                )
+                semantics = await sticker_semantics_analyzer.analyze_sticker(
+                    sticker_id=item.id,
+                    description=final_desc or "",
+                    filename=item.name or "",
+                )
+                if semantics.analyzed and semantics.mood:
+                    extra_tags = [semantics.mood]
+                    if semantics.scene:
+                        extra_tags.append(semantics.scene)
+                    merged = list(
+                        set(semantic_tags) | set(extra_tags)
+                    )
+                    if merged:
+                        await StickerItem.update_tags(
+                            item.id,
+                            semantic_tags=merged,
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"贴纸语义补充失败 {item.name}: {e}",
+                    command="AI",
+                    e=e,
                 )
         except Exception as e:
             logger.debug(

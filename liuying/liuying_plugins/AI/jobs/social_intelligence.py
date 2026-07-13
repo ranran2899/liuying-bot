@@ -2,6 +2,7 @@
 
 早晚问候、节日问候、新闻推送、话题延续。
 基于context_manager时段判断 + llm_helper生成文案。
+集成社交门控（gate）与配额（quota），避免过度打扰。
 """
 
 from datetime import datetime
@@ -19,6 +20,7 @@ from ..config import get_config
 from ..core.context import context_manager
 from ..core.group import build_group_style_prompt_block
 from ..core.llm import llm_helper
+from ..core.social import social_gate, social_quota
 from ..models.group_context import GroupContextSnapshot
 
 __all__ = ["setup_social_intelligence_jobs"]
@@ -107,6 +109,10 @@ class SocialIntelligenceHelper:
     ) -> int:
         """生成文案并发送到所有活跃群
 
+        集成社交配额与门控检查：
+        - 配额检查：每群每日上限 + 单场景冷却
+        - 门控检查：LLM二次判断是否适合发送
+
         参数:
             build_prompt: 接收(group, time_period)返回prompt的函数
             scenario: 场景标记
@@ -127,6 +133,9 @@ class SocialIntelligenceHelper:
             return 0
 
         time_period = context_manager.get_current_time_period()
+        daily_quota = get_config("SOCIAL_QUOTA_PER_USER", 5)
+        cooldown = get_config("SOCIAL_QUOTA_COOLDOWN", 3600)
+        gate_enabled = get_config("SOCIAL_GATE_ENABLED", False)
         sent = 0
         for group in groups:
             if not context_manager.is_group_active_hour(
@@ -134,6 +143,20 @@ class SocialIntelligenceHelper:
                 quiet_start=get_config("GROUP_QUIET_START", 0),
                 quiet_end=get_config("GROUP_QUIET_END", 7),
             ):
+                continue
+
+            # 配额检查：每群每日上限 + 单场景冷却
+            if social_quota.is_quota_exceeded(
+                group.group_id,
+                scenario=scenario,
+                daily_quota_per_user=daily_quota,
+                cooldown_seconds=cooldown,
+            ):
+                logger.debug(
+                    f"群 {group.group_id} 场景 {scenario} "
+                    f"配额已满或冷却中，跳过",
+                    command="AI",
+                )
                 continue
 
             try:
@@ -144,11 +167,38 @@ class SocialIntelligenceHelper:
                     [{"role": "user", "content": prompt}],
                     options={"temperature": 0.7},
                 )
-                if text and len(text) < 100:
-                    await SocialIntelligenceHelper._send_to_group(
-                        group.group_id, text
+                if not text or len(text) >= 100:
+                    continue
+
+                # 社交门控：LLM二次判断是否适合发送
+                if gate_enabled:
+                    allow, rewritten, reason = (
+                        await social_gate.gate_should_send(
+                            scenario=scenario,
+                            user_id=group.group_id,
+                            draft=text,
+                            now_str=datetime.now().strftime(
+                                "%Y-%m-%d %H:%M"
+                            ),
+                        )
                     )
-                    sent += 1
+                    if not allow:
+                        logger.debug(
+                            f"社交门控拒绝发送 {group.group_id}: "
+                            f"{reason}",
+                            command="AI",
+                        )
+                        continue
+                    if rewritten:
+                        text = rewritten
+
+                await SocialIntelligenceHelper._send_to_group(
+                    group.group_id, text
+                )
+                social_quota.mark_sent(
+                    group.group_id, scenario=scenario
+                )
+                sent += 1
             except Exception as e:
                 logger.debug(
                     f"社交智能{scenario}发送失败 {group.group_id}: {e}",
@@ -265,7 +315,10 @@ class SocialIntelligenceHelper:
 
     @staticmethod
     async def _topic_followup() -> None:
-        """话题延续任务"""
+        """话题延续任务
+
+        集成社交配额与门控检查。
+        """
         try:
             groups = await GroupContextSnapshot.filter(
                 is_active=True
@@ -273,10 +326,25 @@ class SocialIntelligenceHelper:
         except Exception:
             groups = []
 
+        daily_quota = get_config("SOCIAL_QUOTA_PER_USER", 5)
+        cooldown = get_config("SOCIAL_QUOTA_COOLDOWN", 3600)
+        gate_enabled = get_config("SOCIAL_GATE_ENABLED", False)
+        scenario = "话题延续"
+
         for group in groups:
             summary = group.summary or ""
             if not summary:
                 continue
+
+            # 配额检查
+            if social_quota.is_quota_exceeded(
+                group.group_id,
+                scenario=scenario,
+                daily_quota_per_user=daily_quota,
+                cooldown_seconds=cooldown,
+            ):
+                continue
+
             prompt = _TOPIC_FOLLOWUP_PROMPT.format(
                 summary=summary[:200]
             )
@@ -285,10 +353,32 @@ class SocialIntelligenceHelper:
                     [{"role": "user", "content": prompt}],
                     options={"temperature": 0.7},
                 )
-                if text and len(text) < 100:
-                    await SocialIntelligenceHelper._send_to_group(
-                        group.group_id, text
+                if not text or len(text) >= 100:
+                    continue
+
+                # 社交门控
+                if gate_enabled:
+                    allow, rewritten, _ = (
+                        await social_gate.gate_should_send(
+                            scenario=scenario,
+                            user_id=group.group_id,
+                            draft=text,
+                            now_str=datetime.now().strftime(
+                                "%Y-%m-%d %H:%M"
+                            ),
+                        )
                     )
+                    if not allow:
+                        continue
+                    if rewritten:
+                        text = rewritten
+
+                await SocialIntelligenceHelper._send_to_group(
+                    group.group_id, text
+                )
+                social_quota.mark_sent(
+                    group.group_id, scenario=scenario
+                )
             except Exception as e:
                 logger.debug(
                     f"话题延续失败 {group.group_id}: {e}",

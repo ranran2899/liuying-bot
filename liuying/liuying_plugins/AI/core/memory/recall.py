@@ -2,6 +2,7 @@
 
 提供 5 路召回（FTS5/向量/嵌入/实体/时间）+ RRF 融合的检索能力，
 作为 Mixin 注入到 MemoryManager，依赖其 `_db`/`_embedding_dim` 状态。
+融合后通过 search_ranker 进行综合重排序，提升召回质量。
 """
 
 import asyncio
@@ -19,6 +20,7 @@ from ._common import (
     _extract_entities_simple,
     _hash_bow_embedding,
 )
+from .search_ranker import search_ranker
 
 
 class RecallMixin:
@@ -42,6 +44,8 @@ class RecallMixin:
         persona_name: str = _DEFAULT_PERSONA,
     ) -> list[dict]:
         """记忆召回主入口
+
+        5路召回 + RRF融合 + search_ranker综合重排序。
 
         参数:
             user_id: 用户ID
@@ -89,28 +93,50 @@ class RecallMixin:
             if not fused:
                 return []
             # 批量查询记忆项，避免 N+1 查询
-            top_ids = [mid for mid, _ in fused[:top_k]]
+            # 取 top_k * 2 候选用于重排序后再截断
+            candidate_count = min(len(fused), top_k * 2)
+            top_ids = [mid for mid, _ in fused[:candidate_count]]
             memories = await MemoryItem.filter(id__in=top_ids).all()
             mem_by_id = {m.id: m for m in memories}
-            results = []
-            for mid, score in fused[:top_k]:
+
+            # 构建重排序候选列表，按 user_id 与 persona_name 双重过滤
+            rerank_list: list[tuple[float, MemoryItem]] = []
+            for mid, rrf_score in fused[:candidate_count]:
                 memory = mem_by_id.get(mid)
-                # 按 user_id 与 persona_name 双重过滤，确保人设间记忆隔离
                 if (
                     memory
                     and memory.user_id == user_id
                     and memory.persona_name == persona_name
                 ):
-                    results.append(
-                        {
-                            "id": memory.id,
-                            "summary": memory.summary,
-                            "content": memory.content,
-                            "tier": memory.tier,
-                            "score": score,
-                        }
-                    )
-                    await self.access(mid)
+                    rerank_list.append((rrf_score, memory))
+
+            # search_ranker 综合重排序
+            scored: list[tuple[float, MemoryItem]] = []
+            for rrf_score, memory in rerank_list:
+                payload = self._memory_to_rank_payload(memory)
+                final_score = search_ranker.rank_memory_payload(
+                    payload,
+                    query=query,
+                    base_score=rrf_score,
+                    requested_group_id=group_id or "",
+                    requested_user_id=user_id,
+                )
+                scored.append((final_score, memory))
+
+            scored.sort(key=lambda x: x[0], reverse=True)
+
+            results = []
+            for final_score, memory in scored[:top_k]:
+                results.append(
+                    {
+                        "id": memory.id,
+                        "summary": memory.summary,
+                        "content": memory.content,
+                        "tier": memory.tier,
+                        "score": final_score,
+                    }
+                )
+                await self.access(memory.id)
             return results
         except Exception as e:
             logger.warning(
@@ -119,6 +145,45 @@ class RecallMixin:
                 e=e,
             )
             return []
+
+    @staticmethod
+    def _memory_to_rank_payload(
+        memory: MemoryItem,
+    ) -> dict[str, Any]:
+        """将MemoryItem转换为search_ranker所需的payload字典
+
+        参数:
+            memory: 记忆项对象
+
+        返回:
+            dict: rank_memory_payload 所需的字段字典
+        """
+        return {
+            "confidence": memory.confidence,
+            "stability": memory.stability,
+            "salience": memory.salience,
+            "reinforcement_count": memory.reinforcement_count,
+            "access_count": memory.access_count,
+            "superseded_by": memory.superseded_by or "",
+            "tier": memory.tier,
+            "group_id": memory.group_id or "",
+            "user_id": memory.user_id,
+            "create_time": (
+                memory.create_time.timestamp()
+                if memory.create_time
+                else 0.0
+            ),
+            "expire_time": (
+                memory.expire_time.timestamp()
+                if memory.expire_time
+                else 0.0
+            ),
+            "last_access_time": (
+                memory.last_access_time.timestamp()
+                if memory.last_access_time
+                else 0.0
+            ),
+        }
 
     async def access(self, memory_id: int) -> None:
         """访问记忆

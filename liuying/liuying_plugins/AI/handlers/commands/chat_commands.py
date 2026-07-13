@@ -15,8 +15,10 @@ from liuying.utils.message import MessageUtils
 
 from ...config import get_config
 from ...core.group import group_social
+from ...core.peer_awareness import peer_awareness
 from ...core.runtime import runtime_switch
 from ...core.safety import AclChecker
+from ...core.target_inference import MessageTarget, target_inference
 from ...core.tools import MessageExtractor
 from ...pipeline.processor import ReplyResult, reply_processor
 from ..chat_helpers import ChatMatchersHelper, _ai_user_states
@@ -30,6 +32,7 @@ def setup_chat_commands() -> None:
     使用 to_me() 规则：私聊自动命中，
     群聊中@bot或回复bot时命中。
     """
+    _register_peer_bot_listener()
     private_msg_cmd = on_message(
         rule=to_me(), priority=520, block=False
     )
@@ -63,6 +66,22 @@ def setup_chat_commands() -> None:
 
         is_private = not session.scene.is_group
         text = MessageExtractor.extract_message_text(event)
+
+        # 群聊目标推断：当消息明确@他人或回复他人时跳过，避免误回复
+        if (
+            not is_private
+            and get_config("TARGET_INFERENCE_ENABLED", True)
+        ):
+            target = target_inference.infer_message_target(
+                event, bot_self_id=session.self_id
+            )
+            if target == MessageTarget.OTHERS:
+                logger.debug(
+                    f"群消息目标为他人，跳过回复: "
+                    f"group={group_id} user={user_id}",
+                    command="AI",
+                )
+                return
 
         image_descs: list[str] = []
         if get_config("VISION_ENABLED", True):
@@ -188,3 +207,47 @@ def setup_chat_commands() -> None:
             segments=result.segments or None,
             gap_delays=result.gap_delays or None,
         )
+
+
+def _register_peer_bot_listener() -> None:
+    """注册群消息监听器用于检测其他bot发言
+
+    在群消息中识别其他bot发言并触发静默，避免bot互相对话。
+    监听器优先级较高（priority=100），不阻断后续matcher。
+    """
+    peer_cmd = on_message(priority=100, block=False)
+
+    @peer_cmd.handle()
+    async def _handle_peer_detection(
+        event: Event,
+        session: Uninfo,
+    ) -> None:
+        """检测群内其他bot发言并触发静默
+
+        参数:
+            event: 消息事件
+            session: 会话信息
+        """
+        if not get_config("PEER_AWARENESS_ENABLED", True):
+            return
+        if not session.scene.is_group:
+            return
+        group_id = session.scene.id
+        user_id = session.user.id
+        if user_id == session.self_id:
+            return
+        text = MessageExtractor.extract_message_text(event)
+        if not text:
+            return
+        nickname = (
+            session.user.nick
+            or session.user.name
+            or ""
+        )
+        if peer_awareness.is_peer_bot(
+            user_id=user_id,
+            text=text,
+            group_id=group_id,
+            nickname=nickname,
+        ):
+            peer_awareness.trigger_silence(group_id)

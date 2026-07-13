@@ -5,7 +5,6 @@
 """
 
 from datetime import datetime, timedelta
-import json
 
 from nonebot_plugin_alconna import Target
 
@@ -16,6 +15,7 @@ from liuying.utils.message import MessageUtils
 
 from ..config import get_config
 from ..core.context import context_manager
+from ..core.json_utils import extract_json_payload
 from ..core.llm import llm_helper
 from ..models.group_context import GroupContextSnapshot
 
@@ -148,15 +148,9 @@ class ProactiveHelper:
                 [{"role": "user", "content": prompt}],
                 options={"temperature": 0.7},
             )
-            text = response.strip()
-            if text.startswith("```"):
-                lines = text.split("\n")
-                text = "\n".join(
-                    line
-                    for line in lines
-                    if not line.startswith("```")
-                )
-            data = json.loads(text)
+            data = extract_json_payload(response)
+            if data is None:
+                return False, ""
             return bool(data.get("should_send", False)), str(
                 data.get("message", "")
             )

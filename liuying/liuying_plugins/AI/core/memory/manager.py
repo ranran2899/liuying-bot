@@ -2,7 +2,7 @@
 
 4层记忆管理（working/episodic/semantic/background）+
 5路召回（FTS5/向量/嵌入/实体/时间）+ RRF融合 +
-记忆衰减与巩固。
+记忆衰减与巩固 + 记忆进化（覆盖/合并/巩固/冲突）。
 所有记忆绑定 persona_name，实现人设间记忆数据隔离。
 """
 
@@ -10,6 +10,7 @@ import asyncio
 
 from liuying.utils.log import logger
 
+from ...config import get_config
 from ...models.memory_item import MemoryItem
 from ..knowledge_db import knowledge_base
 from ._common import (
@@ -18,15 +19,18 @@ from ._common import (
     _extract_entities_simple,
     _hash_bow_embedding,
 )
+from .background_intelligence import background_intelligence
 from .consolidation import ConsolidationMixin
+from .evolves import EvolveMixin
 from .recall import RecallMixin
 
 
-class MemoryManager(RecallMixin, ConsolidationMixin):
+class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
     """记忆管理器
 
     管理4层记忆，提供5路召回+RRF融合的检索能力。
     所有记忆绑定 persona_name，实现人设间数据隔离。
+    集成记忆进化引擎，写入后自动判断与旧记忆的关系。
     """
 
     def __init__(self, db=None) -> None:
@@ -87,7 +91,60 @@ class MemoryManager(RecallMixin, ConsolidationMixin):
                 command="AI",
                 e=e,
             )
+        # 记忆进化：后台异步执行，不阻塞写入返回
+        if get_config("MEMORY_EVOLVE_ENABLED", True):
+            asyncio.create_task(
+                self._safe_evolve(
+                    user_id=user_id,
+                    new_memory_id=memory.id,
+                    new_summary=use_summary,
+                    group_id=group_id,
+                    persona_name=persona_name,
+                )
+            )
+            # 后台智能：防抖触发去重/晶体化
+            asyncio.create_task(
+                background_intelligence.notify_memory_added(
+                    user_id=user_id,
+                    memory_id=memory.id,
+                    summary=use_summary,
+                    group_id=group_id,
+                    persona_name=persona_name,
+                )
+            )
         return memory.id
+
+    async def _safe_evolve(
+        self,
+        user_id: str,
+        new_memory_id: int,
+        new_summary: str,
+        group_id: str | None,
+        persona_name: str,
+    ) -> None:
+        """安全执行记忆进化（吞异常，不阻塞主流程）
+
+        参数:
+            user_id: 用户ID
+            new_memory_id: 新记忆ID
+            new_summary: 新记忆摘要
+            group_id: 群组ID
+            persona_name: bot人格名
+        """
+        try:
+            await self.evolve_memory(
+                user_id=user_id,
+                new_memory_id=new_memory_id,
+                new_summary=new_summary,
+                group_id=group_id,
+                persona_name=persona_name,
+            )
+        except Exception as e:
+            logger.debug(
+                f"记忆进化后台任务失败: {e}",
+                command="AI",
+                e=e,
+            )
 
     async def _index_memory(self, memory: MemoryItem) -> None:
         """为记忆建立检索索引（原子写入）

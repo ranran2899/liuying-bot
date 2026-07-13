@@ -3,7 +3,15 @@
 导入所有内置工具模块以触发 @register_tool 装饰器自动注册。
 """
 
-from . import context, group, knowledge, media, memory_tools, search
+from . import (
+    context,
+    group,
+    knowledge,
+    media,
+    memory_tools,
+    plugin_invoker,
+    search,
+)
 
 __all__ = [
     "context",
@@ -11,5 +19,6 @@ __all__ = [
     "knowledge",
     "media",
     "memory_tools",
+    "plugin_invoker",
     "search",
 ]

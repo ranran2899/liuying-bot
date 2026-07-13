@@ -13,6 +13,7 @@ from liuying.utils.log import logger
 
 from ...models.emotion_state import EmotionState
 from ..context import context_manager
+from ..json_utils import extract_json_payload
 from ..llm import llm_helper as _default_llm_helper
 from .inner_state import InnerStateHelper
 
@@ -245,16 +246,10 @@ class EmotionManager:
         返回:
             dict: 解析后的状态字典
         """
-        response = response.strip()
-        if response.startswith("```"):
-            lines = response.split("\n")
-            response = "\n".join(
-                line for line in lines if not line.startswith("```")
-            )
+        data = extract_json_payload(response)
+        if data is None:
+            return {}
         try:
-            data = json.loads(response)
-            if not isinstance(data, dict):
-                return {}
             if "mood" in data and data["mood"] not in (
                 "happy",
                 "sad",
@@ -271,7 +266,7 @@ class EmotionManager:
                     0.0, min(1.0, float(data["relation_warmth"]))
                 )
             return data
-        except (json.JSONDecodeError, ValueError, TypeError) as e:
+        except (ValueError, TypeError) as e:
             logger.debug(
                 f"解析情绪状态响应失败: {e}", command="AI"
             )

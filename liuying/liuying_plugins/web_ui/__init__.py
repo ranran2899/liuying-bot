@@ -67,8 +67,6 @@ __plugin_meta__ = PluginMetadata(
     ).to_dict(),
 )
 
-driver = nonebot.get_driver()
-
 
 gConfig.set_name("web-ui", "web-ui")
 

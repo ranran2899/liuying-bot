@@ -84,6 +84,14 @@ SOCIAL_CONFIGS: list[RegisterConfig] = [
         type=int,
     ),
     RegisterConfig(
+        key="SOCIAL_QUOTA_COOLDOWN",
+        value=3600,
+        module=MODULE,
+        help="单场景主动消息冷却时间（秒）",
+        default_value=3600,
+        type=int,
+    ),
+    RegisterConfig(
         key="PEER_AWARENESS_ENABLED",
         value=True,
         module=MODULE,

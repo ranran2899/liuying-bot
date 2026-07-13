@@ -6,6 +6,7 @@ Agent循环、安全过滤、拟人化处理、贴纸决策、碎片化分段、
 """
 
 import asyncio
+from datetime import datetime
 import random
 import time
 from typing import Any
@@ -17,7 +18,8 @@ from liuying.utils.log import logger
 
 from ..agent.runner import AgentResult, AgentRunner
 from ..config import get_config
-from ..core.context import ContextPolicy, context_manager
+from ..core.active_learning import active_learning
+from ..core.context import ContextPolicy, context_manager, thread_tracker
 from ..core.emotion import emotion_manager
 from ..core.group import (
     GroupMuteTracker,
@@ -30,7 +32,10 @@ from ..core.llm import (
     llm_helper,
 )
 from ..core.memory import memory_manager
+from ..core.peer_awareness import peer_awareness
 from ..core.persona import persona_manager
+from ..core.prompt_hooks import HookContext, get_hook_registry
+from ..core.reply_turn_trace import reply_turn_trace
 from ..core.safety import (
     SafetyFilter,
     SafetyRefusalError,
@@ -40,7 +45,10 @@ from ..core.vision import summarize_image, vision_router
 from ..models.conversation_record import ConversationRecord
 from .helpers import ReplyPipeline
 from .humanize import HumanizeToolkit
+from .response_review import response_reviewer
 from .sticker import sticker_manager
+from .style_policy import ReplyStylePolicy
+from .text_policy import ReplyTextPolicy
 from .types import ReplyContext, ReplyResult
 
 _FALLBACK_REPLIES: list[str] = [
@@ -101,6 +109,19 @@ class ReplyProcessor:
                 )
                 return False
 
+        # 环境感知：检测到其他bot发言后触发静默，避免bot互相对话
+        if (
+            ctx.group_id
+            and get_config("PEER_AWARENESS_ENABLED", True)
+            and peer_awareness.should_silence(ctx.group_id)
+        ):
+            logger.debug(
+                f"群 {ctx.group_id} 处于peer静默期，跳过回复",
+                command="AI",
+                group_id=ctx.group_id,
+            )
+            return False
+
         return True
 
     async def _refresh_mute_state(
@@ -134,6 +155,7 @@ class ReplyProcessor:
 
         使用用户当前激活的人格构建提示词，并注入对应人格的
         情绪状态与记忆，确保人设间数据隔离。
+        同时执行提示词钩子注册表中的钩子，支持热插拔注入。
 
         参数:
             ctx: 回复上下文
@@ -174,7 +196,32 @@ class ReplyProcessor:
                     e=e,
                 )
 
+        # 构建提示词钩子上下文
+        hook_ctx = HookContext(
+            user_id=ctx.user_id,
+            group_id=ctx.group_id or "",
+            is_private=ctx.is_private,
+            message_text=ctx.text,
+            has_image_input=ctx.image_data is not None,
+            current_time_str=datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+            persona_name=ctx.persona_name,
+        )
+        registry = get_hook_registry()
+
+        # system_prelude 钩子：在基础提示词之前注入
+        prelude_chunks = await registry.run_all(
+            hook_ctx, phase="system_prelude"
+        )
+
         parts = [base_prompt, context_prompt, emotion_prompt, memory_prompt]
+
+        # system_context 钩子：在记忆之后注入上下文补充
+        context_chunks = await registry.run_all(
+            hook_ctx, phase="system_context"
+        )
+        parts.extend(context_chunks)
 
         parts.append(context_manager.get_time_flavor_prompt())
 
@@ -190,6 +237,28 @@ class ReplyProcessor:
                 logger.debug(
                     f"注入群风格失败: {e}", command="AI", e=e
                 )
+
+            # 话题线程追踪：记录用户消息并注入当前话题上下文
+            if get_config("THREAD_TRACKER_ENABLED", True):
+                try:
+                    thread_tracker.track_message(
+                        group_id=ctx.group_id,
+                        user_id=ctx.user_id,
+                        text=ctx.text,
+                    )
+                    thread_ctx = thread_tracker.get_thread_context(
+                        ctx.group_id
+                    )
+                    if thread_ctx:
+                        parts.append(
+                            f"\n{thread_ctx}\n"
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"话题线程追踪失败: {e}",
+                        command="AI",
+                        e=e,
+                    )
 
             # 注入群社交上下文（角色/关系/复读跟随提示）
             if get_config("SOCIAL_INTELLIGENCE_ENABLED", True):
@@ -211,6 +280,22 @@ class ReplyProcessor:
         if get_config("SAFETY_FILTER_ENABLED", True):
             parts.append(SafetyFilter.build_prompt_injection_guard())
 
+        # 注入回复风格策略：防止堆砌网络热词/模板化口癖
+        has_visual = ctx.image_data is not None
+        parts.append(
+            ReplyStylePolicy.build_style_policy_prompt(
+                has_visual_context=has_visual,
+            )
+        )
+        if has_visual:
+            parts.append(
+                ReplyStylePolicy.build_visual_identity_guard()
+            )
+
+        # 注入环境感知提示词（提醒AI不要将其他插件/其他bot功能说成自己能力）
+        if get_config("PEER_AWARENESS_ENABLED", True):
+            parts.append(peer_awareness.build_peer_awareness_prompt())
+
         if (
             ctx.group_id
             and get_config("FRAGMENT_STYLE", "prompt") == "prompt"
@@ -220,6 +305,16 @@ class ReplyProcessor:
         anti_loop = ContextPolicy.build_anti_loop_hint(history)
         if anti_loop:
             parts.append(anti_loop)
+
+        # system_postlude 钩子：在所有提示词组装完成后注入
+        postlude_chunks = await registry.run_all(
+            hook_ctx, phase="system_postlude"
+        )
+        parts.extend(postlude_chunks)
+
+        # prelude 作为最前置内容
+        if prelude_chunks:
+            parts = prelude_chunks + parts
 
         return "".join(parts)
 
@@ -630,6 +725,9 @@ class ReplyProcessor:
         - 对话周期内通过会话级用量累加器统计实际 token 消耗；
         - 对话结束后按实际消耗扣费。
 
+        本方法同时通过 reply_turn_trace 记录各阶段耗时与状态，
+        用于事后诊断回复异常。
+
         参数:
             ctx: 回复上下文
 
@@ -637,9 +735,22 @@ class ReplyProcessor:
             ReplyResult: 回复结果
         """
         start_time = time.time()
+        session_type = "private" if ctx.is_private else "group"
+        trace_id = reply_turn_trace.start_trace(
+            session_type=session_type,
+            group_id=ctx.group_id or "",
+            user_id=ctx.user_id,
+        )
 
         if not await self._check_permission(ctx):
+            reply_turn_trace.finish_trace(
+                trace_id=trace_id,
+                outcome="permission_denied",
+            )
             return ReplyResult(text="", typing_delay=0.0)
+        reply_turn_trace.record_stage(
+            trace_id=trace_id, key="permission", label="权限检查通过"
+        )
 
         # 用户对话 token 额度检查（不足则阻止对话继续）
         quota = await token_quota_service.check_before_conversation(
@@ -651,6 +762,11 @@ class ReplyProcessor:
                 f"user={ctx.user_id} group={ctx.group_id or ''} "
                 f"reason={quota.reason}",
                 command="AI",
+            )
+            reply_turn_trace.finish_trace(
+                trace_id=trace_id,
+                outcome="quota_blocked",
+                diagnosis_code=quota.reason,
             )
             if quota.need_remind:
                 tip = _QUOTA_INSUFFICIENT_TPL.format(
@@ -674,6 +790,11 @@ class ReplyProcessor:
                     "elapsed": round(time.time() - start_time, 3),
                 },
             )
+        reply_turn_trace.record_stage(
+            trace_id=trace_id,
+            key="quota_check",
+            label="额度检查通过",
+        )
 
         # 解析用户当前激活的人格名，确保人设间数据隔离
         # get_user_persona_name 内部已捕获异常并回退默认人格，无需外层兜底
@@ -682,7 +803,15 @@ class ReplyProcessor:
         )
 
         history = await self._load_history(ctx)
+        reply_turn_trace.record_stage(
+            trace_id=trace_id,
+            key="load_history",
+            label=f"加载历史{len(history)}条",
+        )
         system_prompt = await self._build_system_prompt(ctx, history)
+        reply_turn_trace.record_stage(
+            trace_id=trace_id, key="build_prompt", label="构建提示词完成"
+        )
         messages = ReplyPipeline.build_messages(
             system_prompt, history, ctx
         )
@@ -697,6 +826,12 @@ class ReplyProcessor:
             usage = TokenTrackingHelper.stop_conversation_tracking(
                 track_token
             )
+        reply_turn_trace.record_stage(
+            trace_id=trace_id,
+            key="generate_reply",
+            label="生成回复完成",
+            detail=f"长度={len(reply_text)}",
+        )
 
         # 按实际消耗扣费（失败不影响已生成回复的发送）
         try:
@@ -710,11 +845,44 @@ class ReplyProcessor:
                 e=e,
             )
 
+        # 响应深度审查：LLM二次审核回复质量与安全
+        review = await response_reviewer.review(
+            user_message=ctx.text,
+            reply_text=reply_text,
+        )
+        if review.final_text != reply_text:
+            logger.debug(
+                f"响应审查调整回复: verdict={review.verdict} "
+                f"reason={review.reason}",
+                command="AI",
+            )
+            reply_text = review.final_text
+        reply_turn_trace.record_stage(
+            trace_id=trace_id,
+            key="review",
+            label=f"审查verdict={review.verdict}",
+        )
+
+        # 回复文本策略：清理Markdown格式，让回复像真人而非文档
+        reply_text = ReplyTextPolicy.normalize_visible_reply_text(
+            reply_text
+        )
+
         if ContextPolicy.has_silence_control_marker(reply_text):
             logger.info(
                 f"AI决定SILENCE，跳过回复: user={ctx.user_id} "
                 f"group={ctx.group_id}",
                 command="AI",
+            )
+            # 主动学习：即使SILENCE也异步分析不确定性（fire-and-forget）
+            active_learning.process_reply_async(
+                user_id=ctx.user_id,
+                user_question=ctx.text,
+                ai_reply=reply_text,
+                persona_name=ctx.persona_name,
+            )
+            reply_turn_trace.finish_trace(
+                trace_id=trace_id, outcome="silence"
             )
             return ReplyResult(
                 text="",
@@ -725,12 +893,23 @@ class ReplyProcessor:
                 },
             )
 
+        # 主动学习：异步分析回复中的不确定性并深度查证（fire-and-forget）
+        active_learning.process_reply_async(
+            user_id=ctx.user_id,
+            user_question=ctx.text,
+            ai_reply=reply_text,
+            persona_name=ctx.persona_name,
+        )
+
         elapsed = time.time() - start_time
         humanized_text, typing_delay = ReplyPipeline.humanize_reply(
             reply_text, elapsed, ctx
         )
 
         if not humanized_text:
+            reply_turn_trace.finish_trace(
+                trace_id=trace_id, outcome="empty_reply"
+            )
             return ReplyResult(
                 text="",
                 typing_delay=0.0,
@@ -739,6 +918,9 @@ class ReplyProcessor:
                     "token_usage": usage,
                 },
             )
+        reply_turn_trace.record_stage(
+            trace_id=trace_id, key="humanize", label="拟人化完成"
+        )
 
         segments, gap_delays = ReplyPipeline.build_segments(
             humanized_text, ctx
@@ -765,11 +947,20 @@ class ReplyProcessor:
             "history_count": len(history),
             "segment_count": len(segments),
             "token_usage": usage,
+            "trace_id": trace_id,
         }
         if agent_result and agent_result.tool_calls:
             metadata["tool_calls"] = agent_result.tool_calls
             metadata["agent_steps"] = agent_result.steps
 
+        reply_turn_trace.finish_trace(
+            trace_id=trace_id,
+            outcome="success",
+            detail={
+                "elapsed": round(elapsed, 3),
+                "segments": len(segments),
+            },
+        )
         return ReplyResult(
             text=humanized_text,
             segments=segments,

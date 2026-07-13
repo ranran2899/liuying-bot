@@ -2,6 +2,7 @@
 
 多provider容错路由：失败缓存（cooldown）+ 指数退避 +
 同优先级轮询 + 冷却降级不剔除。
+集成 provider_health 实现基于 EMA 延迟与失败率的动态优先级。
 """
 
 import asyncio
@@ -13,27 +14,13 @@ from typing import Any
 
 from liuying.utils.log import logger
 
+from .provider_health import provider_health
+
 __all__ = [
     "ProviderRouter",
     "ProviderState",
     "provider_router",
 ]
-
-
-_RATE_LIMIT_DEFAULT_COOLDOWN = 600.0
-"""429限流默认冷却（秒）"""
-
-
-_RATE_LIMIT_MAX_COOLDOWN = 1800.0
-"""429限流最大冷却（秒）"""
-
-
-_EXPONENTIAL_BASE = 60.0
-"""指数退避基数（秒）"""
-
-
-_EXPONENTIAL_MAX = 1800.0
-"""指数退避上限（秒）"""
 
 
 _MAX_RETRIES = 2
@@ -136,6 +123,9 @@ class ProviderRouter:
     ) -> None:
         """记录失败调用并计算冷却
 
+        使用 provider_health 的指数退避冷却计算，
+        加入抖动避免多个provider同时恢复造成惊群。
+
         参数:
             name: provider名
             is_rate_limit: 是否429限流
@@ -146,17 +136,11 @@ class ProviderRouter:
             state.consecutive_failures += 1
             now_ts = time.time()
 
-            if is_rate_limit:
-                cooldown = max(
-                    _RATE_LIMIT_DEFAULT_COOLDOWN,
-                    float(retry_after or 0.0),
-                )
-                cooldown = min(cooldown, _RATE_LIMIT_MAX_COOLDOWN)
-            else:
-                backoff = _EXPONENTIAL_BASE * (
-                    2 ** (state.consecutive_failures - 1)
-                )
-                cooldown = min(backoff, _EXPONENTIAL_MAX)
+            cooldown = provider_health.compute_cooldown_seconds(
+                state.consecutive_failures,
+                is_rate_limit=is_rate_limit,
+                retry_after=retry_after,
+            )
 
             state.cooldown_until = now_ts + cooldown
             state.retry_after = retry_after
@@ -167,7 +151,8 @@ class ProviderRouter:
     ) -> list[str]:
         """按有效优先级排序provider候选列表
 
-        冷却的provider降级到最后但不剔除。
+        结合 provider_health 的动态优先级（EMA延迟+失败率）与
+        本地冷却状态进行排序。冷却的provider降级到最后但不剔除。
 
         参数:
             providers: provider名列表
@@ -177,15 +162,24 @@ class ProviderRouter:
         """
         now_ts = time.time()
         decorated: list[tuple[float, str, bool]] = []
-        for name in providers:
+        for idx, name in enumerate(providers):
             state = self.get_state(name)
             cooling = state.cooldown_until > now_ts
-            penalty = state.consecutive_failures * 10.0
-            if state.success_count == 0 and state.consecutive_failures > 0:
-                penalty += 100.0
+            # 基础优先级使用原始顺序（越靠前优先级越高）
+            base_priority = float(idx)
+            # 动态优先级：结合 EMA 延迟与失败率
+            effective = provider_health.compute_effective_priority(
+                name, base_priority
+            )
+            # 冷却的provider额外惩罚（降级到最后）
             if cooling:
-                penalty += 100.0
-            effective = penalty + state.last_latency
+                effective += 1000.0
+            # 从未成功且有失败的provider额外惩罚
+            if (
+                state.success_count == 0
+                and state.consecutive_failures > 0
+            ):
+                effective += 100.0
             decorated.append((effective, name, cooling))
 
         decorated.sort(key=lambda x: (x[0], x[1]))
@@ -221,6 +215,8 @@ class ProviderRouter:
         """带容错切换的调用
 
         按sort_candidates顺序尝试，失败时记录并切换到下一个。
+        同时将每次请求结果（延迟、成功/失败、错误类型）记录到
+        provider_health 用于动态优先级计算。
 
         参数:
             providers: provider名列表
@@ -244,15 +240,30 @@ class ProviderRouter:
                     result = await call_fn(name, *args, **kwargs)
                     latency = time.time() - start
                     self.record_success(name, latency=latency)
+                    # 记录到 provider_health 用于动态优先级
+                    provider_health.record_request_result(
+                        provider_name=name,
+                        latency_ms=latency * 1000.0,
+                        success=True,
+                    )
                     return result
                 except Exception as exc:
                     last_error = exc
+                    latency = time.time() - start
                     is_rate = self._is_rate_limit(exc)
                     retry_after = self._extract_retry_after(exc)
+                    error_kind = provider_health.classify_error(exc)
                     self.record_failure(
                         name,
                         is_rate_limit=is_rate,
                         retry_after=retry_after,
+                    )
+                    # 记录失败到 provider_health
+                    provider_health.record_request_result(
+                        provider_name=name,
+                        latency_ms=latency * 1000.0,
+                        success=False,
+                        error_kind=error_kind,
                     )
                     logger.warning(
                         f"provider {name} 第{attempt+1}次失败: {exc}",
