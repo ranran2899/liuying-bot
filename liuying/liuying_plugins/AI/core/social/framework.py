@@ -4,8 +4,8 @@
 （handler）解耦。handler通过SocialContext拿到运行所需的
 全部依赖，便于测试和扩展。
 
-注册表模式：register_social_trigger注册触发器，
-list_social_triggers列出所有已注册的触发器。
+注册表模式：通过SocialTriggerRegistry单例注册触发器，
+social_trigger_registry.list()列出所有已注册的触发器。
 """
 
 from collections.abc import Awaitable, Callable
@@ -15,8 +15,8 @@ from typing import Any
 __all__ = [
     "SocialContext",
     "SocialTrigger",
-    "list_social_triggers",
-    "register_social_trigger",
+    "SocialTriggerRegistry",
+    "social_trigger_registry",
 ]
 
 
@@ -71,26 +71,34 @@ class SocialTrigger:
     )
 
 
-_REGISTRY: dict[str, SocialTrigger] = {}
+class SocialTriggerRegistry:
+    """SocialTrigger注册表
 
-
-def register_social_trigger(
-    trigger: SocialTrigger,
-) -> None:
-    """注册一个SocialTrigger
-
-    重名会覆盖（便于热重载）。
-
-    参数:
-        trigger: 触发器配置
+    集中管理所有主动社交触发器的注册与查询，
+    替代原先的模块级散装函数。
     """
-    _REGISTRY[trigger.name] = trigger
+
+    def __init__(self) -> None:
+        """初始化空注册表"""
+        self._registry: dict[str, SocialTrigger] = {}
+
+    def register(self, trigger: SocialTrigger) -> None:
+        """注册一个SocialTrigger
+
+        重名会覆盖（便于热重载）。
+
+        参数:
+            trigger: 触发器配置
+        """
+        self._registry[trigger.name] = trigger
+
+    def list(self) -> list[SocialTrigger]:
+        """列出所有已注册的触发器
+
+        返回:
+            list[SocialTrigger]: 触发器列表
+        """
+        return list(self._registry.values())
 
 
-def list_social_triggers() -> list[SocialTrigger]:
-    """列出所有已注册的触发器
-
-    返回:
-        list[SocialTrigger]: 触发器列表
-    """
-    return list(_REGISTRY.values())
+social_trigger_registry = SocialTriggerRegistry()

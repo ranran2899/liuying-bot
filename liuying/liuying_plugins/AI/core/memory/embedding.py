@@ -12,7 +12,7 @@ from liuying.utils.log import logger
 
 from ...config import get_config
 from ..llm import llm_helper
-from ._common import _hash_bow_embedding
+from ._common import MemoryEmbeddingUtils
 
 _EMBEDDING_CACHE_TYPE = "AI_EMBEDDING"
 """嵌入缓存类型"""
@@ -75,7 +75,7 @@ class EmbeddingService:
                     command="AI",
                     e=e,
                 )
-        return _hash_bow_embedding(text)
+        return MemoryEmbeddingUtils.hash_bow_embedding(text)
 
     async def embed(self, text: str) -> list[float]:
         """生成文本嵌入向量
@@ -90,7 +90,7 @@ class EmbeddingService:
             list[float]: 嵌入向量
         """
         if not text or not text.strip():
-            return _hash_bow_embedding(text)
+            return MemoryEmbeddingUtils.hash_bow_embedding(text)
         cache_key = self._cache_key(text)
         try:
             cached = await self._cache.get(cache_key)

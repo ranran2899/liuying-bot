@@ -109,23 +109,17 @@ class MemoryDecayHelper:
             list[tuple[str, str | None, str]]: (user_id, group_id, persona_name) 列表
         """
         cutoff = datetime.now() - timedelta(hours=hours)
-        try:
-            records = await ConversationRecord.filter(
-                create_time__gt=cutoff,
-                role="user",
-            ).all()
-            seen: set[tuple[str, str | None, str]] = set()
-            for r in records:
-                persona = r.persona_name or "default"
-                key = (r.user_id, r.group_id, persona)
-                if key not in seen:
-                    seen.add(key)
-            return list(seen)
-        except Exception as e:
-            logger.debug(
-                f"获取活跃用户失败: {e}", command="AI", e=e
-            )
-            return []
+        records = await ConversationRecord.filter(
+            create_time__gt=cutoff,
+            role="user",
+        ).all()
+        seen: set[tuple[str, str | None, str]] = set()
+        for r in records:
+            persona = r.persona_name or "default"
+            key = (r.user_id, r.group_id, persona)
+            if key not in seen:
+                seen.add(key)
+        return list(seen)
 
     @staticmethod
     async def _user_persona_update_task() -> None:

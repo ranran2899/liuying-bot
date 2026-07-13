@@ -6,8 +6,8 @@
 from .framework import (
     SocialContext,
     SocialTrigger,
-    list_social_triggers,
-    register_social_trigger,
+    SocialTriggerRegistry,
+    social_trigger_registry,
 )
 from .gate import SocialGate, social_gate
 from .quota import SocialQuota, social_quota
@@ -17,8 +17,8 @@ __all__ = [
     "SocialGate",
     "SocialQuota",
     "SocialTrigger",
-    "list_social_triggers",
-    "register_social_trigger",
+    "SocialTriggerRegistry",
     "social_gate",
     "social_quota",
+    "social_trigger_registry",
 ]

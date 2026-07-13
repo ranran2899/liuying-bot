@@ -22,12 +22,14 @@ SQLite 数据库文件（data/db/knowledge_base.db）。
 """
 
 from .connection import KbConnectionManager, kb_connection
-from .manager import KnowledgeBase, cosine_similarity, knowledge_base
+from .manager import KnowledgeBase, knowledge_base
+from .retriever import KnowledgeQueryUtils, KnowledgeRetrieverMixin
 
 __all__ = [
     "KbConnectionManager",
     "KnowledgeBase",
-    "cosine_similarity",
+    "KnowledgeQueryUtils",
+    "KnowledgeRetrieverMixin",
     "kb_connection",
     "knowledge_base",
 ]

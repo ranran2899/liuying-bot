@@ -38,53 +38,6 @@ _LOG_CMD = "knowledge_base"
 """日志 command 标识"""
 
 
-def _is_locked_error(exc: Exception) -> bool:
-    """判断异常是否为 SQLite database is locked 错误
-
-    参数:
-        exc: 异常实例
-
-    返回:
-        bool: 是否为锁冲突错误
-    """
-    for err in (exc, exc.__cause__, exc.__context__):
-        if isinstance(err, sqlite3.OperationalError):
-            msg = str(err).lower()
-            if "database is locked" in msg or "is locked" in msg:
-                return True
-    return False
-
-
-def with_write_lock(func: Callable[..., Awaitable[None]]):
-    """装饰器：为写操作添加全局写锁与重试机制
-
-    串行化所有写操作，遇到 ``database is locked`` 时自动重试（指数退避）。
-    """
-
-    @functools.wraps(func)
-    async def wrapper(self, *args, **kwargs) -> None:
-        async with self._conn.write_lock:
-            for attempt in range(_WRITE_MAX_RETRIES):
-                try:
-                    await func(self, *args, **kwargs)
-                    return
-                except Exception as e:
-                    if not (
-                        _is_locked_error(e)
-                        and attempt < _WRITE_MAX_RETRIES - 1
-                    ):
-                        raise
-                    delay = _WRITE_BASE_DELAY * (2**attempt)
-                    logger.debug(
-                        f"知识库写锁冲突，{delay:.2f}s 后重试 "
-                        f"({attempt + 1}/{_WRITE_MAX_RETRIES}): {e}",
-                        _LOG_CMD,
-                    )
-                    await asyncio.sleep(delay)
-
-    return wrapper
-
-
 class KbConnectionManager:
     """知识库连接管理器
 
@@ -92,14 +45,74 @@ class KbConnectionManager:
     提供全局写锁以串行化写操作。
 
     通过单例 ``kb_connection`` 暴露，外部统一通过该单例访问。
+    写操作装饰器 ``with_write_lock`` 作为静态方法提供，
+    供 ``KnowledgeBase`` 等宿主类装饰写方法。
     """
 
     __slots__ = ("_db", "_initialized", "write_lock")
 
     def __init__(self) -> None:
+        """初始化连接管理器"""
         self._db: aiosqlite.Connection | None = None
         self.write_lock = asyncio.Lock()
         self._initialized = False
+
+    @staticmethod
+    def is_locked_error(exc: Exception) -> bool:
+        """判断异常是否为 SQLite database is locked 错误
+
+        参数:
+            exc: 异常实例
+
+        返回:
+            bool: 是否为锁冲突错误
+        """
+        for err in (exc, exc.__cause__, exc.__context__):
+            if isinstance(err, sqlite3.OperationalError):
+                msg = str(err).lower()
+                if "database is locked" in msg or "is locked" in msg:
+                    return True
+        return False
+
+    @staticmethod
+    def with_write_lock(
+        func: Callable[..., Awaitable[None]],
+    ) -> Callable[..., Awaitable[None]]:
+        """装饰器：为写操作添加全局写锁与重试机制
+
+        串行化所有写操作，遇到 ``database is locked`` 时自动重试（指数退避）。
+        要求被装饰方法所属的宿主类提供 ``_conn`` 属性
+        （``KbConnectionManager`` 实例）。
+
+        参数:
+            func: 被装饰的异步写方法
+
+        返回:
+            Callable: 包装后的异步方法
+        """
+
+        @functools.wraps(func)
+        async def wrapper(self, *args, **kwargs) -> None:
+            async with self._conn.write_lock:
+                for attempt in range(_WRITE_MAX_RETRIES):
+                    try:
+                        await func(self, *args, **kwargs)
+                        return
+                    except Exception as e:
+                        if not (
+                            KbConnectionManager.is_locked_error(e)
+                            and attempt < _WRITE_MAX_RETRIES - 1
+                        ):
+                            raise
+                        delay = _WRITE_BASE_DELAY * (2**attempt)
+                        logger.debug(
+                            f"知识库写锁冲突，{delay:.2f}s 后重试 "
+                            f"({attempt + 1}/{_WRITE_MAX_RETRIES}): {e}",
+                            command=_LOG_CMD,
+                        )
+                        await asyncio.sleep(delay)
+
+        return wrapper
 
     async def init(self) -> None:
         """初始化数据库连接与表结构
@@ -119,7 +132,7 @@ class KbConnectionManager:
             await self._db.execute(ddl)
         await self._db.commit()
         self._initialized = True
-        logger.info("知识库数据库初始化完成", _LOG_CMD)
+        logger.info("知识库数据库初始化完成", command=_LOG_CMD)
 
     @property
     def db(self) -> aiosqlite.Connection:
@@ -143,7 +156,7 @@ class KbConnectionManager:
             await self._db.close()
             self._db = None
             self._initialized = False
-            logger.info("知识库数据库连接已关闭", _LOG_CMD)
+            logger.info("知识库数据库连接已关闭", command=_LOG_CMD)
 
 
 kb_connection = KbConnectionManager()

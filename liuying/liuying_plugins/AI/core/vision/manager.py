@@ -23,7 +23,7 @@ from .capabilities import vision_router
 __all__ = [
     "GifSummary",
     "ImageSummary",
-    "build_vision_messages",
+    "VisionUtils",
     "summarize_gif",
     "summarize_image",
 ]
@@ -102,46 +102,149 @@ class GifSummary:
     error: str = ""
 
 
-def _to_data_url(data: bytes, mime: str = "image/jpeg") -> str:
-    """转base64 data URL
+class VisionUtils:
+    """视觉工具类
 
-    参数:
-        data: 二进制数据
-        mime: MIME类型
-
-    返回:
-        str: data URL
+    封装视觉处理相关的静态工具方法，包括 base64 编码、
+    帧采样、GIF拼图构建与视觉消息构建。
     """
-    b64 = base64.b64encode(data).decode("ascii")
-    return f"data:{mime};base64,{b64}"
 
+    @staticmethod
+    def to_data_url(data: bytes, mime: str = "image/jpeg") -> str:
+        """转base64 data URL
 
-def _select_frame_indices(
-    total: int,
-    sample: int,
-) -> list[int]:
-    """等距采样帧索引（含末帧）
+        参数:
+            data: 二进制数据
+            mime: MIME类型
 
-    参数:
-        total: 总帧数
-        sample: 采样数
+        返回:
+            str: data URL
+        """
+        b64 = base64.b64encode(data).decode("ascii")
+        return f"data:{mime};base64,{b64}"
 
-    返回:
-        list[int]: 帧索引列表
-    """
-    if total <= 0 or sample <= 0:
-        return []
-    if total <= sample:
-        return list(range(total))
+    @staticmethod
+    def select_frame_indices(
+        total: int,
+        sample: int,
+    ) -> list[int]:
+        """等距采样帧索引（含末帧）
 
-    if sample == 1:
-        return [total - 1]
+        参数:
+            total: 总帧数
+            sample: 采样数
 
-    last = total - 1
-    indices = sorted(
-        {round(i * last / (sample - 1)) for i in range(sample)}
-    )
-    return indices
+        返回:
+            list[int]: 帧索引列表
+        """
+        if total <= 0 or sample <= 0:
+            return []
+        if total <= sample:
+            return list(range(total))
+
+        if sample == 1:
+            return [total - 1]
+
+        last = total - 1
+        indices = sorted(
+            {round(i * last / (sample - 1)) for i in range(sample)}
+        )
+        return indices
+
+    @staticmethod
+    def build_gif_contact_sheet_sync(
+        gif_data: bytes,
+    ) -> tuple[bytes, int, int, int]:
+        """构建GIF拼图（同步，CPU密集型）
+
+        参数:
+            gif_data: GIF二进制数据
+
+        返回:
+            tuple[bytes, int, int, int]:
+                (jpeg数据, 总帧数, 采样帧数, 持续ms)
+        """
+        if Image is None:
+            raise ImportError("需要Pillow库支持GIF处理")
+
+        with Image.open(io.BytesIO(gif_data)) as img:
+            n_frames = getattr(img, "n_frames", 1)
+            duration_ms = 0
+            for i in range(n_frames):
+                img.seek(i)
+                duration_ms += getattr(img, "duration", 0) or 100
+
+            sample_indices = VisionUtils.select_frame_indices(
+                n_frames, min(_GIF_SAMPLE_FRAMES, n_frames)
+            )
+            if not sample_indices:
+                sample_indices = [0]
+
+            frames: list[Image.Image] = []
+            for idx in sample_indices:
+                img.seek(idx)
+                frame = img.convert("RGB")
+                frames.append(frame.copy())
+
+        if not frames:
+            raise ValueError("无法解码GIF帧")
+
+        max_w = max(f.width for f in frames)
+        max_h = max(f.height for f in frames)
+        scale = min(
+            1.0,
+            _GIF_CONTACT_SHEET_LONG_EDGE / max(max_w * len(frames), max_h),
+        )
+        thumb_w = max(1, int(max_w * scale))
+        thumb_h = max(1, int(max_h * scale))
+
+        contact = Image.new(
+            "RGB",
+            (thumb_w * len(frames), thumb_h),
+            (255, 255, 255),
+        )
+        for i, frame in enumerate(frames):
+            thumb = frame.resize((thumb_w, thumb_h))
+            contact.paste(thumb, (i * thumb_w, 0))
+
+        buf = io.BytesIO()
+        contact.save(buf, format="JPEG", quality=85)
+        return (
+            buf.getvalue(),
+            n_frames,
+            len(sample_indices),
+            duration_ms,
+        )
+
+    @staticmethod
+    def build_vision_messages(
+        text: str,
+        image_data: bytes,
+        mime: str = "image/jpeg",
+    ) -> list[dict[str, Any]]:
+        """构建视觉理解消息列表
+
+        参数:
+            text: 文本提示
+            image_data: 图片数据
+            mime: MIME类型
+
+        返回:
+            list[dict]: 消息列表
+        """
+        data_url = VisionUtils.to_data_url(image_data, mime)
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": text},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": data_url},
+                    },
+                ],
+            }
+        ]
 
 
 async def summarize_image(
@@ -174,7 +277,7 @@ async def summarize_image(
         llm_helper = _default_llm_helper
 
     use_prompt = prompt or _VISION_PROMPT
-    data_url = _to_data_url(image_data, mime)
+    data_url = VisionUtils.to_data_url(image_data, mime)
 
     messages: list[dict[str, Any]] = [
         {
@@ -219,70 +322,6 @@ async def summarize_image(
         return ImageSummary(error=str(e))
 
 
-def _build_gif_contact_sheet_sync(
-    gif_data: bytes,
-) -> tuple[bytes, int, int, int]:
-    """构建GIF拼图（同步，CPU密集型）
-
-    参数:
-        gif_data: GIF二进制数据
-
-    返回:
-        tuple[bytes, int, int, int]: (jpeg数据, 总帧数, 采样帧数, 持续ms)
-    """
-    if Image is None:
-        raise ImportError("需要Pillow库支持GIF处理")
-
-    with Image.open(io.BytesIO(gif_data)) as img:
-        n_frames = getattr(img, "n_frames", 1)
-        duration_ms = 0
-        for i in range(n_frames):
-            img.seek(i)
-            duration_ms += getattr(img, "duration", 0) or 100
-
-        sample_indices = _select_frame_indices(
-            n_frames, min(_GIF_SAMPLE_FRAMES, n_frames)
-        )
-        if not sample_indices:
-            sample_indices = [0]
-
-        frames: list[Image.Image] = []
-        for idx in sample_indices:
-            img.seek(idx)
-            frame = img.convert("RGB")
-            frames.append(frame.copy())
-
-    if not frames:
-        raise ValueError("无法解码GIF帧")
-
-    max_w = max(f.width for f in frames)
-    max_h = max(f.height for f in frames)
-    scale = min(
-        1.0,
-        _GIF_CONTACT_SHEET_LONG_EDGE / max(max_w * len(frames), max_h),
-    )
-    thumb_w = max(1, int(max_w * scale))
-    thumb_h = max(1, int(max_h * scale))
-
-    contact = Image.new(
-        "RGB",
-        (thumb_w * len(frames), thumb_h),
-        (255, 255, 255),
-    )
-    for i, frame in enumerate(frames):
-        thumb = frame.resize((thumb_w, thumb_h))
-        contact.paste(thumb, (i * thumb_w, 0))
-
-    buf = io.BytesIO()
-    contact.save(buf, format="JPEG", quality=85)
-    return (
-        buf.getvalue(),
-        n_frames,
-        len(sample_indices),
-        duration_ms,
-    )
-
-
 async def summarize_gif(
     gif_data: bytes,
     llm_helper: Any = None,
@@ -315,7 +354,9 @@ async def summarize_gif(
     try:
         # GIF 解码为 CPU 密集型操作，通过 to_thread 避免阻塞事件循环
         result = await asyncio.wait_for(
-            asyncio.to_thread(_build_gif_contact_sheet_sync, gif_data),
+            asyncio.to_thread(
+                VisionUtils.build_gif_contact_sheet_sync, gif_data
+            ),
             timeout=_GIF_TIMEOUT,
         )
     except TimeoutError:
@@ -345,33 +386,3 @@ async def summarize_gif(
         _gif_cache.set(cache_key, summary)
 
     return summary
-
-
-def build_vision_messages(
-    text: str,
-    image_data: bytes,
-    mime: str = "image/jpeg",
-) -> list[dict[str, Any]]:
-    """构建视觉理解消息列表
-
-    参数:
-        text: 文本提示
-        image_data: 图片数据
-        mime: MIME类型
-
-    返回:
-        list[dict]: 消息列表
-    """
-    data_url = _to_data_url(image_data, mime)
-    return [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": text},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": data_url},
-                },
-            ],
-        }
-    ]

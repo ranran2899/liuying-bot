@@ -62,108 +62,6 @@ class SkillSpec:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-def _extract_frontmatter(text: str) -> tuple[dict[str, Any], str]:
-    """从SKILL.md提取YAML frontmatter
-
-    参数:
-        text: SKILL.md内容
-
-    返回:
-        tuple[dict, str]: (frontmatter字典, 正文)
-    """
-    normalized = text.replace("\r\n", "\n")
-    if not normalized.startswith("---\n"):
-        return {}, normalized
-
-    match = re.match(r"^---\n([\s\S]*?)\n---\n?([\s\S]*)$", normalized)
-    if not match:
-        return {}, normalized
-    try:
-        data = yaml.safe_load(match.group(1)) or {}
-    except Exception:
-        data = {}
-    return (
-        data if isinstance(data, dict) else {},
-        match.group(2),
-    )
-
-
-def _resolve_entrypoint(
-    skill_dir: Path,
-    frontmatter: dict[str, Any],
-) -> Path | None:
-    """解析入口文件路径
-
-    优先级：frontmatter.entrypoint → frontmatter.script →
-    scripts/main.py → scripts/run.py → scripts/skill.py → scripts/首个.py
-
-    参数:
-        skill_dir: 技能目录
-        frontmatter: frontmatter字典
-
-    返回:
-        Path | None: 入口文件路径
-    """
-    scripts_dir = skill_dir / "scripts"
-
-    entry = str(
-        frontmatter.get("entrypoint")
-        or frontmatter.get("script")
-        or ""
-    ).strip()
-    if entry:
-        candidate = skill_dir / entry
-        if candidate.exists():
-            return candidate
-        candidate = scripts_dir / entry
-        if candidate.exists():
-            return candidate
-
-    for name in _ENTRYPOINT_NAMES:
-        candidate = scripts_dir / name
-        if candidate.exists():
-            return candidate
-
-    if scripts_dir.exists():
-        py_files = sorted(scripts_dir.glob("*.py"))
-        if py_files:
-            return py_files[0]
-
-    return None
-
-
-def _load_skill_module(
-    script_path: Path,
-    sys_paths: list[str] | None = None,
-) -> Any:
-    """加载技能模块
-
-    参数:
-        script_path: 脚本路径
-        sys_paths: 额外sys.path
-
-    返回:
-        Any: 模块对象
-
-    异常:
-        ImportError: 加载失败
-    """
-    for p in sys_paths or []:
-        if p not in sys.path:
-            sys.path.insert(0, p)
-
-    module_name = f"_skill_{script_path.stem}_{hash(str(script_path))}"
-    spec = importlib.util.spec_from_file_location(
-        module_name, script_path
-    )
-    if spec is None or spec.loader is None:
-        raise ImportError(f"无法加载技能模块: {script_path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 class SkillpackLoader:
     """技能包加载器
 
@@ -244,14 +142,16 @@ class SkillpackLoader:
         if skill_md.exists() and not frontmatter:
             try:
                 text = skill_md.read_text(encoding="utf-8")
-                frontmatter, _ = _extract_frontmatter(text)
-            except Exception:
+                frontmatter, _ = self._extract_frontmatter(text)
+            except (yaml.YAMLError, OSError):
                 pass
 
         name = str(
             frontmatter.get("name") or skill_dir.name
         )
-        entrypoint = _resolve_entrypoint(skill_dir, frontmatter)
+        entrypoint = self._resolve_entrypoint(
+            skill_dir, frontmatter
+        )
         if entrypoint is None:
             logger.debug(
                 f"技能 {name} 未找到入口文件，跳过",
@@ -287,7 +187,7 @@ class SkillpackLoader:
             if not spec.enabled or spec.entrypoint is None:
                 continue
             try:
-                module = _load_skill_module(spec.entrypoint)
+                module = self._load_skill_module(spec.entrypoint)
 
                 if hasattr(module, "register"):
                     module.register(registry)
@@ -353,6 +253,113 @@ class SkillpackLoader:
             command="AI",
         )
         return registered
+
+    def _extract_frontmatter(
+        self, text: str
+    ) -> tuple[dict[str, Any], str]:
+        """从SKILL.md提取YAML frontmatter
+
+        参数:
+            text: SKILL.md内容
+
+        返回:
+            tuple[dict, str]: (frontmatter字典, 正文)
+        """
+        normalized = text.replace("\r\n", "\n")
+        if not normalized.startswith("---\n"):
+            return {}, normalized
+
+        match = re.match(
+            r"^---\n([\s\S]*?)\n---\n?([\s\S]*)$", normalized
+        )
+        if not match:
+            return {}, normalized
+        try:
+            data = yaml.safe_load(match.group(1)) or {}
+        except yaml.YAMLError:
+            data = {}
+        return (
+            data if isinstance(data, dict) else {},
+            match.group(2),
+        )
+
+    def _resolve_entrypoint(
+        self,
+        skill_dir: Path,
+        frontmatter: dict[str, Any],
+    ) -> Path | None:
+        """解析入口文件路径
+
+        优先级：frontmatter.entrypoint → frontmatter.script →
+        scripts/main.py → scripts/run.py → scripts/skill.py → scripts/首个.py
+
+        参数:
+            skill_dir: 技能目录
+            frontmatter: frontmatter字典
+
+        返回:
+            Path | None: 入口文件路径
+        """
+        scripts_dir = skill_dir / "scripts"
+
+        entry = str(
+            frontmatter.get("entrypoint")
+            or frontmatter.get("script")
+            or ""
+        ).strip()
+        if entry:
+            candidate = skill_dir / entry
+            if candidate.exists():
+                return candidate
+            candidate = scripts_dir / entry
+            if candidate.exists():
+                return candidate
+
+        for name in _ENTRYPOINT_NAMES:
+            candidate = scripts_dir / name
+            if candidate.exists():
+                return candidate
+
+        if scripts_dir.exists():
+            py_files = sorted(scripts_dir.glob("*.py"))
+            if py_files:
+                return py_files[0]
+
+        return None
+
+    def _load_skill_module(
+        self,
+        script_path: Path,
+        sys_paths: list[str] | None = None,
+    ) -> Any:
+        """加载技能模块
+
+        参数:
+            script_path: 脚本路径
+            sys_paths: 额外sys.path
+
+        返回:
+            Any: 模块对象
+
+        异常:
+            ImportError: 加载失败
+        """
+        for p in sys_paths or []:
+            if p not in sys.path:
+                sys.path.insert(0, p)
+
+        module_name = (
+            f"_skill_{script_path.stem}_{hash(str(script_path))}"
+        )
+        spec = importlib.util.spec_from_file_location(
+            module_name, script_path
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"无法加载技能模块: {script_path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
 
 
 skill_loader = SkillpackLoader()

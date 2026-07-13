@@ -7,6 +7,8 @@
 import hashlib
 import math
 
+__all__ = ["MemoryEmbeddingUtils"]
+
 _DEFAULT_PERSONA = "default"
 """默认人格名（未指定时回退）"""
 
@@ -37,59 +39,67 @@ _CONSOLIDATE_PROMPT = """请将以下对话记录摘要成一段简洁的记忆�
 4. 只返回摘要文本"""
 
 
-def _hash_bow_embedding(
-    text: str, dim: int = _EMBEDDING_DIM
-) -> list[float]:
-    """生成hash-bow嵌入向量
+class MemoryEmbeddingUtils:
+    """记忆嵌入与实体提取工具集
 
-    使用blake2b哈希将文本映射到固定维度向量，再L2归一化。
-    零外部依赖，适合作为默认嵌入方案。
-
-    参数:
-        text: 输入文本
-        dim: 嵌入维度
-
-    返回:
-        list[float]: 归一化后的嵌入向量
+    提供无外部依赖的哈希词袋嵌入与简单实体提取能力，
+    作为记忆系统的默认降级方案。
     """
-    vec = [0.0] * dim
-    if not text:
+
+    @staticmethod
+    def hash_bow_embedding(
+        text: str, dim: int = _EMBEDDING_DIM
+    ) -> list[float]:
+        """生成hash-bow嵌入向量
+
+        使用blake2b哈希将文本映射到固定维度向量，再L2归一化。
+        零外部依赖，适合作为默认嵌入方案。
+
+        参数:
+            text: 输入文本
+            dim: 嵌入维度
+
+        返回:
+            list[float]: 归一化后的嵌入向量
+        """
+        vec = [0.0] * dim
+        if not text:
+            return vec
+        words = text.split()
+        for word in words:
+            h = hashlib.blake2b(word.encode("utf-8"), digest_size=8).digest()
+            idx = int.from_bytes(h, "big") % dim
+            vec[idx] += 1.0
+        norm = math.sqrt(sum(x * x for x in vec))
+        if norm > 0:
+            vec = [x / norm for x in vec]
         return vec
-    words = text.split()
-    for word in words:
-        h = hashlib.blake2b(word.encode("utf-8"), digest_size=8).digest()
-        idx = int.from_bytes(h, "big") % dim
-        vec[idx] += 1.0
-    norm = math.sqrt(sum(x * x for x in vec))
-    if norm > 0:
-        vec = [x / norm for x in vec]
-    return vec
 
+    @staticmethod
+    def extract_entities_simple(text: str) -> list[dict]:
+        """简单实体提取
 
-def _extract_entities_simple(text: str) -> list[dict]:
-    """简单实体提取
+        基于关键词频率提取实体（无NLP依赖的简化方案）。
 
-    基于关键词频率提取实体（无NLP依赖的简化方案）。
+        参数:
+            text: 输入文本
 
-    参数:
-        text: 输入文本
-
-    返回:
-        list[dict]: 实体列表，每项含 name/type/weight
-    """
-    if not text:
-        return []
-    entities: list[dict] = []
-    words = text.split()
-    freq: dict[str, int] = {}
-    for word in words:
-        if len(word) >= 2:
-            freq[word] = freq.get(word, 0) + 1
-    sorted_words = sorted(
-        freq.items(), key=lambda x: x[1], reverse=True
-    )[:5]
-    for word, count in sorted_words:
-        entities.append(
-            {"name": word, "type": "keyword", "weight": float(count)}
-        )
-    return entities
+        返回:
+            list[dict]: 实体列表，每项含 name/type/weight
+        """
+        if not text:
+            return []
+        entities: list[dict] = []
+        words = text.split()
+        freq: dict[str, int] = {}
+        for word in words:
+            if len(word) >= 2:
+                freq[word] = freq.get(word, 0) + 1
+        sorted_words = sorted(
+            freq.items(), key=lambda x: x[1], reverse=True
+        )[:5]
+        for word, count in sorted_words:
+            entities.append(
+                {"name": word, "type": "keyword", "weight": float(count)}
+            )
+        return entities

@@ -12,7 +12,7 @@ from .capabilities import (
 from .manager import (
     GifSummary,
     ImageSummary,
-    build_vision_messages,
+    VisionUtils,
     summarize_gif,
     summarize_image,
 )
@@ -25,7 +25,7 @@ __all__ = [
     "VisionCapabilityInfo",
     "VisionCapabilityRouter",
     "VisionRouteResult",
-    "build_vision_messages",
+    "VisionUtils",
     "image_result_cache",
     "summarize_gif",
     "summarize_image",

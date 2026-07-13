@@ -12,7 +12,7 @@ from .members import (
 )
 from .mute import GroupMuteTracker, group_mute_tracker
 from .profile import (
-    build_group_style_prompt_block,
+    ProfileToolkit,
     extract_group_knowledge,
     extract_group_style,
     group_profile,
@@ -34,10 +34,10 @@ __all__ = [
     "GroupMuteTracker",
     "GroupSocialService",
     "ProfileService",
+    "ProfileToolkit",
     "RepeatContext",
     "RepeatFollow",
     "RepeatTracker",
-    "build_group_style_prompt_block",
     "extract_group_knowledge",
     "extract_group_style",
     "group_member_service",

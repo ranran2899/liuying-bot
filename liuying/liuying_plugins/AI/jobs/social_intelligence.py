@@ -18,7 +18,7 @@ from liuying.utils.message import MessageUtils
 
 from ..config import get_config
 from ..core.context import context_manager
-from ..core.group import build_group_style_prompt_block
+from ..core.group import ProfileToolkit
 from ..core.llm import llm_helper
 from ..core.social import social_gate, social_quota
 from ..models.group_context import GroupContextSnapshot
@@ -123,12 +123,9 @@ class SocialIntelligenceHelper:
         if not get_config("SOCIAL_INTELLIGENCE_ENABLED", True):
             return 0
 
-        try:
-            groups = await GroupContextSnapshot.filter(
-                is_active=True
-            ).all()
-        except Exception:
-            groups = []
+        groups = await GroupContextSnapshot.filter(
+            is_active=True
+        ).all()
         if not groups:
             return 0
 
@@ -264,7 +261,7 @@ class SocialIntelligenceHelper:
                     group.style
                 )
             )
-            style_prompt = build_group_style_prompt_block(style)
+            style_prompt = ProfileToolkit.build_group_style_prompt_block(style)
             return _GREETING_PROMPT.format(
                 greeting_type="早安",
                 time_period=time_period,
@@ -288,7 +285,7 @@ class SocialIntelligenceHelper:
                     group.style
                 )
             )
-            style_prompt = build_group_style_prompt_block(style)
+            style_prompt = ProfileToolkit.build_group_style_prompt_block(style)
             return _GREETING_PROMPT.format(
                 greeting_type="晚安",
                 time_period=time_period,
@@ -319,12 +316,9 @@ class SocialIntelligenceHelper:
 
         集成社交配额与门控检查。
         """
-        try:
-            groups = await GroupContextSnapshot.filter(
-                is_active=True
-            ).all()
-        except Exception:
-            groups = []
+        groups = await GroupContextSnapshot.filter(
+            is_active=True
+        ).all()
 
         daily_quota = get_config("SOCIAL_QUOTA_PER_USER", 5)
         cooldown = get_config("SOCIAL_QUOTA_COOLDOWN", 3600)

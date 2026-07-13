@@ -56,12 +56,9 @@ class ProactiveHelper:
         if context_manager.is_rest_time():
             return
 
-        try:
-            groups = await GroupContextSnapshot.filter(
-                is_active=True
-            ).all()
-        except Exception:
-            groups = []
+        groups = await GroupContextSnapshot.filter(
+            is_active=True
+        ).all()
 
         if not groups:
             return
@@ -207,15 +204,9 @@ class ProactiveHelper:
         daily_limit = get_config("PROACTIVE_DAILY_LIMIT", 3)
         sent_count = 0
 
-        try:
-            users = await UserInfo.filter(
-                favor_value__gte=_PROACTIVE_FAVOR_THRESHOLD
-            ).all()
-        except Exception as e:
-            logger.debug(
-                f"查询高好感用户失败: {e}", command="AI", e=e
-            )
-            return
+        users = await UserInfo.filter(
+            favor_value__gte=_PROACTIVE_FAVOR_THRESHOLD
+        ).all()
 
         if not users:
             return

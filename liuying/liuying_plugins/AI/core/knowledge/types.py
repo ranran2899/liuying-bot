@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .store import PluginView
+    from .plugin_view import PluginView
 
 
 @dataclass(slots=True)

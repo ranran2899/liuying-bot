@@ -10,8 +10,6 @@ from datetime import datetime, timedelta
 import json
 from typing import Any
 
-from liuying.utils.log import logger
-
 from ...models.group_context import GroupContextSnapshot
 from .repeat_follow import RepeatTracker
 
@@ -418,48 +416,41 @@ class GroupSocialService:
         参数:
             group_id: 群组ID
         """
+        roles = self._roles.get(group_id, {})
+        if not roles:
+            return
+        snapshot = await GroupContextSnapshot.get_or_create(
+            group_id
+        )
+        relationships = self.get_relationship_summary(
+            group_id, limit=20
+        )
+        extra_data: dict[str, Any] = {
+            "roles": {
+                uid: {
+                    "role": r.role,
+                    "activity": r.activity_score,
+                    "influence": r.influence_score,
+                }
+                for uid, r in roles.items()
+            },
+            "relationships": relationships,
+        }
+        existing_extra: dict[str, Any] = {}
         try:
-            roles = self._roles.get(group_id, {})
-            if not roles:
-                return
-            snapshot = await GroupContextSnapshot.get_or_create(
-                group_id
+            existing_extra = json.loads(
+                snapshot.extra or "{}"
             )
-            relationships = self.get_relationship_summary(
-                group_id, limit=20
-            )
-            extra_data: dict[str, Any] = {
-                "roles": {
-                    uid: {
-                        "role": r.role,
-                        "activity": r.activity_score,
-                        "influence": r.influence_score,
-                    }
-                    for uid, r in roles.items()
-                },
-                "relationships": relationships,
-            }
-            existing_extra: dict[str, Any] = {}
-            try:
-                existing_extra = json.loads(
-                    snapshot.extra or "{}"
-                )
-            except (json.JSONDecodeError, TypeError):
-                existing_extra = {}
-            existing_extra["social"] = extra_data
-            snapshot.extra = json.dumps(
-                existing_extra, ensure_ascii=False
-            )
-            snapshot.last_activity_time = datetime.now()
-            await snapshot.save(
-                update_fields=["extra", "last_activity_time"]
-            )
-        except Exception as e:
-            logger.debug(
-                f"持久化群社交数据失败: {e}",
-                command="AI",
-                e=e,
-            )
+        except (json.JSONDecodeError, TypeError):
+            existing_extra = {}
+        existing_extra["social"] = extra_data
+        snapshot.extra = json.dumps(
+            existing_extra, ensure_ascii=False
+        )
+        snapshot.last_activity_time = datetime.now()
+        await snapshot.save(
+            update_fields=["extra", "last_activity_time"]
+        )
 
 
 group_social = GroupSocialService()

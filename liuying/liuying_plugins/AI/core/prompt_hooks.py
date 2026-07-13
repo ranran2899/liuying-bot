@@ -20,8 +20,7 @@ from liuying.utils.log import logger
 __all__ = [
     "HookContext",
     "PromptHookRegistry",
-    "get_hook_registry",
-    "register_prompt_hook",
+    "hook_registry",
 ]
 
 
@@ -156,33 +155,5 @@ class PromptHookRegistry:
         return results
 
 
-_registry = PromptHookRegistry()
+hook_registry = PromptHookRegistry()
 """全局钩子注册表单例"""
-
-
-def get_hook_registry() -> PromptHookRegistry:
-    """获取全局钩子注册表
-
-    返回:
-        PromptHookRegistry: 钩子注册表
-    """
-    return _registry
-
-
-def register_prompt_hook(
-    name: str,
-    hook: PromptHook,
-    priority: int = 50,
-    phase: HookPhase = "system_context",
-) -> None:
-    """注册一个提示词钩子到全局注册表
-
-    参数:
-        name: 钩子名称
-        hook: 钩子函数
-        priority: 优先级（越小越先执行）
-        phase: 钩子阶段
-    """
-    _registry.register(
-        name, hook, priority=priority, phase=phase
-    )

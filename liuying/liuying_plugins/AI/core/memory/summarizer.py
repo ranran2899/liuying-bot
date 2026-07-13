@@ -79,35 +79,29 @@ class MemorySummarizer:
         summary = await self._generate_summary(memories)
         if not summary:
             return 0
-        try:
-            await MemoryItem.add_memory(
-                user_id=user_id,
-                content=self._build_content(memories),
-                summary=summary,
-                group_id=group_id,
-                tier="semantic",
-                salience=0.8,
-                is_protected=True,
-                persona_name=persona_name,
+        await MemoryItem.add_memory(
+            user_id=user_id,
+            content=self._build_content(memories),
+            summary=summary,
+            group_id=group_id,
+            tier="semantic",
+            salience=0.8,
+            is_protected=True,
+            persona_name=persona_name,
+        )
+        for mem in memories:
+            mem.tier = "background"
+            mem.reinforcement_count += 1
+            await mem.save(
+                update_fields=["tier", "reinforcement_count"]
             )
-            for mem in memories:
-                mem.tier = "background"
-                mem.reinforcement_count += 1
-                await mem.save(
-                    update_fields=["tier", "reinforcement_count"]
-                )
-            logger.info(
-                f"记忆摘要完成: user={user_id} "
-                f"persona={persona_name} "
-                f"summarized={len(memories)}",
-                command="AI",
-            )
-            return 1
-        except Exception as e:
-            logger.warning(
-                f"记忆摘要写入失败: {e}", command="AI", e=e
-            )
-            return 0
+        logger.info(
+            f"记忆摘要完成: user={user_id} "
+            f"persona={persona_name} "
+            f"summarized={len(memories)}",
+            command="AI",
+        )
+        return 1
 
     async def summarize_all_users(self) -> int:
         """摘要所有用户的工作记忆（定时任务入口）
@@ -118,18 +112,10 @@ class MemorySummarizer:
         cutoff = datetime.now() - timedelta(
             hours=_WORKING_AGE_HOURS
         )
-        try:
-            recent_memories = await MemoryItem.filter(
-                tier="working",
-                create_time__lt=cutoff,
-            ).all()
-        except Exception as e:
-            logger.warning(
-                f"查询待摘要记忆失败: {e}",
-                command="AI",
-                e=e,
-            )
-            return 0
+        recent_memories = await MemoryItem.filter(
+            tier="working",
+            create_time__lt=cutoff,
+        ).all()
         user_keys: set[tuple[str, str, str | None]] = set()
         for mem in recent_memories:
             user_keys.add(

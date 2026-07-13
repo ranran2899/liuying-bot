@@ -18,8 +18,8 @@ from ...config import get_config
 __all__ = [
     "RepeatContext",
     "RepeatFollow",
+    "RepeatFollowToolkit",
     "RepeatTracker",
-    "normalize_message",
     "repeat_follow",
 ]
 
@@ -36,23 +36,63 @@ _MAX_MESSAGE_LEN: int = 50
 """参与复读检测的最大消息长度"""
 
 
-def normalize_message(
-    text: str, max_len: int = _MAX_MESSAGE_LEN
-) -> str:
-    """文本归一化（用于复读检测与相似度计算）
+class RepeatFollowToolkit:
+    """复读跟随工具集
 
-    参数:
-        text: 原始文本
-        max_len: 最大长度截断
-
-    返回:
-        str: 归一化后的文本
+    提供消息归一化与文本相似度计算等无状态工具方法，
+    供 RepeatFollow 与 RepeatTracker 共享使用。
     """
-    if not text:
-        return ""
-    cleaned = re.sub(r"\s+", "", text.lower())
-    cleaned = re.sub(r"[^\w\u4e00-\u9fa5]+", "", cleaned)
-    return cleaned[:max_len]
+
+    @staticmethod
+    def normalize_message(
+        text: str, max_len: int = _MAX_MESSAGE_LEN
+    ) -> str:
+        """文本归一化（用于复读检测与相似度计算）
+
+        参数:
+            text: 原始文本
+            max_len: 最大长度截断
+
+        返回:
+            str: 归一化后的文本
+        """
+        if not text:
+            return ""
+        cleaned = re.sub(r"\s+", "", text.lower())
+        cleaned = re.sub(r"[^\w\u4e00-\u9fa5]+", "", cleaned)
+        return cleaned[:max_len]
+
+    @staticmethod
+    def text_similarity(
+        a: str, b: str, normalize_len: int = 100
+    ) -> float:
+        """计算两段文本的相似度（基于字符集合）
+
+        参数:
+            a: 文本a
+            b: 文本b
+            normalize_len: 归一化文本截断长度
+
+        返回:
+            float: 相似度（0-1）
+        """
+        na = RepeatFollowToolkit.normalize_message(
+            a, max_len=normalize_len
+        )
+        nb = RepeatFollowToolkit.normalize_message(
+            b, max_len=normalize_len
+        )
+        if not na or not nb:
+            return 0.0
+        if na == nb:
+            return 1.0
+        set_a = set(na)
+        set_b = set(nb)
+        intersection = set_a & set_b
+        union = set_a | set_b
+        if not union:
+            return 0.0
+        return len(intersection) / len(union)
 
 
 class _RepeatEntry:
@@ -166,7 +206,7 @@ class RepeatFollow:
         if len(message) > _MAX_MESSAGE_LEN:
             return False
 
-        key = normalize_message(message)
+        key = RepeatFollowToolkit.normalize_message(message)
         if not key:
             return False
 
@@ -218,9 +258,6 @@ _REPEAT_WINDOW_SECONDS = 300
 _REPEAT_MAX_FOLLOW_OFFSET = 2
 """复读最大跟随偏移量（超过阈值+偏移量后不再跟随）"""
 
-_SIMILARITY_NORMALIZE_LEN = 100
-"""相似度计算时的归一化文本截断长度"""
-
 
 @dataclass(slots=True)
 class RepeatContext:
@@ -239,31 +276,6 @@ class RepeatContext:
     participants: list[str] = field(default_factory=list)
     first_time: datetime | None = None
     last_time: datetime | None = None
-
-
-def _text_similarity(a: str, b: str) -> float:
-    """计算两段文本的相似度（基于字符集合）
-
-    参数:
-        a: 文本a
-        b: 文本b
-
-    返回:
-        float: 相似度（0-1）
-    """
-    na = normalize_message(a, max_len=_SIMILARITY_NORMALIZE_LEN)
-    nb = normalize_message(b, max_len=_SIMILARITY_NORMALIZE_LEN)
-    if not na or not nb:
-        return 0.0
-    if na == nb:
-        return 1.0
-    set_a = set(na)
-    set_b = set(nb)
-    intersection = set_a & set_b
-    union = set_a | set_b
-    if not union:
-        return 0.0
-    return len(intersection) / len(union)
 
 
 class RepeatTracker:
@@ -300,7 +312,7 @@ class RepeatTracker:
 
         for ctx in buffer:
             if (
-                _text_similarity(ctx.text, text)
+                RepeatFollowToolkit.text_similarity(ctx.text, text)
                 >= _REPEAT_SIMILARITY
             ):
                 if user_id not in ctx.participants:
@@ -342,7 +354,7 @@ class RepeatTracker:
 
         for ctx in buffer:
             if (
-                _text_similarity(ctx.text, text)
+                RepeatFollowToolkit.text_similarity(ctx.text, text)
                 >= _REPEAT_SIMILARITY
             ):
                 if ctx.count < _REPEAT_DETECT_THRESHOLD:

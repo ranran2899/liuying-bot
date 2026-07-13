@@ -15,6 +15,7 @@ from typing import Any
 from liuying.utils.log import logger
 
 from ..config import get_config
+from ..core.llm import LLMHelper
 from .runtime.execution.executor import ToolExecutor
 from .runtime.planning.planner import TurnPlanner
 from .runtime.planning.types import TurnPlan
@@ -80,7 +81,7 @@ class AgentRunner:
     @staticmethod
     async def run_agent(
         messages: list[dict[str, str]],
-        llm_helper,
+        llm_helper: LLMHelper,
         registry: ToolRegistry | None = None,
         max_steps: int | None = None,
         time_budget: float | None = None,

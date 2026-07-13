@@ -163,20 +163,14 @@ class EvolveMixin:
         返回:
             list[dict]: 候选旧记忆列表
         """
-        try:
-            results = await self.recall(
-                user_id=user_id,
-                query=new_summary,
-                group_id=group_id,
-                top_k=_MAX_CANDIDATES,
-                mode="fast",
-                persona_name=persona_name,
-            )
-        except Exception as e:
-            logger.debug(
-                f"进化候选召回失败: {e}", command="AI", e=e
-            )
-            return []
+        results = await self.recall(
+            user_id=user_id,
+            query=new_summary,
+            group_id=group_id,
+            top_k=_MAX_CANDIDATES,
+            mode="fast",
+            persona_name=persona_name,
+        )
         candidates: list[dict] = []
         for r in results:
             if r.get("id") == new_memory_id:

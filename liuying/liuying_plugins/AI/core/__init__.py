@@ -17,8 +17,7 @@ from .persona import PersonaManager, persona_manager
 from .prompt_hooks import (
     HookContext,
     PromptHookRegistry,
-    get_hook_registry,
-    register_prompt_hook,
+    hook_registry,
 )
 from .reply_turn_trace import (
     ReplyTurnTrace,
@@ -30,10 +29,10 @@ from .social import (
     SocialGate,
     SocialQuota,
     SocialTrigger,
-    list_social_triggers,
-    register_social_trigger,
+    SocialTriggerRegistry,
     social_gate,
     social_quota,
+    social_trigger_registry,
 )
 from .target_inference import (
     MessageTarget,
@@ -59,22 +58,21 @@ __all__ = [
     "SocialGate",
     "SocialQuota",
     "SocialTrigger",
+    "SocialTriggerRegistry",
     "TargetInference",
     "active_learning",
     "context_manager",
     "diagnostics",
     "emotion_manager",
-    "get_hook_registry",
-    "list_social_triggers",
+    "hook_registry",
     "llm_helper",
     "memory_manager",
     "peer_awareness",
     "persona_manager",
     "profile_service",
-    "register_prompt_hook",
-    "register_social_trigger",
     "reply_turn_trace",
     "social_gate",
     "social_quota",
+    "social_trigger_registry",
     "target_inference",
 ]

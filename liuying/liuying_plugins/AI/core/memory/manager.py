@@ -16,8 +16,7 @@ from ..knowledge_db import knowledge_base
 from ._common import (
     _DEFAULT_PERSONA,
     _EMBEDDING_DIM,
-    _extract_entities_simple,
-    _hash_bow_embedding,
+    MemoryEmbeddingUtils,
 )
 from .background_intelligence import background_intelligence
 from .consolidation import ConsolidationMixin
@@ -157,8 +156,10 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
             memory: 记忆项
         """
         search_text = f"{memory.summary} {memory.content}"
-        embedding = _hash_bow_embedding(search_text, self._embedding_dim)
-        entities = _extract_entities_simple(search_text)
+        embedding = MemoryEmbeddingUtils.hash_bow_embedding(
+            search_text, self._embedding_dim
+        )
+        entities = MemoryEmbeddingUtils.extract_entities_simple(search_text)
         await self._db.index_document(
             doc_id=memory.id,
             text=search_text,

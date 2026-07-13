@@ -101,36 +101,36 @@ class GroupMemberSnapshot:
     source: str = "db"
 
 
-def _user_data_to_member(
-    user: UserData, group_id: str
-) -> GroupMemberInfo:
-    """将 UserData 转为 GroupMemberInfo
-
-    参数:
-        user: UserData 实例
-        group_id: 群组ID
-
-    返回:
-        GroupMemberInfo: 群成员信息
-    """
-    return GroupMemberInfo(
-        user_id=str(getattr(user, "user_id", "") or ""),
-        nickname=getattr(user, "card", "") or getattr(user, "name", ""),
-        username=getattr(user, "name", ""),
-        group_id=group_id,
-        role=getattr(user, "role", "member") or "member",
-        avatar_url=getattr(user, "avatar_url", "") or "",
-        join_time=getattr(user, "join_time", None),
-        platform="",
-    )
-
-
 class GroupMemberService:
     """群成员服务
 
     整合 GroupInfoUser 数据库与 PlatformUtils 实时接口，
     提供群成员查询、缓存与统计能力。
     """
+
+    @staticmethod
+    def _user_data_to_member(
+        user: UserData, group_id: str
+    ) -> GroupMemberInfo:
+        """将 UserData 转为 GroupMemberInfo
+
+        参数:
+            user: UserData 实例
+            group_id: 群组ID
+
+        返回:
+            GroupMemberInfo: 群成员信息
+        """
+        return GroupMemberInfo(
+            user_id=str(getattr(user, "user_id", "") or ""),
+            nickname=getattr(user, "card", "") or getattr(user, "name", ""),
+            username=getattr(user, "name", ""),
+            group_id=group_id,
+            role=getattr(user, "role", "member") or "member",
+            avatar_url=getattr(user, "avatar_url", "") or "",
+            join_time=getattr(user, "join_time", None),
+            platform="",
+        )
 
     def __init__(self) -> None:
         """初始化群成员服务"""
@@ -187,39 +187,29 @@ class GroupMemberService:
         返回:
             GroupMemberSnapshot: 群成员快照
         """
-        try:
-            members_data = await GroupInfoUser.filter(
-                group_id=group_id
-            ).limit(500).all()
-            members: list[GroupMemberInfo] = []
-            for m in members_data:
-                members.append(
-                    GroupMemberInfo(
-                        user_id=m.user_id,
-                        nickname=m.nickname or m.user_name,
-                        username=m.user_name,
-                        group_id=group_id,
-                        role="member",
-                        platform=m.platform or "",
-                        join_time=m.user_join_time,
-                    )
+        members_data = await GroupInfoUser.filter(
+            group_id=group_id
+        ).limit(500).all()
+        members: list[GroupMemberInfo] = []
+        for m in members_data:
+            members.append(
+                GroupMemberInfo(
+                    user_id=m.user_id,
+                    nickname=m.nickname or m.user_name,
+                    username=m.user_name,
+                    group_id=group_id,
+                    role="member",
+                    platform=m.platform or "",
+                    join_time=m.user_join_time,
                 )
-            return GroupMemberSnapshot(
-                group_id=group_id,
-                members=members,
-                total=len(members),
-                update_time=datetime.now(),
-                source="db",
             )
-        except Exception as e:
-            logger.debug(
-                f"从数据库获取群成员失败: {e}",
-                command="AI",
-                e=e,
-            )
-            return GroupMemberSnapshot(
-                group_id=group_id, source="db"
-            )
+        return GroupMemberSnapshot(
+            group_id=group_id,
+            members=members,
+            total=len(members),
+            update_time=datetime.now(),
+            source="db",
+        )
 
     async def get_members_realtime(
         self, bot: Any, group_id: str
@@ -238,7 +228,7 @@ class GroupMemberService:
                 bot, group_id
             )
             members: list[GroupMemberInfo] = [
-                _user_data_to_member(u, group_id) for u in users
+                GroupMemberService._user_data_to_member(u, group_id) for u in users
             ]
             snapshot = GroupMemberSnapshot(
                 group_id=group_id,
@@ -330,7 +320,7 @@ class GroupMemberService:
                     bot, user_id, group_id=group_id
                 )
                 if user:
-                    return _user_data_to_member(user, group_id)
+                    return GroupMemberService._user_data_to_member(user, group_id)
             except Exception as e:
                 logger.debug(
                     f"获取单个群成员失败: {e}",
@@ -376,18 +366,11 @@ class GroupMemberService:
         返回:
             str: 昵称（无则返回空串）
         """
-        try:
-            nickname = await GroupInfoUser.get_user_nickname(
-                user_id, group_id
-            )
-            if nickname:
-                return nickname
-        except Exception as e:
-            logger.debug(
-                f"获取群成员昵称失败: {e}",
-                command="AI",
-                e=e,
-            )
+        nickname = await GroupInfoUser.get_user_nickname(
+            user_id, group_id
+        )
+        if nickname:
+            return nickname
 
         member = await self.get_member(
             group_id, user_id, bot=bot

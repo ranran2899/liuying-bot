@@ -5,9 +5,9 @@
 支持多维度检索、智能召回、知识块构建与查询日志。
 """
 
+from .plugin_view import PluginView
 from .store import (
     KnowledgeStore,
-    PluginView,
     knowledge_store,
 )
 from .types import KnowledgeStats, RecallResult

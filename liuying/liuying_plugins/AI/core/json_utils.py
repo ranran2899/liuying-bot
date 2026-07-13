@@ -62,33 +62,33 @@ def extract_json_payload(raw: str) -> dict[str, Any] | None:
     try:
         parsed = json.loads(text)
         return parsed if isinstance(parsed, dict) else None
-    except Exception:
+    except json.JSONDecodeError:
         pass
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text).rstrip("`").strip()
         try:
             parsed = json.loads(text)
             return parsed if isinstance(parsed, dict) else None
-        except Exception:
+        except json.JSONDecodeError:
             pass
     repaired = _repair_unquoted_json_values(text)
     try:
         parsed = json.loads(repaired)
         return parsed if isinstance(parsed, dict) else None
-    except Exception:
+    except json.JSONDecodeError:
         pass
     match = re.search(r"\{[\s\S]*\}", text)
     if not match:
         return None
     try:
         parsed = json.loads(match.group(0))
-    except Exception:
+    except json.JSONDecodeError:
         # 即使正则提取的块解析失败，也尝试修复一次
         repaired_block = _repair_unquoted_json_values(
             match.group(0)
         )
         try:
             parsed = json.loads(repaired_block)
-        except Exception:
+        except json.JSONDecodeError:
             return None
     return parsed if isinstance(parsed, dict) else None

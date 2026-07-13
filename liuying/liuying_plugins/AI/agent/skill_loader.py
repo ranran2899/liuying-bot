@@ -308,7 +308,7 @@ class RemoteSkillLoader:
                 content = await asyncio.to_thread(
                     py_file.read_text, "utf-8"
                 )
-            except Exception as e:
+            except OSError as e:
                 result["issues"].append(
                     f"读取失败 {py_file.name}: {e}"
                 )

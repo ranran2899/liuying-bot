@@ -9,16 +9,13 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 
-from liuying.utils.log import logger
-
 from ...models.memory_item import MemoryItem
 from ._common import (
     _DEFAULT_PERSONA,
     _EMBEDDING_DIM,
     _EPISODIC_EXPIRE_DAYS,
     _RRF_K,
-    _extract_entities_simple,
-    _hash_bow_embedding,
+    MemoryEmbeddingUtils,
 )
 from .search_ranker import search_ranker
 
@@ -60,91 +57,83 @@ class RecallMixin:
         """
         if not query or not query.strip():
             return []
-        try:
-            # 5 路召回并行执行，避免串行 5x 耗时
-            fts_task = self._search_fts(query, top_k * 3)
-            vector_task = self._search_vector(query, top_k * 3)
-            embedding_task = self._search_embedding(query, top_k * 3)
-            entity_task = self._search_entity(query, top_k * 3)
-            time_task = self._search_time(
-                query,
-                top_k * 3,
-                user_id=user_id,
-                group_id=group_id,
-                persona_name=persona_name,
+        # 5 路召回并行执行，避免串行 5x 耗时
+        fts_task = self._search_fts(query, top_k * 3)
+        vector_task = self._search_vector(query, top_k * 3)
+        embedding_task = self._search_embedding(query, top_k * 3)
+        entity_task = self._search_entity(query, top_k * 3)
+        time_task = self._search_time(
+            query,
+            top_k * 3,
+            user_id=user_id,
+            group_id=group_id,
+            persona_name=persona_name,
+        )
+        fts_res, vec_res, emb_res, ent_res, time_res = (
+            await asyncio.gather(
+                fts_task,
+                vector_task,
+                embedding_task,
+                entity_task,
+                time_task,
             )
-            fts_res, vec_res, emb_res, ent_res, time_res = (
-                await asyncio.gather(
-                    fts_task,
-                    vector_task,
-                    embedding_task,
-                    entity_task,
-                    time_task,
-                )
-            )
-            candidates: dict[str, list[tuple[int, float]]] = {
-                "fts": fts_res,
-                "vector": vec_res,
-                "embedding": emb_res,
-                "entity": ent_res,
-                "time": time_res,
-            }
-            fused = self._fuse_recall(candidates)
-            if not fused:
-                return []
-            # 批量查询记忆项，避免 N+1 查询
-            # 取 top_k * 2 候选用于重排序后再截断
-            candidate_count = min(len(fused), top_k * 2)
-            top_ids = [mid for mid, _ in fused[:candidate_count]]
-            memories = await MemoryItem.filter(id__in=top_ids).all()
-            mem_by_id = {m.id: m for m in memories}
-
-            # 构建重排序候选列表，按 user_id 与 persona_name 双重过滤
-            rerank_list: list[tuple[float, MemoryItem]] = []
-            for mid, rrf_score in fused[:candidate_count]:
-                memory = mem_by_id.get(mid)
-                if (
-                    memory
-                    and memory.user_id == user_id
-                    and memory.persona_name == persona_name
-                ):
-                    rerank_list.append((rrf_score, memory))
-
-            # search_ranker 综合重排序
-            scored: list[tuple[float, MemoryItem]] = []
-            for rrf_score, memory in rerank_list:
-                payload = self._memory_to_rank_payload(memory)
-                final_score = search_ranker.rank_memory_payload(
-                    payload,
-                    query=query,
-                    base_score=rrf_score,
-                    requested_group_id=group_id or "",
-                    requested_user_id=user_id,
-                )
-                scored.append((final_score, memory))
-
-            scored.sort(key=lambda x: x[0], reverse=True)
-
-            results = []
-            for final_score, memory in scored[:top_k]:
-                results.append(
-                    {
-                        "id": memory.id,
-                        "summary": memory.summary,
-                        "content": memory.content,
-                        "tier": memory.tier,
-                        "score": final_score,
-                    }
-                )
-                await self.access(memory.id)
-            return results
-        except Exception as e:
-            logger.warning(
-                f"记忆召回失败，降级到无记忆模式: {e}",
-                command="AI",
-                e=e,
-            )
+        )
+        candidates: dict[str, list[tuple[int, float]]] = {
+            "fts": fts_res,
+            "vector": vec_res,
+            "embedding": emb_res,
+            "entity": ent_res,
+            "time": time_res,
+        }
+        fused = self._fuse_recall(candidates)
+        if not fused:
             return []
+        # 批量查询记忆项，避免 N+1 查询
+        # 取 top_k * 2 候选用于重排序后再截断
+        candidate_count = min(len(fused), top_k * 2)
+        top_ids = [mid for mid, _ in fused[:candidate_count]]
+        memories = await MemoryItem.filter(id__in=top_ids).all()
+        mem_by_id = {m.id: m for m in memories}
+
+        # 构建重排序候选列表，按 user_id 与 persona_name 双重过滤
+        rerank_list: list[tuple[float, MemoryItem]] = []
+        for mid, rrf_score in fused[:candidate_count]:
+            memory = mem_by_id.get(mid)
+            if (
+                memory
+                and memory.user_id == user_id
+                and memory.persona_name == persona_name
+            ):
+                rerank_list.append((rrf_score, memory))
+
+        # search_ranker 综合重排序
+        scored: list[tuple[float, MemoryItem]] = []
+        for rrf_score, memory in rerank_list:
+            payload = self._memory_to_rank_payload(memory)
+            final_score = search_ranker.rank_memory_payload(
+                payload,
+                query=query,
+                base_score=rrf_score,
+                requested_group_id=group_id or "",
+                requested_user_id=user_id,
+            )
+            scored.append((final_score, memory))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        results = []
+        for final_score, memory in scored[:top_k]:
+            results.append(
+                {
+                    "id": memory.id,
+                    "summary": memory.summary,
+                    "content": memory.content,
+                    "tier": memory.tier,
+                    "score": final_score,
+                }
+            )
+            await self.access(memory.id)
+        return results
 
     @staticmethod
     def _memory_to_rank_payload(
@@ -226,7 +215,9 @@ class RecallMixin:
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
-        query_vec = _hash_bow_embedding(query, self._embedding_dim)
+        query_vec = MemoryEmbeddingUtils.hash_bow_embedding(
+            query, self._embedding_dim
+        )
         return await self._db.search_vector(query_vec, limit)
 
     async def _search_embedding(
@@ -244,7 +235,9 @@ class RecallMixin:
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
-        query_vec = _hash_bow_embedding(query, self._embedding_dim)
+        query_vec = MemoryEmbeddingUtils.hash_bow_embedding(
+            query, self._embedding_dim
+        )
         return await self._db.search_embedding(query_vec, limit)
 
     async def _search_time(
@@ -300,7 +293,7 @@ class RecallMixin:
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
-        entities = _extract_entities_simple(query)
+        entities = MemoryEmbeddingUtils.extract_entities_simple(query)
         entity_names = [e["name"] for e in entities]
         return await self._db.search_entity(entity_names, limit)
 

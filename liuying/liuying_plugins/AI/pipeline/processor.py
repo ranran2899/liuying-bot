@@ -3,10 +3,11 @@
 整合权限检查、群禁言感知、人格管理、记忆召回、上下文压缩、
 Agent循环、安全过滤、拟人化处理、贴纸决策、碎片化分段、
 持久化等环节，构建完整的对话回复流水线。
+
+提示词组装委托给 PromptBuilder，回复生成委托给 ReplyGenerator。
 """
 
 import asyncio
-from datetime import datetime
 import random
 import time
 from typing import Any
@@ -16,48 +17,27 @@ from nonebot_plugin_alconna import Image
 from liuying.models.ban_console import BanConsole
 from liuying.utils.log import logger
 
-from ..agent.runner import AgentResult, AgentRunner
+from ..agent.runner import AgentResult
 from ..config import get_config
 from ..core.active_learning import active_learning
-from ..core.context import ContextPolicy, context_manager, thread_tracker
-from ..core.emotion import emotion_manager
-from ..core.group import (
-    GroupMuteTracker,
-    build_group_style_prompt_block,
-    group_profile,
-    group_social,
-)
+from ..core.context import ContextPolicy
+from ..core.group import GroupMuteTracker
 from ..core.llm import (
     TokenTrackingHelper,
     llm_helper,
 )
-from ..core.memory import memory_manager
 from ..core.peer_awareness import peer_awareness
 from ..core.persona import persona_manager
-from ..core.prompt_hooks import HookContext, get_hook_registry
 from ..core.reply_turn_trace import reply_turn_trace
-from ..core.safety import (
-    SafetyFilter,
-    SafetyRefusalError,
-    token_quota_service,
-)
-from ..core.vision import summarize_image, vision_router
+from ..core.safety import token_quota_service
 from ..models.conversation_record import ConversationRecord
 from .helpers import ReplyPipeline
-from .humanize import HumanizeToolkit
+from .prompt_builder import PromptBuilder
+from .reply_generator import ReplyGenerator
 from .response_review import response_reviewer
 from .sticker import sticker_manager
-from .style_policy import ReplyStylePolicy
 from .text_policy import ReplyTextPolicy
 from .types import ReplyContext, ReplyResult
-
-_FALLBACK_REPLIES: list[str] = [
-    "嗯...让我想想",
-    "稍等一下~",
-    "我有点没理解，能再说一遍吗",
-    "抱歉刚才走神了",
-]
-"""兜底回复池"""
 
 _TTS_AUTO_TEXT_MIN_LEN = 5
 """自动TTS最小文本长度"""
@@ -73,7 +53,13 @@ class ReplyProcessor:
     """回复处理器
 
     整合所有core服务和pipeline组件，编排完整的对话回复流程。
+    提示词构建委托给 PromptBuilder，回复生成委托给 ReplyGenerator。
     """
+
+    def __init__(self) -> None:
+        """初始化回复处理器"""
+        self._prompt_builder = PromptBuilder()
+        self._reply_generator = ReplyGenerator()
 
     async def _check_permission(
         self, ctx: ReplyContext
@@ -86,19 +72,12 @@ class ReplyProcessor:
         返回:
             bool: 是否允许回复
         """
-        try:
-            if await BanConsole.is_ban(ctx.user_id, ctx.group_id):
-                logger.debug(
-                    f"用户被ban，跳过回复: {ctx.user_id}",
-                    command="AI",
-                )
-                return False
-        except Exception as e:
+        if await BanConsole.is_ban(ctx.user_id, ctx.group_id):
             logger.debug(
-                f"权限检查异常（继续回复）: {e}",
+                f"用户被ban，跳过回复: {ctx.user_id}",
                 command="AI",
-                e=e,
             )
+            return False
 
         if ctx.group_id and get_config("GROUP_MUTE_AWARE", True):
             if GroupMuteTracker.is_group_muted(ctx.group_id):
@@ -124,200 +103,6 @@ class ReplyProcessor:
 
         return True
 
-    async def _refresh_mute_state(
-        self, ctx: ReplyContext, bot: Any
-    ) -> None:
-        """主动刷新群禁言状态
-
-        参数:
-            ctx: 回复上下文
-            bot: Bot对象
-        """
-        if not ctx.group_id or not bot:
-            return
-        if not get_config("GROUP_MUTE_AWARE", True):
-            return
-        try:
-            await GroupMuteTracker.refresh_bot_group_mute_state(
-                bot, ctx.group_id
-            )
-        except Exception as e:
-            logger.debug(
-                f"刷新群禁言状态失败: {e}",
-                command="AI",
-                e=e,
-            )
-
-    async def _build_system_prompt(
-        self, ctx: ReplyContext, history: list[dict[str, str]]
-    ) -> str:
-        """构建系统提示词
-
-        使用用户当前激活的人格构建提示词，并注入对应人格的
-        情绪状态与记忆，确保人设间数据隔离。
-        同时执行提示词钩子注册表中的钩子，支持热插拔注入。
-
-        参数:
-            ctx: 回复上下文
-            history: 历史消息列表（用于anti-loop检测）
-
-        返回:
-            str: 完整系统提示词
-        """
-        persona = await persona_manager.get_user_persona_config(
-            ctx.user_id
-        )
-        base_prompt = await persona_manager.build_system_prompt(
-            persona, ctx.user_id, ctx.group_id
-        )
-
-        context_prompt = await context_manager.build_full_context_prompt(
-            ctx.group_id
-        )
-
-        emotion_prompt = await emotion_manager.build_emotion_prompt_for_user(
-            ctx.user_id, ctx.group_id, persona_name=ctx.persona_name
-        )
-
-        memory_prompt = ""
-        if get_config("MEMORY_ENABLED", True):
-            try:
-                memory_prompt = await memory_manager.build_memory_prompt(
-                    ctx.user_id,
-                    ctx.text,
-                    ctx.group_id,
-                    top_k=get_config("MEMORY_RECALL_TOP_K", 5),
-                    persona_name=ctx.persona_name,
-                )
-            except Exception as e:
-                logger.debug(
-                    f"记忆召回失败，降级到无记忆模式: {e}",
-                    command="AI",
-                    e=e,
-                )
-
-        # 构建提示词钩子上下文
-        hook_ctx = HookContext(
-            user_id=ctx.user_id,
-            group_id=ctx.group_id or "",
-            is_private=ctx.is_private,
-            message_text=ctx.text,
-            has_image_input=ctx.image_data is not None,
-            current_time_str=datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-            persona_name=ctx.persona_name,
-        )
-        registry = get_hook_registry()
-
-        # system_prelude 钩子：在基础提示词之前注入
-        prelude_chunks = await registry.run_all(
-            hook_ctx, phase="system_prelude"
-        )
-
-        parts = [base_prompt, context_prompt, emotion_prompt, memory_prompt]
-
-        # system_context 钩子：在记忆之后注入上下文补充
-        context_chunks = await registry.run_all(
-            hook_ctx, phase="system_context"
-        )
-        parts.extend(context_chunks)
-
-        parts.append(context_manager.get_time_flavor_prompt())
-
-        if ctx.group_id:
-            try:
-                style = await group_profile.get_or_extract_style(
-                    ctx.group_id, ctx.text, llm_helper
-                )
-                style_prompt = build_group_style_prompt_block(style)
-                if style_prompt:
-                    parts.append(style_prompt)
-            except Exception as e:
-                logger.debug(
-                    f"注入群风格失败: {e}", command="AI", e=e
-                )
-
-            # 话题线程追踪：记录用户消息并注入当前话题上下文
-            if get_config("THREAD_TRACKER_ENABLED", True):
-                try:
-                    thread_tracker.track_message(
-                        group_id=ctx.group_id,
-                        user_id=ctx.user_id,
-                        text=ctx.text,
-                    )
-                    thread_ctx = thread_tracker.get_thread_context(
-                        ctx.group_id
-                    )
-                    if thread_ctx:
-                        parts.append(
-                            f"\n{thread_ctx}\n"
-                        )
-                except Exception as e:
-                    logger.debug(
-                        f"话题线程追踪失败: {e}",
-                        command="AI",
-                        e=e,
-                    )
-
-            # 注入群社交上下文（角色/关系/复读跟随提示）
-            if get_config("SOCIAL_INTELLIGENCE_ENABLED", True):
-                try:
-                    social_prompt = (
-                        group_social.build_social_prompt_block(
-                            ctx.group_id, ctx.user_id
-                        )
-                    )
-                    if social_prompt:
-                        parts.append(social_prompt)
-                except Exception as e:
-                    logger.debug(
-                        f"注入群社交上下文失败: {e}",
-                        command="AI",
-                        e=e,
-                    )
-
-        if get_config("SAFETY_FILTER_ENABLED", True):
-            parts.append(SafetyFilter.build_prompt_injection_guard())
-
-        # 注入回复风格策略：防止堆砌网络热词/模板化口癖
-        has_visual = ctx.image_data is not None
-        parts.append(
-            ReplyStylePolicy.build_style_policy_prompt(
-                has_visual_context=has_visual,
-            )
-        )
-        if has_visual:
-            parts.append(
-                ReplyStylePolicy.build_visual_identity_guard()
-            )
-
-        # 注入环境感知提示词（提醒AI不要将其他插件/其他bot功能说成自己能力）
-        if get_config("PEER_AWARENESS_ENABLED", True):
-            parts.append(peer_awareness.build_peer_awareness_prompt())
-
-        if (
-            ctx.group_id
-            and get_config("FRAGMENT_STYLE", "prompt") == "prompt"
-        ):
-            parts.append(HumanizeToolkit.build_group_chat_style_prompt())
-
-        anti_loop = ContextPolicy.build_anti_loop_hint(history)
-        if anti_loop:
-            parts.append(anti_loop)
-
-        # system_postlude 钩子：在所有提示词组装完成后注入
-        postlude_chunks = await registry.run_all(
-            hook_ctx, phase="system_postlude"
-        )
-        parts.extend(postlude_chunks)
-
-        # prelude 作为最前置内容
-        if prelude_chunks:
-            parts = prelude_chunks + parts
-
-        return "".join(parts)
-
     async def _load_history(
         self, ctx: ReplyContext
     ) -> list[dict[str, str]]:
@@ -329,21 +114,15 @@ class ReplyProcessor:
         返回:
             list[dict]: 历史消息列表（按时间正序）
         """
-        try:
-            records = await ConversationRecord.get_history(
-                ctx.user_id, ctx.group_id,
-                limit=get_config("HISTORY_LEN", 20),
-                persona_name=ctx.persona_name,
-            )
-            history = [
-                {"role": r.role, "content": r.content}
-                for r in reversed(records)
-            ]
-        except Exception as e:
-            logger.debug(
-                f"加载历史对话失败: {e}", command="AI", e=e
-            )
-            return []
+        records = await ConversationRecord.get_history(
+            ctx.user_id, ctx.group_id,
+            limit=get_config("HISTORY_LEN", 20),
+            persona_name=ctx.persona_name,
+        )
+        history = [
+            {"role": r.role, "content": r.content}
+            for r in reversed(records)
+        ]
 
         if not history or not get_config("CONTEXT_COMPRESS_ENABLED", True):
             return history
@@ -397,227 +176,6 @@ class ReplyProcessor:
                 e=e,
             )
             return history
-
-    async def _describe_image_for_text(
-        self, ctx: ReplyContext
-    ) -> str:
-        """为纯文本对话生成图片描述注入
-
-        当 provider 不支持视觉或视觉路由失败时，使用
-        summarize_image 获取描述，并拼接到用户消息文本中。
-
-        参数:
-            ctx: 回复上下文（含图片数据）
-
-        返回:
-            str: 图片描述文本，失败返回空串
-        """
-        if not ctx.image_data:
-            return ""
-        try:
-            summary = await summarize_image(
-                ctx.image_data,
-                mime=ctx.image_mime,
-                llm_helper=llm_helper,
-            )
-            if summary.success and summary.description:
-                return summary.description.strip()
-            return ""
-        except Exception as e:
-            logger.debug(
-                f"图片描述生成失败: {e}", command="AI", e=e
-            )
-            return ""
-
-    async def _resolve_vision_route(
-        self, ctx: ReplyContext
-    ) -> tuple[str | None, str | None, bool]:
-        """解析视觉能力路由
-
-        当上下文含图片时，调用 vision_router 路由到支持视觉的
-        provider；返回 (provider, model, use_multimodal)。
-
-        参数:
-            ctx: 回复上下文
-
-        返回:
-            tuple: (provider名, 模型名, 是否使用多模态消息)
-        """
-        if not ctx.image_data:
-            return None, None, False
-        try:
-            route = await vision_router.route_vision_request()
-            if route.success:
-                return route.provider or None, (
-                    route.model or None
-                ), True
-            return None, None, False
-        except Exception as e:
-            logger.debug(
-                f"视觉路由解析失败，降级到文本描述: {e}",
-                command="AI",
-                e=e,
-            )
-            return None, None, False
-
-    async def _generate_reply(
-        self,
-        messages: list[dict[str, str]],
-        ctx: ReplyContext,
-    ) -> tuple[str, AgentResult | None]:
-        """生成回复
-
-        Agent启用时走Agent循环，否则直接LLM对话。
-        启用安全过滤时包裹LLM调用，命中拒绝模板则重试一次。
-        当上下文含图片时：先尝试通过视觉路由切换多模态消息；
-        路由失败则降级到图片描述注入文本。
-
-        参数:
-            messages: 完整消息列表
-            ctx: 回复上下文
-
-        返回:
-            tuple[str, AgentResult | None]: (回复文本, Agent结果)
-        """
-        use_messages: list[dict[str, Any]] = list(messages)
-        vision_provider: str | None = None
-        vision_model: str | None = None
-
-        if ctx.image_data:
-            try:
-                vp, vm, use_mm = await self._resolve_vision_route(
-                    ctx
-                )
-                if use_mm:
-                    vision_provider = vp
-                    vision_model = vm
-                    use_messages = ReplyPipeline.build_vision_messages(
-                        messages[0].get("content", "") if messages else "",
-                        [
-                            m for m in messages
-                            if m.get("role") != "system"
-                        ],
-                        ctx,
-                    )
-                else:
-                    desc = await self._describe_image_for_text(ctx)
-                    if desc:
-                        ctx_text = ctx.text or ""
-                        ctx.text = (
-                            f"{ctx_text}\n[用户附带图片描述: {desc}]"
-                            if ctx_text
-                            else f"[用户发了一张图片: {desc}]"
-                        )
-                        use_messages = ReplyPipeline.build_messages(
-                            messages[0].get("content", "") if messages else "",
-                            [
-                                m for m in messages
-                                if m.get("role") != "system"
-                            ],
-                            ctx,
-                        )
-            except Exception as e:
-                logger.warning(
-                    f"视觉处理失败，使用原消息: {e}",
-                    command="AI",
-                    e=e,
-                )
-
-        if get_config("AGENT_ENABLED", True):
-            try:
-                result = await AgentRunner.run_agent(
-                    use_messages,
-                    llm_helper,
-                    user_id=ctx.user_id,
-                    group_id=ctx.group_id,
-                    use_llm_planning=True,
-                    persona_name=ctx.persona_name,
-                )
-                if (
-                    result.response
-                    and result.response.recommend_silence
-                ):
-                    return "", result
-                return result.text, result
-            except Exception as e:
-                logger.warning(
-                    f"Agent执行失败，降级到普通对话: {e}",
-                    command="AI",
-                    e=e,
-                )
-
-        if not get_config("SAFETY_FILTER_ENABLED", True):
-            try:
-                reply_text = await llm_helper.chat_text(
-                    use_messages,
-                    model=vision_model,
-                    provider_name=vision_provider,
-                )
-                return reply_text, None
-            except Exception as e:
-                logger.error(
-                    f"LLM对话调用失败: {e}", command="AI", e=e
-                )
-                return random.choice(_FALLBACK_REPLIES), None
-
-        retry_messages = list(use_messages)
-        retry_messages.append(
-            {
-                "role": "system",
-                "content": (
-                    "\n[重要提示] 请直接以流萤的身份回复，"
-                    "不要使用模板化拒绝用语，不要提及自己是AI或助手。"
-                    "如果确实无法回答，简短说一句即可。"
-                ),
-            }
-        )
-
-        try:
-
-            async def _first_call() -> str:
-                """首次LLM调用
-
-                返回:
-                    str: LLM回复文本
-                """
-                return await llm_helper.chat_text(
-                    use_messages,
-                    model=vision_model,
-                    provider_name=vision_provider,
-                )
-
-            async def _retry_call() -> str:
-                """重试LLM调用
-
-                返回:
-                    str: LLM回复文本
-                """
-                return await llm_helper.chat_text(
-                    retry_messages,
-                    model=vision_model,
-                    provider_name=vision_provider,
-                )
-
-            reply_text = await SafetyFilter.sanitize_or_retry(
-                call=_first_call,
-                retry_call=_retry_call,
-                extract=lambda r: r or "",
-                purpose="chat",
-            )
-            return reply_text, None
-        except SafetyRefusalError as e:
-            logger.warning(
-                f"安全过滤拦截，丢弃本轮回复: source={e.source} "
-                f"reason={e.reason}",
-                command="AI",
-                e=e,
-            )
-            return "", None
-        except Exception as e:
-            logger.error(
-                f"LLM对话调用失败: {e}", command="AI", e=e
-            )
-            return random.choice(_FALLBACK_REPLIES), None
 
     async def _decide_sticker(
         self,
@@ -808,7 +366,9 @@ class ReplyProcessor:
             key="load_history",
             label=f"加载历史{len(history)}条",
         )
-        system_prompt = await self._build_system_prompt(ctx, history)
+        system_prompt = await self._prompt_builder.build_system_prompt(
+            ctx, history
+        )
         reply_turn_trace.record_stage(
             trace_id=trace_id, key="build_prompt", label="构建提示词完成"
         )
@@ -819,7 +379,7 @@ class ReplyProcessor:
         # 开启会话级 token 用量追踪，统计本轮所有 LLM 调用消耗
         track_token = TokenTrackingHelper.start_conversation_tracking()
         try:
-            reply_text, agent_result = await self._generate_reply(
+            reply_text, agent_result = await self._reply_generator.generate_reply(
                 messages, ctx
             )
         finally:
@@ -833,17 +393,10 @@ class ReplyProcessor:
             detail=f"长度={len(reply_text)}",
         )
 
-        # 按实际消耗扣费（失败不影响已生成回复的发送）
-        try:
-            await token_quota_service.consume_after_conversation(
-                ctx.user_id, usage
-            )
-        except Exception as e:
-            logger.debug(
-                f"用户额度扣费失败（不影响回复）: {e}",
-                command="AI",
-                e=e,
-            )
+        # 按实际消耗扣费（内部已处理异常，失败不影响已生成回复的发送）
+        await token_quota_service.consume_after_conversation(
+            ctx.user_id, usage
+        )
 
         # 响应深度审查：LLM二次审核回复质量与安全
         review = await response_reviewer.review(
