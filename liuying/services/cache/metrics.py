@@ -2,15 +2,13 @@
 缓存指标数据结构
 
 定义缓存监控的核心数据结构，包括指标和监控数据。
-支持P50/P95/P99延迟统计和内存使用统计。
+支持P50/P95/P99延迟统计。
 """
 
 from collections import defaultdict
 from dataclasses import dataclass, field
 import math
-import sys
 import time
-from typing import Any
 
 
 @dataclass(slots=True)
@@ -104,85 +102,6 @@ class LatencyStats:
 
 
 @dataclass(slots=True)
-class MemoryStats:
-    """内存使用统计"""
-
-    total_entries: int = 0
-    """总缓存条目数"""
-    estimated_size_bytes: int = 0
-    """估算内存占用（字节）"""
-    max_entries: int = 0
-    """最大条目数限制"""
-
-    @property
-    def estimated_size_mb(self) -> float:
-        """估算内存占用（MB）"""
-        return self.estimated_size_bytes / (1024 * 1024)
-
-    @property
-    def avg_entry_size(self) -> float:
-        """平均条目大小（字节）"""
-        return (
-            self.estimated_size_bytes / self.total_entries
-            if self.total_entries > 0
-            else 0.0
-        )
-
-    def update(self, entries: int, size_bytes: int) -> None:
-        """更新内存统计
-
-        参数:
-            entries: 条目数
-            size_bytes: 内存占用（字节）
-        """
-        self.total_entries = entries
-        self.estimated_size_bytes = size_bytes
-
-
-def estimate_object_size(obj: Any, _seen: set[int] | None = None) -> int:
-    """估算对象内存大小
-
-    使用 _seen 集合检测循环引用，防止递归栈溢出。
-
-    参数:
-        obj: 要估算的对象
-        _seen: 已访问对象的 id 集合（内部递归使用）
-
-    返回:
-        int: 估算大小（字节）
-    """
-    if obj is None:
-        return 0
-
-    obj_id = id(obj)
-    if _seen is None:
-        _seen = set()
-    if obj_id in _seen:
-        return 0
-    _seen.add(obj_id)
-
-    base_size = sys.getsizeof(obj)
-
-    match obj:
-        case dict():
-            for k, v in obj.items():
-                base_size += sys.getsizeof(k) + estimate_object_size(v, _seen)
-        case list() | tuple() | set():
-            for item in obj:
-                base_size += estimate_object_size(item, _seen)
-        case _ if hasattr(obj, "__dict__"):
-            try:
-                for attr_name, attr_val in obj.__dict__.items():
-                    base_size += sys.getsizeof(attr_name) + estimate_object_size(
-                        attr_val, _seen
-                    )
-            except Exception:
-                pass
-
-    return base_size
-
-
-@dataclass(slots=True)
 class CacheMetrics:
     """缓存指标"""
 
@@ -202,8 +121,6 @@ class CacheMetrics:
     """平均耗时（秒）"""
     latency_stats: LatencyStats = field(default_factory=LatencyStats)
     """延迟统计"""
-    memory_stats: MemoryStats = field(default_factory=MemoryStats)
-    """内存统计"""
 
     @property
     def hit_rate(self) -> float:

@@ -221,6 +221,17 @@ class CacheManager:
         """
         return self._registry.get_model(name)
 
+    def is_valid(self, cache_type: str) -> bool:
+        """检查缓存类型是否已注册
+
+        参数:
+            cache_type: 缓存类型
+
+        返回:
+            bool: 是否已注册
+        """
+        return self._registry.is_valid(cache_type)
+
     async def get(
         self,
         cache_type: str,
@@ -344,7 +355,7 @@ class CacheManager:
                             await self._backend_mgr.cache_backend.delete(cache_key)
                             self._lock_mgr.remove_lock(f"lock:{cache_key}")
                             return True
-                        except Exception as e:
+                        except (TimeoutError, OSError) as e:
                             logger.debug(
                                 f"清除缓存键失败: {cache_key}",
                                 LOG_COMMAND,
@@ -362,7 +373,7 @@ class CacheManager:
                         LOG_COMMAND,
                     )
                     return True
-        except Exception as e:
+        except (TimeoutError, OSError) as e:
             logger.warning("清除缓存失败", LOG_COMMAND, e=e)
             return False
 
@@ -397,10 +408,7 @@ class CacheManager:
                     self._lock_mgr.remove_lock(f"lock:{cache_key}")
                     logger.debug(f"清除缓存: {resolved_type}, 键: {key}", LOG_COMMAND)
                     return True
-        except CacheException as e:
-            logger.warning("清除缓存失败", LOG_COMMAND, e=e)
-            return False
-        except Exception as e:
+        except (TimeoutError, CacheException, OSError) as e:
             logger.warning(f"清除缓存 {resolved_type} 失败", LOG_COMMAND, e=e)
             return False
 
@@ -424,7 +432,7 @@ class CacheManager:
                 self._registry.remove_key(ct, ck)
                 self._lock_mgr.remove_lock(f"lock:{ck}")
                 return True
-            except Exception as e:
+            except (TimeoutError, OSError) as e:
                 logger.debug(
                     f"清除命名空间缓存键失败: {ck}",
                     LOG_COMMAND,

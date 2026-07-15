@@ -194,10 +194,10 @@ class PipelineExecutor:
             batch_keys = all_cache_keys[batch_slice]
             try:
                 pipe = redis_client.pipeline(transaction=False)
-                ttl = CacheOperations.calc_jitter_ttl(base_ttl)
                 for idx, (key, value) in enumerate(batch_items):
                     cache_key = batch_keys[idx]
                     serialized = CacheSerializer.serialize(value)
+                    ttl = CacheOperations.calc_jitter_ttl(base_ttl)
                     pipe.set(cache_key, serialized, ex=ttl)
 
                 exec_results = await pipe.execute()

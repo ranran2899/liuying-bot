@@ -1,11 +1,10 @@
 """
 异步锁工具
 
-提供异步可重入锁和混合锁实现，支持在异步环境中安全使用。
+提供异步可重入锁实现，支持在异步环境中安全使用。
 """
 
 import asyncio
-import threading
 from types import TracebackType
 from typing import Self
 
@@ -66,64 +65,3 @@ class AsyncRLock:
         exc_tb: TracebackType | None,
     ) -> None:
         await self.release()
-
-
-class HybridLock:
-    """混合锁
-
-    同时支持同步和异步操作，内部使用两套独立的锁机制。
-    同步操作使用 threading.RLock，异步操作使用 AsyncRLock。
-    注意：同步锁和异步锁之间不互斥，应避免混用。
-    """
-
-    def __init__(self) -> None:
-        self._sync_lock = threading.RLock()
-        self._async_lock = AsyncRLock()
-
-    def acquire_sync(self) -> bool:
-        """同步获取锁
-
-        返回:
-            bool: 是否成功获取
-        """
-        return self._sync_lock.acquire()
-
-    def release_sync(self) -> None:
-        """同步释放锁"""
-        self._sync_lock.release()
-
-    async def acquire_async(self) -> bool:
-        """异步获取锁
-
-        返回:
-            bool: 是否成功获取
-        """
-        return await self._async_lock.acquire()
-
-    async def release_async(self) -> None:
-        """异步释放锁"""
-        await self._async_lock.release()
-
-    def __enter__(self) -> Self:
-        self._sync_lock.acquire()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        self._sync_lock.release()
-
-    async def __aenter__(self) -> Self:
-        await self._async_lock.acquire()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        await self._async_lock.release()

@@ -14,7 +14,6 @@ from ..config import (
     CACHE_KEY_PREFIX,
     CACHE_KEY_SEPARATOR,
     LOG_COMMAND,
-    NAMESPACE_SEPARATOR,
     CacheException,
     cache_config,
 )
@@ -205,36 +204,6 @@ class TypeRegistry:
 
         return CACHE_KEY_SEPARATOR.join(parts)
 
-    def build_key_with_namespace(
-        self, cache_type: str, key: str | dict[str, Any], namespace: str
-    ) -> str:
-        """构建带指定命名空间的缓存键
-
-        参数:
-            cache_type: 缓存类型
-            key: 键或键参数
-            namespace: 命名空间
-
-        返回:
-            str: 完整缓存键
-        """
-        return self.build_key(cache_type, key, namespace)
-
-    def parse_namespace_from_key(self, cache_key: str) -> str | None:
-        """从缓存键中解析命名空间
-
-        参数:
-            cache_key: 完整缓存键
-
-        返回:
-            str | None: 命名空间，如果不存在返回None
-        """
-        parts = cache_key.split(CACHE_KEY_SEPARATOR)
-        if len(parts) >= 3 and NAMESPACE_SEPARATOR not in parts[1]:
-            if parts[1] != CACHE_KEY_PREFIX and parts[1] not in self._registry:
-                return parts[1]
-        return None
-
     def add_key(self, cache_type: str, cache_key: str, ttl: int | None = None) -> None:
         """添加缓存键到类型键集合，同时记录TTL
 
@@ -383,30 +352,3 @@ class TypeRegistry:
             int: 类型数量
         """
         return len(self._registry)
-
-    @property
-    def all_cache_keys(self) -> set[str]:
-        """获取所有缓存键
-
-        返回:
-            set[str]: 所有缓存键集合
-        """
-        return {k for keys in self._type_keys.values() for k in keys}
-
-    @property
-    def total_keys_count(self) -> int:
-        """获取所有键的总数
-
-        返回:
-            int: 键总数
-        """
-        return sum(len(keys) for keys in self._type_keys.values())
-
-    @property
-    def ttl_keys_count(self) -> int:
-        """获取有TTL记录的键数量
-
-        返回:
-            int: 有TTL记录的键数量
-        """
-        return len(self._key_ttl)

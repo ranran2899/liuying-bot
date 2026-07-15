@@ -151,6 +151,24 @@ class CacheSerializer:
         return None
 
     @classmethod
+    def _find_custom_deserializer(cls, target_type: type) -> CustomSerializer | None:
+        """查找目标类型的自定义反序列化器
+
+        按类型 MRO（方法解析顺序）查找，保证子类优先于父类匹配。
+
+        参数:
+            target_type: 目标类型
+
+        返回:
+            CustomSerializer | None: 自定义反序列化器，未找到返回None
+        """
+        custom = cls._custom_serializers
+        for value_type in getattr(target_type, "__mro__", (target_type,)):
+            if serializer := custom.get(value_type):
+                return serializer
+        return None
+
+    @classmethod
     def serialize(cls, value: Any, strict: bool = False) -> Any:
         """序列化值
 
@@ -299,9 +317,10 @@ class CacheSerializer:
             return value["value"]
 
         if target_type:
-            if target_type in cls._custom_serializers:
+            custom_deserializer = cls._find_custom_deserializer(target_type)
+            if custom_deserializer is not None:
                 try:
-                    return cls._custom_serializers[target_type].deserialize(value)
+                    return custom_deserializer.deserialize(value)
                 except Exception as e:
                     logger.debug(
                         f"自定义反序列化失败: {target_type.__name__}",

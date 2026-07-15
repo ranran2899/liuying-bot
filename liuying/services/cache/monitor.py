@@ -2,13 +2,11 @@
 缓存监控和统计
 
 提供缓存操作的监控、统计和报告功能。
-支持P50/P95/P99延迟统计和内存使用统计。
+支持P50/P95/P99延迟统计。
 所有数据操作使用 threading.Lock 保护，在 asyncio 单线程事件循环下
 不会阻塞其他协程，同时保证线程安全。
 """
 
-from collections.abc import Callable
-from functools import wraps
 from threading import Lock
 import time
 from typing import Any, ClassVar, Self
@@ -16,7 +14,7 @@ from typing import Any, ClassVar, Self
 from liuying.utils.log import logger
 
 from .config import LOG_COMMAND
-from .metrics import CacheMetrics, CacheMonitorData, estimate_object_size
+from .metrics import CacheMetrics, CacheMonitorData
 
 _METRIC_FIELD_MAP: dict[str, str] = {
     "hit": "hits",
@@ -161,42 +159,6 @@ class CacheMonitor:
         self._update_metrics_time(self._data.type_metrics[cache_type], elapsed_time)
         self._update_metrics_time(self._data.global_metrics, elapsed_time)
 
-    def update_memory_stats(
-        self, cache_type: str, entries: int, size_bytes: int
-    ) -> None:
-        """更新内存统计
-
-        参数:
-            cache_type: 缓存类型
-            entries: 条目数
-            size_bytes: 内存占用（字节）
-        """
-        with self._sync_lock:
-            self._data.type_metrics[cache_type].memory_stats.update(entries, size_bytes)
-
-            total_entries = sum(
-                m.memory_stats.total_entries for m in self._data.type_metrics.values()
-            )
-            total_size = sum(
-                m.memory_stats.estimated_size_bytes
-                for m in self._data.type_metrics.values()
-            )
-            self._data.global_metrics.memory_stats.update(total_entries, total_size)
-
-    def estimate_and_update_memory(self, cache_type: str, data: dict[str, Any]) -> int:
-        """估算并更新内存统计
-
-        参数:
-            cache_type: 缓存类型
-            data: 缓存数据字典
-
-        返回:
-            int: 估算的内存大小（字节）
-        """
-        total_size = sum(estimate_object_size(v) for v in data.values())
-        self.update_memory_stats(cache_type, len(data), total_size)
-        return total_size
-
     def _resolve_metrics(self, cache_type: str | None) -> CacheMetrics:
         """解析指标对象（需在锁内调用）
 
@@ -212,18 +174,6 @@ class CacheMonitor:
 
     def get_metrics(self, cache_type: str | None = None) -> CacheMetrics:
         """获取指标（线程安全）
-
-        参数:
-            cache_type: 缓存类型，为None时返回全局指标
-
-        返回:
-            CacheMetrics: 缓存指标
-        """
-        with self._sync_lock:
-            return self._resolve_metrics(cache_type)
-
-    async def get_metrics_async(self, cache_type: str | None = None) -> CacheMetrics:
-        """异步获取指标
 
         参数:
             cache_type: 缓存类型，为None时返回全局指标
@@ -252,15 +202,6 @@ class CacheMonitor:
         with self._sync_lock:
             return self._build_report()
 
-    async def get_report_async(self) -> dict[str, Any]:
-        """异步获取监控报告
-
-        返回:
-            dict[str, Any]: 监控报告
-        """
-        with self._sync_lock:
-            return self._build_report()
-
     @staticmethod
     def _build_metrics_dict(metrics: CacheMetrics) -> dict[str, Any]:
         """构建指标字典
@@ -272,7 +213,6 @@ class CacheMonitor:
             dict[str, Any]: 指标字典
         """
         latency = metrics.latency_stats
-        memory = metrics.memory_stats
         return {
             "hits": metrics.hits,
             "misses": metrics.misses,
@@ -288,11 +228,6 @@ class CacheMonitor:
                 "p99_ms": round(latency.p99, 2),
                 "min_ms": round(latency.min, 2),
                 "max_ms": round(latency.max, 2),
-            },
-            "memory": {
-                "total_entries": memory.total_entries,
-                "estimated_size_mb": round(memory.estimated_size_mb, 2),
-                "avg_entry_size_bytes": round(memory.avg_entry_size, 2),
             },
         }
 
@@ -320,25 +255,6 @@ class CacheMonitor:
             self._data.reset()
         logger.info("缓存监控数据已重置", LOG_COMMAND)
 
-    async def reset_async(self) -> None:
-        """异步重置监控数据"""
-        with self._sync_lock:
-            self._data.reset()
-        logger.info("缓存监控数据已重置", LOG_COMMAND)
-
-    def log_report(self) -> None:
-        """记录监控报告到日志"""
-        report = self.get_report()
-        logger.info(
-            f"缓存监控报告 - 运行时间: {report['uptime_human']}, "
-            f"命中率: {report['global']['hit_rate']}, "
-            f"总操作: {report['global']['total_operations']}, "
-            f"平均耗时: {report['global']['avg_time_ms']}ms, "
-            f"P95延迟: {report['global']['latency']['p95_ms']}ms, "
-            f"内存占用: {report['global']['memory']['estimated_size_mb']}MB",
-            LOG_COMMAND,
-        )
-
     @staticmethod
     def _format_uptime(seconds: float) -> str:
         """格式化运行时间
@@ -358,50 +274,3 @@ class CacheMonitor:
                 return f"{s / 3600:.1f}小时"
             case _:
                 return f"{seconds / 86400:.1f}天"
-
-
-def monitor_operation(cache_type: str, operation: str) -> Callable:
-    """监控操作装饰器
-
-    参数:
-        cache_type: 缓存类型
-        operation: 操作类型 (get/set/delete)
-
-    示例:
-        ```python
-        from liuying.services.cache.monitor import monitor_operation
-
-        @monitor_operation("USER", "get")
-        async def get_user(user_id: str):
-            pass
-        ```
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            monitor = CacheMonitor()
-            start_time = time.time()
-            try:
-                result = await func(*args, **kwargs)
-                elapsed = time.time() - start_time
-
-                match operation:
-                    case "get":
-                        op = "hit" if result is not None else "miss"
-                        monitor.record(cache_type, op, elapsed)
-                    case "set":
-                        monitor.record(cache_type, "set", elapsed)
-                    case "delete":
-                        monitor.record(cache_type, "delete", elapsed)
-
-                return result
-            except Exception:
-                # 异常情况下也记录耗时，用于分析错误操作的延迟
-                elapsed = time.time() - start_time
-                monitor.record_error(cache_type, elapsed)
-                raise
-
-        return wrapper
-
-    return decorator

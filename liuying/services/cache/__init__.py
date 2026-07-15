@@ -50,8 +50,8 @@ from .config import LOG_COMMAND, CacheException, cache_config
 from .containers import CacheDict, CacheList
 from .core import BatchResult, CacheRoot, WarmupResult
 from .decorators import cache_all, cache_evict, cache_put, cached
-from .metrics import LatencyStats, MemoryStats
-from .monitor import CacheMonitor, monitor_operation
+from .metrics import LatencyStats
+from .monitor import CacheMonitor
 
 __all__ = [
     "BatchResult",
@@ -62,14 +62,12 @@ __all__ = [
     "CacheMonitor",
     "CacheRoot",
     "LatencyStats",
-    "MemoryStats",
     "WarmupResult",
     "cache_all",
     "cache_config",
     "cache_evict",
     "cache_put",
     "cached",
-    "monitor_operation",
 ]
 
 driver = nonebot.get_driver()

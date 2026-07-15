@@ -7,7 +7,7 @@
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from .config import CacheException, KeyType
+from .config import KeyType
 from .core.manager import CacheRoot
 
 if TYPE_CHECKING:
@@ -48,11 +48,8 @@ class Cache(Generic[T]):
         self._cache_root = CacheRoot
 
         resolved_type = result_type or self._resolve_generic_type()
-        if resolved_type is not None:
-            try:
-                CacheRoot.get_model(self.cache_type)
-            except CacheException:
-                CacheRoot.register(self.cache_type, resolved_type)
+        if resolved_type is not None and not CacheRoot.is_valid(self.cache_type):
+            CacheRoot.register(self.cache_type, resolved_type)
 
     def _resolve_generic_type(self) -> type | None:
         """从泛型参数中解析结果类型

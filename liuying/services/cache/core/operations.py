@@ -134,6 +134,7 @@ class CacheOperations:
                 logger.warning(
                     f"{operation}缓存 {cache_type}:{cache_key} 超时",
                     LOG_COMMAND,
+                    e=exc,
                 )
             case CacheException():
                 logger.warning(f"{operation}缓存失败", LOG_COMMAND, e=exc)

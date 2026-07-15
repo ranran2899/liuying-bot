@@ -184,17 +184,15 @@ class BackgroundTaskManager:
                     LOG_COMMAND,
                 )
 
-        if (
-            cache_config.cache_mode == CacheMode.REDIS
-            and cache_config.degrade_check_interval > 0
-        ):
-            degrade_task = asyncio.create_task(self._degrade_check_loop())
-            tasks.append(degrade_task)
+        if cache_config.cache_mode == CacheMode.REDIS:
             self._init_distributed_lock()
-            logger.debug(
-                "Redis降级检测任务已启动，"
-                f"间隔: {cache_config.degrade_check_interval}秒",
-                LOG_COMMAND,
-            )
+            if cache_config.degrade_check_interval > 0:
+                degrade_task = asyncio.create_task(self._degrade_check_loop())
+                tasks.append(degrade_task)
+                logger.debug(
+                    "Redis降级检测任务已启动，"
+                    f"间隔: {cache_config.degrade_check_interval}秒",
+                    LOG_COMMAND,
+                )
 
         return tasks
