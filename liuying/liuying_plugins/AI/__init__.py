@@ -172,8 +172,8 @@ async def _init_ai_plugin() -> None:
 
     await setup_jobs()
 
-    # WebUI 已分离为独立插件 AI_webui（liuying/plugins/AI_webui），
-    # 通过 WEBUI_ENABLED 配置项（AI_WEBUI 模块）控制挂载，无需在此初始化。
+    # WebUI 管理能力已整合到流萤本体 web_ui 插件（liuying_plugins/web_ui），
+    # 通过 /liuying/api/ai/* 路由统一挂载，使用本体JWT认证。
 
     # 延迟导入以避免循环依赖：skill_runtime 导入 agent 工具模块，
     # 而 AI 插件 __init__ 在初始化阶段调用 register_all

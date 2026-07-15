@@ -30,6 +30,7 @@ default_menus = [
     ),
     MenuItem(name="系统信息", module="system", router="/system", icon="system"),
     MenuItem(name="关于我们", module="about", router="/about", icon="about"),
+    MenuItem(name="流萤AI", module="ai", router="/ai", icon="ai"),
 ]
 
 
