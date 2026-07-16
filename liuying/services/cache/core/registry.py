@@ -6,6 +6,7 @@
 """
 
 import time
+from threading import Lock
 from typing import Any
 
 from liuying.utils.log import logger
@@ -39,6 +40,7 @@ class TypeRegistry:
         self._key_ttl: dict[str, float] = {}
         self._key_to_type: dict[str, str] = {}
         self._namespace = namespace or cache_config.namespace
+        self._lock = Lock()
 
     @property
     def namespace(self) -> str:
@@ -82,20 +84,21 @@ class TypeRegistry:
             key_format: 键格式
         """
         name = name.upper()
-        if name in self._registry:
-            logger.warning(f"缓存类型 {name} 已存在，将被覆盖", LOG_COMMAND)
+        with self._lock:
+            if name in self._registry:
+                logger.warning(f"缓存类型 {name} 已存在，将被覆盖", LOG_COMMAND)
 
-        self._registry[name] = CacheModel.create(
-            name=name,
-            result_type=result_type,
-            expire=expire,
-            key_format=key_format,
-        )
-        self._type_keys.setdefault(name, set())
-        logger.debug(
-            f"注册缓存类型: {name}, 类型: {result_type}, 过期时间: {expire}秒",
-            LOG_COMMAND,
-        )
+            self._registry[name] = CacheModel.create(
+                name=name,
+                result_type=result_type,
+                expire=expire,
+                key_format=key_format,
+            )
+            self._type_keys.setdefault(name, set())
+            logger.debug(
+                f"注册缓存类型: {name}, 类型: {result_type}, 过期时间: {expire}秒",
+                LOG_COMMAND,
+            )
 
     def get_model(self, name: str) -> CacheModel:
         """获取缓存模型
@@ -123,7 +126,8 @@ class TypeRegistry:
         返回:
             bool: 是否已注册
         """
-        return cache_type.upper() in self._registry
+        with self._lock:
+            return cache_type.upper() in self._registry
 
     def build_key(
         self,

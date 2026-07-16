@@ -253,63 +253,69 @@ class MemoryCurator:
         返回:
             int: 形成的主题数
         """
-        query = MemoryItem.filter(tier="episodic")
-        if user_id:
-            query = query.filter(user_id=user_id)
-        memories = await query.limit(100).all()
-        if len(memories) < _TOPIC_MIN_MEMBERS:
-            return 0
+        try:
+            query = MemoryItem.filter(tier="episodic")
+            if user_id:
+                query = query.filter(user_id=user_id)
+            memories = await query.limit(100).all()
+            if len(memories) < _TOPIC_MIN_MEMBERS:
+                return 0
 
-        clusters: list[list[MemoryItem]] = []
-        for mem in memories:
-            placed = False
-            mem_vec = MemoryEmbeddingUtils.hash_bow_embedding(mem.summary or "")
-            for cluster in clusters:
-                rep = cluster[0]
-                rep_vec = MemoryEmbeddingUtils.hash_bow_embedding(
-                    rep.summary or ""
-                )
-                if (
-                    CurationExtractor.cosine_similarity(
-                        mem_vec, rep_vec
+            clusters: list[list[MemoryItem]] = []
+            for mem in memories:
+                placed = False
+                mem_vec = MemoryEmbeddingUtils.hash_bow_embedding(mem.summary or "")
+                for cluster in clusters:
+                    rep = cluster[0]
+                    rep_vec = MemoryEmbeddingUtils.hash_bow_embedding(
+                        rep.summary or ""
                     )
-                    >= 0.6
-                ):
-                    cluster.append(mem)
-                    placed = True
-                    break
-            if not placed:
-                clusters.append([mem])
+                    if (
+                        CurationExtractor.cosine_similarity(
+                            mem_vec, rep_vec
+                        )
+                        >= 0.6
+                    ):
+                        cluster.append(mem)
+                        placed = True
+                        break
+                if not placed:
+                    clusters.append([mem])
 
-        topic_count = 0
-        for cluster in clusters:
-            if len(cluster) < _TOPIC_MIN_MEMBERS:
-                continue
-            summaries = [m.summary or "" for m in cluster]
-            combined = " | ".join(summaries[:5])
-            persona_name = (
-                cluster[0].persona_name or "default"
+            topic_count = 0
+            for cluster in clusters:
+                if len(cluster) < _TOPIC_MIN_MEMBERS:
+                    continue
+                summaries = [m.summary or "" for m in cluster]
+                combined = " | ".join(summaries[:5])
+                persona_name = (
+                    cluster[0].persona_name or "default"
+                )
+                existing = await MemoryItem.filter(
+                    user_id=cluster[0].user_id,
+                    persona_name=persona_name,
+                    tier="semantic",
+                    summary=combined[:200],
+                ).first()
+                if existing:
+                    continue
+                await memory_manager.add(
+                    user_id=cluster[0].user_id,
+                    content=combined[:500],
+                    summary=combined[:200],
+                    group_id=cluster[0].group_id,
+                    tier="semantic",
+                    topic_tags=[cluster[0].user_id],
+                    salience=0.7,
+                    persona_name=persona_name,
+                )
+                topic_count += 1
+            return topic_count
+        except Exception as e:
+            logger.debug(
+                f"主题聚合失败: {e}", command="AI", e=e
             )
-            existing = await MemoryItem.filter(
-                user_id=cluster[0].user_id,
-                persona_name=persona_name,
-                tier="semantic",
-                summary=combined[:200],
-            ).first()
-            if existing:
-                continue
-            await memory_manager.add(
-                user_id=cluster[0].user_id,
-                content=combined[:500],
-                summary=combined[:200],
-                group_id=cluster[0].group_id,
-                tier="semantic",
-                topic_tags=[cluster[0].user_id],
-                salience=0.7,
-                persona_name=persona_name,
-            )
-            topic_count += 1
-        return topic_count
+            return 0
 
     async def _active_learn(
         self, user_id: str | None
@@ -324,83 +330,89 @@ class MemoryCurator:
         返回:
             tuple[int, int]: (提取的实体数, 更新的画像数)
         """
-        cutoff = datetime.now() - timedelta(hours=24)
-        query = ConversationRecord.filter(
-            create_time__gt=cutoff,
-            role="user",
-        )
-        if user_id:
-            query = query.filter(user_id=user_id)
-        records = await query.order_by("-create_time").limit(
-            _ACTIVE_LEARN_BATCH
-        ).all()
-        if not records:
-            return 0, 0
-
-        entity_counter: dict[str, dict[str, Any]] = (
-            defaultdict(
-                lambda: {"count": 0, "type": "generic"}
+        try:
+            cutoff = datetime.now() - timedelta(hours=24)
+            query = ConversationRecord.filter(
+                create_time__gt=cutoff,
+                role="user",
             )
-        )
-        preference_counter: dict[str, dict[str, int]] = (
-            defaultdict(lambda: {"count": 0, "type": ""})
-        )
+            if user_id:
+                query = query.filter(user_id=user_id)
+            records = await query.order_by("-create_time").limit(
+                _ACTIVE_LEARN_BATCH
+            ).all()
+            if not records:
+                return 0, 0
 
-        for record in records:
-            entities = CurationExtractor.extract_entities(
-                record.content or ""
-            )
-            for ent in entities:
-                entity_counter[ent.name]["count"] += 1
-                entity_counter[ent.name]["type"] = (
-                    ent.entity_type
+            entity_counter: dict[str, dict[str, Any]] = (
+                defaultdict(
+                    lambda: {"count": 0, "type": "generic"}
                 )
-
-            prefs = CurationExtractor.detect_preferences(
-                record.content or ""
             )
-            for pref in prefs:
-                key = pref["target"]
-                preference_counter[key]["count"] += 1
-                preference_counter[key]["type"] = pref["type"]
-
-        extracted_count = 0
-        user_ids_processed: set[str] = set()
-        for record in records:
-            if record.user_id in user_ids_processed:
-                continue
-            user_ids_processed.add(record.user_id)
-
-            user_entities = [
-                {
-                    "name": name,
-                    "count": info["count"],
-                    "type": info["type"],
-                }
-                for name, info in entity_counter.items()
-            ][:10]
-            user_prefs = [
-                {
-                    "target": target,
-                    "count": info["count"],
-                    "type": info["type"],
-                }
-                for target, info in preference_counter.items()
-            ][:10]
-
-            if not user_entities and not user_prefs:
-                continue
-
-            updated = await self._update_user_persona(
-                user_id=record.user_id,
-                entities=user_entities,
-                preferences=user_prefs,
+            preference_counter: dict[str, dict[str, int]] = (
+                defaultdict(lambda: {"count": 0, "type": ""})
             )
-            if updated:
-                extracted_count += len(user_entities)
 
-        persona_updated = len(user_ids_processed)
-        return extracted_count, persona_updated
+            for record in records:
+                entities = CurationExtractor.extract_entities(
+                    record.content or ""
+                )
+                for ent in entities:
+                    entity_counter[ent.name]["count"] += 1
+                    entity_counter[ent.name]["type"] = (
+                        ent.entity_type
+                    )
+
+                prefs = CurationExtractor.detect_preferences(
+                    record.content or ""
+                )
+                for pref in prefs:
+                    key = pref["target"]
+                    preference_counter[key]["count"] += 1
+                    preference_counter[key]["type"] = pref["type"]
+
+            extracted_count = 0
+            user_ids_processed: set[str] = set()
+            for record in records:
+                if record.user_id in user_ids_processed:
+                    continue
+                user_ids_processed.add(record.user_id)
+
+                user_entities = [
+                    {
+                        "name": name,
+                        "count": info["count"],
+                        "type": info["type"],
+                    }
+                    for name, info in entity_counter.items()
+                ][:10]
+                user_prefs = [
+                    {
+                        "target": target,
+                        "count": info["count"],
+                        "type": info["type"],
+                    }
+                    for target, info in preference_counter.items()
+                ][:10]
+
+                if not user_entities and not user_prefs:
+                    continue
+
+                updated = await self._update_user_persona(
+                    user_id=record.user_id,
+                    entities=user_entities,
+                    preferences=user_prefs,
+                )
+                if updated:
+                    extracted_count += len(user_entities)
+
+            persona_updated = len(user_ids_processed)
+            return extracted_count, persona_updated
+        except Exception as e:
+            logger.debug(
+                f"主动学习失败: {e}", command="AI", e=e
+            )
+            return 0, 0
 
     async def _update_user_persona(
         self,
@@ -420,59 +432,65 @@ class MemoryCurator:
         返回:
             bool: 是否更新成功
         """
-        profile, _ = await UserPersonaProfile.get_or_create(
-            user_id=user_id
-        )
         try:
-            structured = json.loads(
-                profile.structured_json or "{}"
+            profile, _ = await UserPersonaProfile.get_or_create(
+                user_id=user_id
             )
-            if not isinstance(structured, dict):
+            try:
+                structured = json.loads(
+                    profile.structured_json or "{}"
+                )
+                if not isinstance(structured, dict):
+                    structured = {}
+            except (json.JSONDecodeError, TypeError):
                 structured = {}
-        except (json.JSONDecodeError, TypeError):
-            structured = {}
 
-        existing_entities = structured.get("entities", [])
-        if not isinstance(existing_entities, list):
-            existing_entities = []
-        existing_set = {
-            e.get("name", "")
-            for e in existing_entities
-            if isinstance(e, dict)
-        }
-        for ent in entities:
-            if ent["name"] not in existing_set:
-                existing_entities.append(
+            existing_entities = structured.get("entities", [])
+            if not isinstance(existing_entities, list):
+                existing_entities = []
+            existing_set = {
+                e.get("name", "")
+                for e in existing_entities
+                if isinstance(e, dict)
+            }
+            for ent in entities:
+                if ent["name"] not in existing_set:
+                    existing_entities.append(
+                        {
+                            "name": ent["name"],
+                            "type": ent["type"],
+                            "count": ent["count"],
+                        }
+                    )
+                    existing_set.add(ent["name"])
+            structured["entities"] = existing_entities[-50:]
+
+            existing_prefs = structured.get("preferences", [])
+            if not isinstance(existing_prefs, list):
+                existing_prefs = []
+            for pref in preferences:
+                existing_prefs.append(
                     {
-                        "name": ent["name"],
-                        "type": ent["type"],
-                        "count": ent["count"],
+                        "target": pref["target"],
+                        "type": pref["type"],
+                        "count": pref["count"],
                     }
                 )
-                existing_set.add(ent["name"])
-        structured["entities"] = existing_entities[-50:]
+            structured["preferences"] = existing_prefs[-50:]
 
-        existing_prefs = structured.get("preferences", [])
-        if not isinstance(existing_prefs, list):
-            existing_prefs = []
-        for pref in preferences:
-            existing_prefs.append(
-                {
-                    "target": pref["target"],
-                    "type": pref["type"],
-                    "count": pref["count"],
-                }
+            profile.structured_json = json.dumps(
+                structured, ensure_ascii=False
             )
-        structured["preferences"] = existing_prefs[-50:]
-
-        profile.structured_json = json.dumps(
-            structured, ensure_ascii=False
-        )
-        profile.updated_at = datetime.now()
-        await profile.save(
-            update_fields=["structured_json", "updated_at"]
-        )
-        return True
+            profile.updated_at = datetime.now()
+            await profile.save(
+                update_fields=["structured_json", "updated_at"]
+            )
+            return True
+        except Exception as e:
+            logger.debug(
+                f"更新用户画像失败: {e}", command="AI", e=e
+            )
+            return False
 
     def get_last_curation_time(self) -> datetime | None:
         """获取最后策展时间

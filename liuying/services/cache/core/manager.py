@@ -373,7 +373,7 @@ class CacheManager:
                         LOG_COMMAND,
                     )
                     return True
-        except (TimeoutError, OSError) as e:
+        except Exception as e:
             logger.warning("清除缓存失败", LOG_COMMAND, e=e)
             return False
 
@@ -408,7 +408,7 @@ class CacheManager:
                     self._lock_mgr.remove_lock(f"lock:{cache_key}")
                     logger.debug(f"清除缓存: {resolved_type}, 键: {key}", LOG_COMMAND)
                     return True
-        except (TimeoutError, CacheException, OSError) as e:
+        except Exception as e:
             logger.warning(f"清除缓存 {resolved_type} 失败", LOG_COMMAND, e=e)
             return False
 
@@ -432,7 +432,7 @@ class CacheManager:
                 self._registry.remove_key(ct, ck)
                 self._lock_mgr.remove_lock(f"lock:{ck}")
                 return True
-            except (TimeoutError, OSError) as e:
+            except Exception as e:
                 logger.debug(
                     f"清除命名空间缓存键失败: {ck}",
                     LOG_COMMAND,
