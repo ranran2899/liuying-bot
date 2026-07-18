@@ -11,10 +11,9 @@ from collections.abc import AsyncGenerator, Callable
 from datetime import datetime
 import hashlib
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import (
-    ColumnElement,
     and_,
     delete,
     func,
@@ -37,14 +36,11 @@ from .conditions import (
     _QUERY_CACHE,
     _RESULT_HANDLERS,
     _RETRYABLE_ERRORS,
-    Q,
     _build_django_conditions,
+    _compile_filter_args,
     _is_retryable_error,
     _separate_kwargs,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 class QueryExecutorMixin:
@@ -85,26 +81,17 @@ class QueryExecutorMixin:
             if regular:
                 stmt = stmt.filter_by(**regular)
             if django:
-                stmt = stmt.where(*_build_django_conditions(self.model_class, django))
+                stmt = stmt.where(
+                    *_build_django_conditions(self.model_class, django)
+                )
 
         # 应用 args 条件
-        for arg in self.args:
-            if isinstance(arg, Q):
-                compiled = arg.compile(self.model_class, _build_django_conditions)
-                if compiled is not None:
-                    stmt = stmt.where(compiled)
-            else:
-                stmt = stmt.where(arg)
+        clauses = _compile_filter_args(self.model_class, self.args)
+        if clauses:
+            stmt = stmt.where(*clauses)
 
         # 应用排除条件
-        exclude_clauses: list[ColumnElement[bool]] = []
-        for arg in self._exclude_args:
-            if isinstance(arg, Q):
-                compiled = arg.compile(self.model_class, _build_django_conditions)
-                if compiled is not None:
-                    exclude_clauses.append(compiled)
-            else:
-                exclude_clauses.append(arg)
+        exclude_clauses = _compile_filter_args(self.model_class, self._exclude_args)
         if self._exclude_kwargs:
             exclude_clauses.extend(
                 _build_django_conditions(self.model_class, self._exclude_kwargs)
@@ -277,6 +264,35 @@ class QueryExecutorMixin:
         )
         return instance
 
+    async def one(self) -> Any:
+        """获取唯一记录，不存在或存在多条时抛出异常
+
+        与 ``first`` 不同，此方法要求结果精确为一条，适用于主键或唯一约束查询。
+
+        返回:
+            唯一匹配的记录
+
+        抛出:
+            sqlalchemy.exc.NoResultFound: 未找到记录
+            sqlalchemy.exc.MultipleResultsFound: 找到多条记录
+        """
+        stmt = self._build_base_query().limit(2)
+        fetch = "one_row" if self._returns_rows() else "one"
+        return await self._execute_query(stmt, fetch)
+
+    async def one_or_none(self) -> Any | None:
+        """获取唯一记录或None，存在多条时抛出异常
+
+        返回:
+            唯一匹配的记录，未找到返回None
+
+        抛出:
+            sqlalchemy.exc.MultipleResultsFound: 找到多条记录
+        """
+        stmt = self._build_base_query().limit(2)
+        fetch = "one_row_or_none" if self._returns_rows() else "one_or_none"
+        return await self._execute_query(stmt, fetch)
+
     async def earliest(self, field: str | None = None) -> Any | None:
         """按指定字段升序取第一条记录
 
@@ -352,6 +368,29 @@ class QueryExecutorMixin:
             stmt = stmt.limit(limit)
         rows = await self._execute_query(stmt, "fetchall")
         return [(row[0], row[1]) for row in rows]
+
+    async def group_dict(
+        self,
+        key_column: str | Any,
+        value_column: str | Any,
+    ) -> dict[Any, list[Any]]:
+        """按 key 列分组，返回 {key: [value, ...]} 映射
+
+        参数:
+            key_column: 作为字典键的列名或列对象
+            value_column: 作为字典值的列名或列对象
+
+        返回:
+            dict[Any, list[Any]]: 分组映射字典
+        """
+        key_col = DbUtils.get_column(self.model_class, key_column)
+        val_col = DbUtils.get_column(self.model_class, value_column)
+        stmt = self._build_base_query(select(key_col, val_col))
+        rows = await self._execute_query(stmt, "fetchall")
+        result: dict[Any, list[Any]] = {}
+        for row in rows:
+            result.setdefault(row[0], []).append(row[1])
+        return result
 
     async def exists(self) -> bool:
         """检查是否存在符合条件的记录
@@ -469,6 +508,26 @@ class QueryExecutorMixin:
         if flat and len(fields) == 1:
             return [row[0] for row in result]
         return result
+
+    async def values_dict(self, *fields: str) -> list[dict[str, Any]]:
+        """直接从数据库行返回字典列表，比 to_dict 更高效
+
+        ``to_dict`` 需先加载完整 ORM 对象再逐字段取值，此方法直接查询指定列
+        并从行映射构建字典，减少对象实例化开销。
+
+        参数:
+            *fields: 要查询的字段名，为空时返回所有列
+
+        返回:
+            list[dict[str, Any]]: 字段名到值的字典列表
+        """
+        if fields:
+            cols = [DbUtils.get_column(self.model_class, f) for f in fields]
+            stmt = self._build_base_query(select(*cols))
+        else:
+            stmt = self._build_base_query()
+        rows = await self._execute_query(stmt, "mappings")
+        return [dict(row) for row in rows]
 
     async def to_dict(
         self,
@@ -655,18 +714,37 @@ class QueryExecutorMixin:
     @staticmethod
     def _build_mapping(obj: Any, fields: list[str] | None = None) -> dict:
         """构建对象映射字典"""
-        match fields:
-            case None:
-                return {
-                    col.name: getattr(obj, col.name)
-                    for col in obj.__table__.columns
-                }
-            case _:
-                mapping = {f: getattr(obj, f) for f in fields if hasattr(obj, f)}
-                for pk in DbUtils.get_primary_key_names(obj.__class__):
-                    if hasattr(obj, pk):
-                        mapping[pk] = getattr(obj, pk)
-                return mapping
+        if fields is None:
+            return {
+                col.name: getattr(obj, col.name)
+                for col in obj.__table__.columns
+            }
+        mapping = {f: getattr(obj, f) for f in fields if hasattr(obj, f)}
+        for pk in DbUtils.get_primary_key_names(obj.__class__):
+            if hasattr(obj, pk):
+                mapping[pk] = getattr(obj, pk)
+        return mapping
+
+    @staticmethod
+    def _iter_batches(
+        items: list[Any], batch_size: int | None
+    ) -> list[list[Any]]:
+        """将列表切分为批次
+
+        参数:
+            items: 待切分列表
+            batch_size: 批次大小，None或非正数时返回单批
+
+        返回:
+            list[list[Any]]: 批次列表
+        """
+        if not items:
+            return []
+        if not batch_size or batch_size <= 0:
+            return [items]
+        return [
+            items[i : i + batch_size] for i in range(0, len(items), batch_size)
+        ]
 
     async def bulk_create(
         self,
@@ -687,21 +765,14 @@ class QueryExecutorMixin:
         if not objects:
             return []
         total = len(objects)
+        processed = 0
         async with self.model_class.get_session(db_name=self._db_name) as session:
-            if batch_size and batch_size > 0:
-                processed = 0
-                for i in range(0, total, batch_size):
-                    batch = objects[i : i + batch_size]
-                    session.add_all(batch)
-                    await session.flush()
-                    processed += len(batch)
-                    if progress_callback:
-                        progress_callback(processed, total)
-            else:
-                session.add_all(objects)
+            for batch in self._iter_batches(objects, batch_size):
+                session.add_all(batch)
                 await session.flush()
+                processed += len(batch)
                 if progress_callback:
-                    progress_callback(total, total)
+                    progress_callback(processed, total)
             for obj in objects:
                 await session.refresh(obj)
             return objects
@@ -719,26 +790,15 @@ class QueryExecutorMixin:
         total = len(objects)
         updated = 0
         async with self.model_class.get_session(db_name=self._db_name) as session:
-            if batch_size and batch_size > 0:
-                for i in range(0, total, batch_size):
-                    batch = objects[i : i + batch_size]
-                    mappings = [self._build_mapping(o, fields) for o in batch]
-                    await session.run_sync(
-                        lambda s: s.bulk_update_mappings(self.model_class, mappings)
-                    )
-                    updated += len(batch)
-                    await session.flush()
-                    if progress_callback:
-                        progress_callback(min(i + batch_size, total), total)
-            else:
-                mappings = [self._build_mapping(o, fields) for o in objects]
+            for batch in self._iter_batches(objects, batch_size):
+                mappings = [self._build_mapping(o, fields) for o in batch]
                 await session.run_sync(
                     lambda s: s.bulk_update_mappings(self.model_class, mappings)
                 )
-                updated = len(objects)
+                updated += len(batch)
                 await session.flush()
                 if progress_callback:
-                    progress_callback(total, total)
+                    progress_callback(updated, total)
             return updated
 
     async def bulk_delete(
@@ -753,18 +813,13 @@ class QueryExecutorMixin:
         total = len(objects)
         deleted = 0
         async with self.model_class.get_session(db_name=self._db_name) as session:
-            batches = (
-                [objects[i : i + batch_size] for i in range(0, total, batch_size)]
-                if batch_size and batch_size > 0
-                else [objects]
-            )
-            for batch in batches:
+            for batch in self._iter_batches(objects, batch_size):
                 for obj in batch:
                     await session.delete(obj)
                     deleted += 1
                 await session.flush()
                 if progress_callback:
-                    progress_callback(min(deleted, total), total)
+                    progress_callback(deleted, total)
             return deleted
 
     async def _atomic_update(self, column: str | Any, amount: int) -> int:

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import ColumnElement, and_, func, not_, or_
 
 from ..utils import DbUtils
-from .conditions import _escape_like
+from .conditions import _COMPARISON_OPS, _escape_like
 
 if TYPE_CHECKING:
     from . import QueryWrapper
@@ -484,32 +484,19 @@ class QueryBuilderMixin:
 
         参数:
             *conditions: 条件元组列表，每个元组格式为 (列名, 操作符, 值)
-                         操作符支持: eq/ne/gt/gte/lt/lte/like/ilike/in/not_in/
-                                    is_null/is_not_null
+                         操作符支持: eq/ne/gt/gte/lt/lte/like/ilike/contains/
+                                    icontains/startswith/endswith/in/not_in/
+                                    is_null/is_not_null/between/regex
 
         返回:
             QueryWrapper[T]: 返回自身以支持链式调用
         """
-        _OPS = {
-            "eq": lambda c, v: c == v,
-            "ne": lambda c, v: c != v,
-            "gt": lambda c, v: c > v,
-            "gte": lambda c, v: c >= v,
-            "lt": lambda c, v: c < v,
-            "lte": lambda c, v: c <= v,
-            "like": lambda c, v: c.like(v),
-            "ilike": lambda c, v: c.ilike(v),
-            "in": lambda c, v: c.in_(v),
-            "not_in": lambda c, v: c.notin_(v),
-            "is_null": lambda c, v: c.is_(None),
-            "is_not_null": lambda c, v: c.isnot(None),
-        }
-        clauses = []
+        clauses: list[ColumnElement[bool]] = []
         for col, op, val in conditions:
-            column = DbUtils.get_column(self.model_class, col)
-            if op not in _OPS:
+            builder = _COMPARISON_OPS.get(op)
+            if builder is None:
                 raise ValueError(f"不支持的操作符: {op}")
-            clauses.append(_OPS[op](column, val))
+            clauses.append(builder(DbUtils.get_column(self.model_class, col), val))
         if clauses:
             self.args = (*self.args, or_(*clauses))
         return self

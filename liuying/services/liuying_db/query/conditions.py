@@ -12,6 +12,7 @@
 """
 
 from collections.abc import Callable
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from sqlalchemy import (
@@ -63,11 +64,17 @@ _NON_RETRYABLE_KEYWORDS = (
 _RESULT_HANDLERS: dict[str, Callable[[Any], Any]] = {
     "first": lambda r: r.scalars().first(),
     "all": lambda r: r.scalars().all(),
+    "one": lambda r: r.scalars().one(),
+    "one_or_none": lambda r: r.scalars().one_or_none(),
+    "one_row": lambda r: r.one(),
+    "one_row_or_none": lambda r: r.one_or_none(),
     "scalar": lambda r: r.scalar(),
     "count": lambda r: r.scalar(),
     "rowcount": lambda r: r.rowcount,
     "first_row": lambda r: r.first(),
     "fetchall": lambda r: r.fetchall(),
+    "mapping": lambda r: r.mappings().first(),
+    "mappings": lambda r: r.mappings().all(),
 }
 
 # Django 风格 lookup 构建器映射
@@ -119,6 +126,30 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+# 短操作符映射，供 where_or 等条件方法复用，避免在各处重复定义
+_COMPARISON_OPS: dict[str, Callable[[Any, Any], ColumnElement[bool]]] = {
+    "eq": lambda c, v: c == v,
+    "ne": lambda c, v: c != v,
+    "gt": lambda c, v: c > v,
+    "gte": lambda c, v: c >= v,
+    "lt": lambda c, v: c < v,
+    "lte": lambda c, v: c <= v,
+    "like": lambda c, v: c.like(v),
+    "ilike": lambda c, v: c.ilike(v),
+    "contains": lambda c, v: c.like(f"%{_escape_like(str(v))}%", escape="\\"),
+    "icontains": lambda c, v: c.ilike(f"%{_escape_like(str(v))}%", escape="\\"),
+    "startswith": lambda c, v: c.like(f"{_escape_like(str(v))}%", escape="\\"),
+    "endswith": lambda c, v: c.like(f"%{_escape_like(str(v))}", escape="\\"),
+    "in": lambda c, v: c.in_(v),
+    "not_in": lambda c, v: c.notin_(v),
+    "is_null": lambda c, v: c.is_(None),
+    "is_not_null": lambda c, v: c.isnot(None),
+    "between": lambda c, v: c.between(v[0], v[1]),
+    "regex": lambda c, v: c.regexp_match(v),
+}
+
+
+@lru_cache(maxsize=512)
 def _is_django_lookup(key: str) -> bool:
     """检查关键字是否为 Django 风格查询
 
@@ -217,6 +248,32 @@ def _separate_kwargs(
     return regular, django
 
 
+def _compile_filter_args(
+    model_class: type, args: tuple[Any, ...]
+) -> list[ColumnElement[bool]]:
+    """编译过滤参数，将 Q 对象编译为表达式，非 Q 对象直接收集
+
+    供 ``build_filter_statement`` 与 ``QueryExecutorMixin._apply_filters``
+    复用，消除 Q 对象编译逻辑的重复。
+
+    参数:
+        model_class: 模型类，用于解析字段
+        args: 过滤参数元组，元素为 SQLAlchemy 表达式或 Q 对象
+
+    返回:
+        list[ColumnElement[bool]]: 编译后的条件列表
+    """
+    clauses: list[ColumnElement[bool]] = []
+    for arg in args:
+        if isinstance(arg, Q):
+            compiled = arg.compile(model_class, _build_django_conditions)
+            if compiled is not None:
+                clauses.append(compiled)
+        else:
+            clauses.append(arg)
+    return clauses
+
+
 def build_filter_statement(model_class: type, *args: Any, **kwargs: Any) -> Select:
     """构建过滤查询语句
 
@@ -238,14 +295,7 @@ def build_filter_statement(model_class: type, *args: Any, **kwargs: Any) -> Sele
         if django:
             stmt = stmt.where(*_build_django_conditions(model_class, django))
     if args:
-        clauses: list[ColumnElement[bool]] = []
-        for arg in args:
-            if isinstance(arg, Q):
-                compiled = arg.compile(model_class, _build_django_conditions)
-                if compiled is not None:
-                    clauses.append(compiled)
-            else:
-                clauses.append(arg)
+        clauses = _compile_filter_args(model_class, args)
         if clauses:
             stmt = stmt.where(*clauses)
     return stmt
@@ -342,13 +392,15 @@ class Q:
             ColumnElement[bool] | None: 编译后的条件表达式，空 Q 返回 None
         """
         if self._children:
-            clauses = [
-                c for c in (
-                    child.compile(model_class, build_conditions_fn)
-                    for child in self._children
+            clauses = list(
+                filter(
+                    None,
+                    (
+                        child.compile(model_class, build_conditions_fn)
+                        for child in self._children
+                    ),
                 )
-                if c is not None
-            ]
+            )
             if not clauses:
                 return None
             clause = and_(*clauses) if self._operator == "AND" else or_(*clauses)
