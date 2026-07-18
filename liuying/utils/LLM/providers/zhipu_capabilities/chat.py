@@ -60,9 +60,11 @@ class ZhipuChatCapability:
 
         logger.info(f"智谱AI对话: {actual_model}")
 
-        response = await self._client.post("chat/completions", request_data)
+        response = await self._client.post(
+            "chat/completions", request_data, model=actual_model
+        )
         result = ResponseParser.parse_chat_response(response, "zhipu")
-        provider_cfg = self._client.get_provider_config()
+        provider_cfg = self._client.get_provider_config(model=actual_model)
         await token_tracker.record(
             provider=provider_cfg.name if provider_cfg else "zhipu",
             model=actual_model,
@@ -107,8 +109,8 @@ class ZhipuChatCapability:
             "type": "enabled" if reasoning_enabled else "disabled"
         }
 
-        url = f"{self._client.base_url}/chat/completions"
-        headers = self._client.get_headers()
+        url = f"{self._client.get_base_url(actual_model)}/chat/completions"
+        headers = self._client.get_headers(model=actual_model)
 
         async for chunk in AsyncHttpx.post_stream(
             url=url, json=request_data, headers=headers, timeout=60

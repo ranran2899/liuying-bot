@@ -47,7 +47,7 @@ class ZhipuRerankCapability:
         if options:
             request_data.update(options)
 
-        response = await self._client.post("rerank", request_data)
+        response = await self._client.post("rerank", request_data, model=model)
 
         results: list[dict[str, Any]] = []
         for item in response.get("results", []):

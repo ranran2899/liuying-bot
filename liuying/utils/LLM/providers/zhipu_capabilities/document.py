@@ -44,14 +44,14 @@ class ZhipuDocumentCapability:
             if options:
                 data.update(options)
             return await self._client.post_multipart(
-                "document/parser", files, data, timeout=300
+                "document/parser", files, data, timeout=300, model=model
             )
 
         request_data: dict[str, Any] = {"model": model, "url": file}
         if options:
             request_data.update(options)
         return await self._client.post(
-            "document/parser", request_data, timeout=300
+            "document/parser", request_data, timeout=300, model=model
         )
 
     async def extract_text(

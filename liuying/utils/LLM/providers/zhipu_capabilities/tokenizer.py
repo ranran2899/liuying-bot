@@ -48,7 +48,9 @@ class ZhipuTokenizerCapability:
             token 数量
         """
         request_data: dict[str, Any] = {"model": model, "text": text}
-        result = await self._client.post("tokenizer/tokenize", request_data)
+        result = await self._client.post(
+            "tokenizer/tokenize", request_data, model=model
+        )
         return result.get("total_tokens", 0)
 
     def estimate(self, text: str) -> int:

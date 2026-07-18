@@ -43,7 +43,9 @@ class ZhipuEmbeddingCapability:
         if options:
             request_data.update(options)
 
-        response = await self._client.post("embeddings", request_data)
+        response = await self._client.post(
+            "embeddings", request_data, model=model
+        )
 
         embeddings: list[list[float]] = []
         for item in response.get("data", []):

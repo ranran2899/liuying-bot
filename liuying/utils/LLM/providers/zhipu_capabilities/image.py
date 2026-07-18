@@ -48,7 +48,7 @@ class ZhipuImageCapability:
             request_data["quality"] = "standard"
 
         response = await self._client.post(
-            "images/generations", request_data, timeout=120
+            "images/generations", request_data, timeout=120, model=model
         )
         return ResponseParser.parse_image_response(response)
 
@@ -89,7 +89,7 @@ class ZhipuImageCapability:
             request_data.update(options)
 
         response = await self._client.post(
-            "images/edits", request_data, timeout=120
+            "images/edits", request_data, timeout=120, model=model
         )
         return ResponseParser.parse_image_response(response)
 
@@ -123,7 +123,7 @@ class ZhipuImageCapability:
             request_data.update(options)
 
         response = await self._client.post(
-            "images/variations", request_data, timeout=120
+            "images/variations", request_data, timeout=120, model=model
         )
         return ResponseParser.parse_image_response(response)
 

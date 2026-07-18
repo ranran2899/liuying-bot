@@ -47,8 +47,8 @@ class ZhipuAudioCapability:
         if options:
             request_data.update(options)
 
-        url = f"{self._client.base_url}/audio/speech"
-        headers = self._client.get_headers()
+        url = f"{self._client.get_base_url(model)}/audio/speech"
+        headers = self._client.get_headers(model=model)
 
         response = await AsyncHttpx.post(
             url=url, json=request_data, headers=headers, timeout=120
@@ -95,7 +95,7 @@ class ZhipuAudioCapability:
             data.update(options)
 
         response = await self._client.post_multipart(
-            "audio/transcriptions", files, data, timeout=120
+            "audio/transcriptions", files, data, timeout=120, model=model
         )
         return ResponseParser.parse_transcription_response(response)
 
@@ -122,7 +122,7 @@ class ZhipuAudioCapability:
             data.update(options)
 
         response = await self._client.post_multipart(
-            "audio/translations", files, data, timeout=120
+            "audio/translations", files, data, timeout=120, model=model
         )
         return ResponseParser.parse_transcription_response(response)
 
@@ -152,7 +152,7 @@ class ZhipuAudioCapability:
             request_data.update(options)
 
         response = await self._client.post(
-            "audio/transcriptions", request_data, timeout=120
+            "audio/transcriptions", request_data, timeout=120, model=model
         )
         return ResponseParser.parse_transcription_response(response)
 
