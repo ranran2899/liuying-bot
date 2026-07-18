@@ -5,7 +5,7 @@
 
 import asyncio
 
-from nonebot import on_message
+from nonebot import get_bot, on_message
 from nonebot.adapters import Event
 from nonebot.rule import to_me
 from nonebot_plugin_uninfo import Uninfo
@@ -16,6 +16,7 @@ from liuying.utils.message import MessageUtils
 from ...config import get_config
 from ...core.group import group_social
 from ...core.peer_awareness import peer_awareness
+from ...core.runtime import ProtocolHelper
 from ...core.runtime import runtime_switch
 from ...core.safety import AclChecker
 from ...core.target_inference import MessageTarget, target_inference
@@ -24,6 +25,53 @@ from ...pipeline.processor import ReplyResult, reply_processor
 from ..chat_helpers import ChatMatchersHelper, _ai_user_states
 
 __all__ = ["setup_chat_commands"]
+
+
+async def _apply_emoji_react(
+    session: Uninfo, message_id: int, face_id: int
+) -> None:
+    """执行表情表态
+
+    协议扩展调用降级：失败仅记录debug日志，不影响主流程。
+
+    参数:
+        session: 会话信息
+        message_id: 消息ID
+        face_id: 表情ID
+    """
+    try:
+        bot = get_bot()
+        await ProtocolHelper.emoji_react(
+            bot,
+            message_id=message_id,
+            face_id=face_id,
+            group_id=(
+                session.scene.id if session.scene.is_group else ""
+            ),
+        )
+    except Exception as e:
+        logger.debug(
+            f"表情表态失败: {e}", command="AI", e=e
+        )
+
+
+async def _apply_set_typing(session: Uninfo) -> None:
+    """执行输入状态模拟
+
+    协议扩展调用降级：失败仅记录debug日志，不影响主流程。
+
+    参数:
+        session: 会话信息
+    """
+    try:
+        bot = get_bot()
+        await ProtocolHelper.set_typing(
+            bot, user_id=session.user.id
+        )
+    except Exception as e:
+        logger.debug(
+            f"输入状态模拟失败: {e}", command="AI", e=e
+        )
 
 
 def setup_chat_commands() -> None:
@@ -118,6 +166,7 @@ def setup_chat_commands() -> None:
             text,
             group_id,
             is_private,
+            message_id=getattr(event, "message_id", None),
         )
 
     async def _handle_reply(
@@ -126,6 +175,7 @@ def setup_chat_commands() -> None:
         text: str,
         group_id: str | None,
         is_private: bool,
+        message_id: int | None = None,
     ) -> None:
         """统一处理回复生成与发送
 
@@ -135,6 +185,7 @@ def setup_chat_commands() -> None:
             text: 输入文本
             group_id: 群组ID
             is_private: 是否私聊
+            message_id: 触发消息的ID，用于引用回复/表情表态
         """
         err_text = ""
         result: ReplyResult | None = None
@@ -190,10 +241,24 @@ def setup_chat_commands() -> None:
             return
 
         if result.metadata.get("silence"):
+            # 沉默时仍可能按概率表情表态
+            if (
+                result.react_face_id is not None
+                and message_id is not None
+            ):
+                await _apply_emoji_react(
+                    session,
+                    message_id,
+                    result.react_face_id,
+                )
             return
 
         if not result.text and not result.segments:
             return
+
+        # 输入状态模拟（发送前，仅私聊）
+        if result.should_set_typing:
+            await _apply_set_typing(session)
 
         if result.typing_delay > 0:
             await asyncio.sleep(result.typing_delay)
@@ -206,6 +271,10 @@ def setup_chat_commands() -> None:
             image_url=result.image_url,
             segments=result.segments or None,
             gap_delays=result.gap_delays or None,
+            quote_msg_id=(
+                message_id if result.should_quote else None
+            ),
+            at_user_id=result.at_user_id,
         )
 
 

@@ -58,5 +58,13 @@ MEMORY_CONFIGS: list[RegisterConfig] = [
         default_value=20,
         type=int,
     ),
+    RegisterConfig(
+        key="KNOWLEDGE_QUERY_REWRITE_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用检索查询改写（LLM识别梗/黑话/缩写补出正式名）",
+        default_value=True,
+        type=bool,
+    ),
 ]
 """记忆相关配置项列表"""

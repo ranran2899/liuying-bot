@@ -1,0 +1,172 @@
+{
+  "yyds": {
+    "meaning": "永远的神，表示极度赞美",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "xswl": {
+    "meaning": "笑死我了，表示很好笑",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "awsl": {
+    "meaning": "啊我死了，表示被萌到或激动",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "u1s1": {
+    "meaning": "有一说一，表示客观评价",
+    "tone": "neutral",
+    "risk": "low"
+  },
+  "zqsg": {
+    "meaning": "真情实感，表示认真投入",
+    "tone": "neutral",
+    "risk": "low"
+  },
+  "ssfd": {
+    "meaning": "瑟瑟发抖，表示害怕或紧张",
+    "tone": "negative",
+    "risk": "low"
+  },
+  "nbcs": {
+    "meaning": "nobody cares，没人在意",
+    "tone": "negative",
+    "risk": "medium"
+  },
+  "bdjw": {
+    "meaning": "不懂就问，表示疑问",
+    "tone": "neutral",
+    "risk": "low"
+  },
+  "666": {
+    "meaning": "厉害，表示赞叹",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "999": {
+    "meaning": "比666更厉害，极致赞叹",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "打call": {
+    "meaning": "加油支持，表示声援",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "种草": {
+    "meaning": "想买某物，被安利",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "拔草": {
+    "meaning": "不想买了或已买，消除购买欲",
+    "tone": "neutral",
+    "risk": "low"
+  },
+  "躺平": {
+    "meaning": "不奋斗，佛系应对",
+    "tone": "neutral",
+    "risk": "low"
+  },
+  "内卷": {
+    "meaning": "过度竞争，内部消耗",
+    "tone": "negative",
+    "risk": "low"
+  },
+  "破防": {
+    "meaning": "心理防线被突破，被触动或受伤",
+    "tone": "negative",
+    "risk": "low"
+  },
+  "破大防": {
+    "meaning": "严重破防，情绪强烈波动",
+    "tone": "negative",
+    "risk": "low"
+  },
+  "emo": {
+    "meaning": "抑郁情绪，情绪低落",
+    "tone": "negative",
+    "risk": "low"
+  },
+  "社死": {
+    "meaning": "社会性死亡，极度尴尬",
+    "tone": "negative",
+    "risk": "low"
+  },
+  "绝绝子": {
+    "meaning": "极好或极差，看语境",
+    "tone": "neutral",
+    "risk": "low"
+  },
+  "耗子尾汁": {
+    "meaning": "好自为之，劝告语气",
+    "tone": "neutral",
+    "risk": "medium"
+  },
+  "芭比Q了": {
+    "meaning": "完蛋了，糟了",
+    "tone": "negative",
+    "risk": "low"
+  },
+  "尊嘟假嘟": {
+    "meaning": "真的假的，表示惊讶或疑问",
+    "tone": "neutral",
+    "risk": "low"
+  },
+  "泰裤辣": {
+    "meaning": "太酷啦，表示赞叹",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "显眼包": {
+    "meaning": "爱表现的人，引人注目",
+    "tone": "neutral",
+    "risk": "medium"
+  },
+  "搭子": {
+    "meaning": "一起做某事的伙伴，非深交",
+    "tone": "neutral",
+    "risk": "low"
+  },
+  "电子榨菜": {
+    "meaning": "吃饭时看的视频或节目",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "天花板": {
+    "meaning": "最高水平，顶尖",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "锦鲤": {
+    "meaning": "运气极好的人",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "下头": {
+    "meaning": "扫兴，破坏气氛",
+    "tone": "negative",
+    "risk": "low"
+  },
+  "上头": {
+    "meaning": "着迷，沉迷其中",
+    "tone": "positive",
+    "risk": "low"
+  },
+  "摸鱼": {
+    "meaning": "偷懒，上班不干活",
+    "tone": "neutral",
+    "risk": "low"
+  },
+  "卷王": {
+    "meaning": "极度内卷的人",
+    "tone": "negative",
+    "risk": "low"
+  },
+  "干饭": {
+    "meaning": "吃饭，干饭人指努力吃饭的人",
+    "tone": "positive",
+    "risk": "low"
+  }
+}

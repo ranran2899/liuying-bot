@@ -10,7 +10,7 @@ from typing import Any
 
 from nonebot import on_notice
 from nonebot.adapters import Bot, Event
-from nonebot_plugin_alconna import Image
+from nonebot_plugin_alconna import At, Image, Reply
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.log import logger
@@ -142,10 +142,14 @@ class ChatMatchersHelper:
         image_url: str | None = None,
         segments: list[str] | None = None,
         gap_delays: list[float] | None = None,
+        *,
+        quote_msg_id: int | None = None,
+        at_user_id: str | None = None,
     ) -> None:
         """发送回复消息（支持碎片化分段与图片）
 
             统一使用 MessageUtils.build_message 构建消息。
+            quote_msg_id/at_user_id 仅作用于第一条段，避免每段都引用/@。
 
             参数:
                 session: 会话信息
@@ -155,13 +159,35 @@ class ChatMatchersHelper:
                 image_url: 生成图片的URL
                 segments: 碎片化段列表（非空时优先使用）
                 gap_delays: 段间延迟列表（与segments对齐）
+                quote_msg_id: 引用回复的消息ID，None为不引用
+                at_user_id: @的用户ID，None为不@
             """
+        def _build_prefix_parts(idx: int) -> list:
+            """构造首条段的引用/@前缀段
+
+            参数:
+                idx: 段索引，仅0时构造
+
+            返回:
+                list: 前缀段列表（可能为空）
+            """
+            if idx != 0:
+                return []
+            parts: list = []
+            if quote_msg_id is not None:
+                parts.append(Reply(id=quote_msg_id))
+            if at_user_id is not None:
+                parts.append(At(flag="user", target=at_user_id))
+            return parts
+
         if segments and not image_url:
             last_idx = len(segments) - 1
             for i, seg in enumerate(segments):
                 if not seg:
                     continue
-                await MessageUtils.build_message(seg).send()
+                parts = _build_prefix_parts(i)
+                parts.append(seg)
+                await MessageUtils.build_message(parts).send()
                 if i < last_idx and gap_delays:
                     delay = (
                         gap_delays[i]
@@ -185,7 +211,7 @@ class ChatMatchersHelper:
         ):
             return
 
-        msg_parts: list[Any] = []
+        msg_parts: list = _build_prefix_parts(0)
         if text:
             msg_parts.append(text)
         if image_url:

@@ -9,7 +9,9 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 
+from ...config import get_config
 from ...models.memory_item import MemoryItem
+from ..knowledge_db.query_rewriter import rewrite_query
 from ._common import (
     _DEFAULT_PERSONA,
     _EMBEDDING_DIM,
@@ -57,6 +59,9 @@ class RecallMixin:
         """
         if not query or not query.strip():
             return []
+        # 检索意图改写：LLM识别梗/黑话/缩写补出正式名，提升召回准确率
+        if get_config("KNOWLEDGE_QUERY_REWRITE_ENABLED", True):
+            query = await rewrite_query(query)
         # 5 路召回并行执行，避免串行 5x 耗时
         fts_task = self._search_fts(query, top_k * 3)
         vector_task = self._search_vector(query, top_k * 3)

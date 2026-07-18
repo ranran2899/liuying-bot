@@ -17,6 +17,7 @@ from .commands import (
     setup_persona_commands,
     setup_tts_commands,
 )
+from .poke_notice import setup_poke_notice
 
 __all__ = ["setup_matchers"]
 
@@ -30,12 +31,14 @@ def setup_matchers() -> None:
     - 记忆查看与清空命令
     - TTS合成命令
     - group_ban notice 监听
+    - 拍一拍响应 notice 监听
     """
     setup_chat_commands()
     setup_persona_commands()
     setup_memory_commands()
     setup_tts_commands()
     ChatMatchersHelper._register_group_ban_notice()
+    setup_poke_notice()
 
     logger.info(
         "AI matcher注册完成",

@@ -84,6 +84,22 @@ HUMANIZE_CONFIGS: list[RegisterConfig] = [
         type=bool,
     ),
     RegisterConfig(
+        key="POKE_BACK_PROBABILITY",
+        value=0.3,
+        module=MODULE,
+        help="被戳后戳回的概率",
+        default_value=0.3,
+        type=float,
+    ),
+    RegisterConfig(
+        key="PROACTIVE_POKE_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否启用主动拍一拍（定时主动戳活跃用户）",
+        default_value=False,
+        type=bool,
+    ),
+    RegisterConfig(
         key="INPUT_STATUS_ENABLED",
         value=False,
         module=MODULE,

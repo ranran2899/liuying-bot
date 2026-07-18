@@ -6,6 +6,7 @@
 """
 
 from datetime import datetime
+import json
 from pathlib import Path
 
 from ruamel.yaml import YAML
@@ -374,6 +375,21 @@ class PersonaManager:
         if user_persona:
             parts.append(f"\n\n[用户画像]\n{user_persona}")
 
+        meme_seeds = self._load_meme_seeds()
+        if meme_seeds:
+            meme_lines = [
+                f"- {name}: {info.get('meaning', '')}"
+                for name, info in meme_seeds.items()
+                if isinstance(info, dict)
+            ]
+            if meme_lines:
+                parts.append(
+                    "\n\n[网络梗词典]\n"
+                    "用户消息中可能包含以下网络梗，"
+                    "理解其含义并自然回应：\n"
+                    + "\n".join(meme_lines)
+                )
+
         max_len = persona.get("max_response_length", 200)
         parts.append(f"\n\n[输出要求]\n回复保持简洁，不超过{max_len}字")
 
@@ -479,6 +495,35 @@ class PersonaManager:
             str: 贴纸情绪（warm/cool/neutral）
         """
         return persona.get("sticker_mood", "neutral")
+
+    def _load_meme_seeds(self) -> dict:
+        """加载网络梗词典
+
+        从 personas/meme_seeds.json 加载常用梗含义，
+        用于注入系统提示词帮助AI理解用户黑话。
+
+        返回:
+            dict: 梗词典字典，加载失败返回空字典
+        """
+        cache_key = "__meme_seeds__"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        path = self.personas_dir / "meme_seeds.json"
+        if not path.exists():
+            self._cache[cache_key] = {}
+            return {}
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f) or {}
+            if not isinstance(data, dict):
+                data = {}
+        except Exception as e:
+            logger.debug(
+                f"加载梗词典失败: {e}", command="AI", e=e
+            )
+            data = {}
+        self._cache[cache_key] = data
+        return data
 
 
 persona_manager = PersonaManager()

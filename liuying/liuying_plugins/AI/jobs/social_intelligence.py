@@ -7,12 +7,13 @@
 
 from datetime import datetime
 import json
+import random
 from typing import Any
 
 from nonebot import get_bot
 from nonebot_plugin_alconna import Target
 
-from liuying.utils.apscheduler import task_manager
+from liuying.models._user.user_info import UserInfo
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
@@ -20,10 +21,25 @@ from ..config import get_config
 from ..core.context import context_manager
 from ..core.group import ProfileToolkit
 from ..core.llm import llm_helper
+from ..core.runtime import ProtocolHelper
 from ..core.social import social_gate, social_quota
+from ..core.social.framework import (
+    SocialContext,
+    SocialTrigger,
+    social_trigger_registry,
+)
 from ..models.group_context import GroupContextSnapshot
 
-__all__ = ["setup_social_intelligence_jobs"]
+__all__ = [
+    "register_social_triggers",
+    "setup_social_intelligence_jobs",
+]
+
+_PROACTIVE_POKE_FAVOR_THRESHOLD = 5
+"""主动拍一拍触发的好感度阈值"""
+
+_PROACTIVE_POKE_DAILY_LIMIT = 3
+"""主动拍一拍每日上限"""
 
 
 _FESTIVAL_MAP: dict[str, str] = {
@@ -246,6 +262,63 @@ class SocialIntelligenceHelper:
         return _FESTIVAL_MAP.get(key, "")
 
     @staticmethod
+    async def _proactive_poke() -> None:
+        """主动拍一拍高好感度用户
+
+        随机选一个高好感度用户戳一下，作为亲昵互动。
+        深夜静默时段跳过，受配额限制避免过度打扰。
+        """
+        if not get_config("PROACTIVE_POKE_ENABLED", False):
+            return
+        if context_manager.is_rest_time():
+            return
+
+        users = await UserInfo.filter(
+            favor_value__gte=_PROACTIVE_POKE_FAVOR_THRESHOLD
+        ).all()
+        if not users:
+            return
+
+        daily_limit = get_config(
+            "PROACTIVE_POKE_DAILY_LIMIT",
+            _PROACTIVE_POKE_DAILY_LIMIT,
+        )
+        poked = 0
+        random.shuffle(users)
+        for user in users:
+            if poked >= daily_limit:
+                break
+            if not user.user_id:
+                continue
+            if social_quota.is_quota_exceeded(
+                user.user_id,
+                scenario="主动拍一拍",
+                daily_quota_per_user=daily_limit,
+                cooldown_seconds=3600,
+            ):
+                continue
+            try:
+                bot = get_bot()
+                ok = await ProtocolHelper.poke(
+                    bot, user_id=user.user_id
+                )
+                if ok:
+                    social_quota.mark_sent(
+                        user.user_id, scenario="主动拍一拍"
+                    )
+                    poked += 1
+                    logger.info(
+                        f"主动拍一拍: {user.user_id}",
+                        command="AI",
+                    )
+            except Exception as e:
+                logger.debug(
+                    f"主动拍一拍失败 {user.user_id}: {e}",
+                    command="AI",
+                    e=e,
+                )
+
+    @staticmethod
     async def _morning_greeting() -> None:
         """早安问候任务"""
         festival = SocialIntelligenceHelper._get_festival()
@@ -381,8 +454,98 @@ class SocialIntelligenceHelper:
                 )
 
 
+def _make_handler(func: Any) -> Any:
+    """包装SocialIntelligenceHelper方法为接收SocialContext的handler
+
+    SocialTrigger.handler签名要求接收SocialContext，
+    但社交智能任务内部自行遍历所有群，不使用ctx。
+
+    参数:
+        func: SocialIntelligenceHelper的无参数async方法
+
+    返回:
+        接收SocialContext的async handler
+    """
+
+    async def _handler(_ctx: SocialContext) -> None:
+        await func()
+
+    return _handler
+
+
+def register_social_triggers() -> None:
+    """注册社交智能触发器到SocialTrigger框架
+
+    把早安/晚安/新闻/话题延续4个任务注册为SocialTrigger，
+    由social_trigger_registry.setup_to_scheduler统一调度。
+    """
+    enabled_fn = lambda _cfg: get_config(
+        "SOCIAL_INTELLIGENCE_ENABLED", True
+    )
+    social_trigger_registry.register(
+        SocialTrigger(
+            name="morning_greeting",
+            handler=_make_handler(
+                SocialIntelligenceHelper._morning_greeting
+            ),
+            schedule_kind="cron",
+            schedule_args={"hour": 8, "minute": 0},
+            enabled=enabled_fn,
+        )
+    )
+    social_trigger_registry.register(
+        SocialTrigger(
+            name="evening_greeting",
+            handler=_make_handler(
+                SocialIntelligenceHelper._evening_greeting
+            ),
+            schedule_kind="cron",
+            schedule_args={"hour": 22, "minute": 30},
+            enabled=enabled_fn,
+        )
+    )
+    social_trigger_registry.register(
+        SocialTrigger(
+            name="news_push",
+            handler=_make_handler(
+                SocialIntelligenceHelper._news_push
+            ),
+            schedule_kind="interval",
+            schedule_args={"hours": 4},
+            enabled=enabled_fn,
+        )
+    )
+    social_trigger_registry.register(
+        SocialTrigger(
+            name="topic_followup",
+            handler=_make_handler(
+                SocialIntelligenceHelper._topic_followup
+            ),
+            schedule_kind="interval",
+            schedule_args={"hours": 2},
+            enabled=enabled_fn,
+        )
+    )
+    social_trigger_registry.register(
+        SocialTrigger(
+            name="proactive_poke",
+            handler=_make_handler(
+                SocialIntelligenceHelper._proactive_poke
+            ),
+            schedule_kind="interval",
+            schedule_args={"hours": 6},
+            enabled=lambda _cfg: get_config(
+                "PROACTIVE_POKE_ENABLED", False
+            ),
+        )
+    )
+
+
 async def setup_social_intelligence_jobs() -> None:
-    """注册社交智能定时任务"""
+    """注册社交智能定时任务
+
+    通过SocialTrigger框架注册触发器并统一调度。
+    """
     if not get_config("SOCIAL_INTELLIGENCE_ENABLED", True):
         logger.info(
             "社交智能功能已禁用，跳过任务注册",
@@ -390,30 +553,11 @@ async def setup_social_intelligence_jobs() -> None:
         )
         return
 
-    await task_manager.add_cron_task(
-        task_id="ai_morning_greeting",
-        func=SocialIntelligenceHelper._morning_greeting,
-        hour=8,
-        minute=0,
-    )
-    await task_manager.add_cron_task(
-        task_id="ai_evening_greeting",
-        func=SocialIntelligenceHelper._evening_greeting,
-        hour=22,
-        minute=30,
-    )
-    await task_manager.add_interval_task(
-        task_id="ai_news_push",
-        func=SocialIntelligenceHelper._news_push,
-        hours=4,
-    )
-    await task_manager.add_interval_task(
-        task_id="ai_topic_followup",
-        func=SocialIntelligenceHelper._topic_followup,
-        hours=2,
-    )
+    register_social_triggers()
+    count = await social_trigger_registry.setup_to_scheduler()
 
     logger.info(
-        "社交智能任务已注册（早安8:00/晚安22:30/新闻4h/话题2h）",
+        f"社交智能任务已注册 {count} 个触发器"
+        "（早安8:00/晚安22:30/新闻4h/话题2h/主动拍6h）",
         command="AI",
     )

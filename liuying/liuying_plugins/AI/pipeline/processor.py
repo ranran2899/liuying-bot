@@ -21,6 +21,7 @@ from ..agent.runner import AgentResult
 from ..config import get_config
 from ..core.active_learning import active_learning
 from ..core.context import ContextPolicy
+from ..core.emotion import emotion_manager
 from ..core.group import GroupMuteTracker
 from ..core.llm import (
     TokenTrackingHelper,
@@ -29,9 +30,11 @@ from ..core.llm import (
 from ..core.peer_awareness import peer_awareness
 from ..core.persona import persona_manager
 from ..core.reply_turn_trace import reply_turn_trace
+from ..core.runtime import ProtocolHelper
 from ..core.safety import token_quota_service
 from ..models.conversation_record import ConversationRecord
 from .helpers import ReplyPipeline
+from .humanize import HumanizeToolkit
 from .prompt_builder import PromptBuilder
 from .reply_generator import ReplyGenerator
 from .response_review import response_reviewer
@@ -271,6 +274,88 @@ class ReplyProcessor:
             )
             return None
 
+    def _decide_silence_reaction(
+        self, ctx: ReplyContext
+    ) -> int | None:
+        """沉默时按概率决定表情表态face_id
+
+        仅群聊 + REACTION_ENABLED + 概率命中时返回face_id，
+        由发送方拿到message_id后调用ProtocolHelper.emoji_react执行。
+
+        参数:
+            ctx: 回复上下文
+
+        返回:
+            int | None: face_id，None为不表态
+        """
+        if not ctx.group_id:
+            return None
+        if not get_config("REACTION_ENABLED", True):
+            return None
+        prob = get_config("REACTION_PROBABILITY", 0.15)
+        if random.random() >= prob:
+            return None
+        return HumanizeToolkit.pick_reaction_face_id("neutral")
+
+    @staticmethod
+    def _decide_typing_status(
+        ctx: ReplyContext, typing_delay: float
+    ) -> bool:
+        """判断是否需要模拟输入状态
+
+        仅私聊 + INPUT_STATUS_ENABLED + 延迟>1.5s时触发，
+        避免在群聊刷屏输入状态打扰他人。
+
+        参数:
+            ctx: 回复上下文
+            typing_delay: 打字延迟（秒）
+
+        返回:
+            bool: 是否需要模拟输入状态
+        """
+        if not ctx.is_private:
+            return False
+        if not get_config("INPUT_STATUS_ENABLED", False):
+            return False
+        return typing_delay > 1.5
+
+    @staticmethod
+    async def _maybe_prepend_catchphrase(
+        text: str, ctx: ReplyContext
+    ) -> str:
+        """按概率在回复前插入人格口头禅
+
+        从用户当前人格的traits.catchphrase列表按概率前置插入。
+        失败时返回原始文本，不影响主流程。
+
+        参数:
+            text: 拟人化后的回复文本
+            ctx: 回复上下文
+
+        返回:
+            str: 可能前置了口头禅的文本
+        """
+        try:
+            persona = await persona_manager.get_user_persona_config(
+                ctx.user_id
+            )
+            traits = persona.get("traits") or {}
+            if not isinstance(traits, dict):
+                return text
+            catchphrases = traits.get("catchphrase") or []
+            if not catchphrases or not isinstance(
+                catchphrases, list
+            ):
+                return text
+            return HumanizeToolkit.maybe_prepend_catchphrase(
+                text, catchphrases
+            )
+        except Exception as e:
+            logger.debug(
+                f"口头禅插入失败: {e}", command="AI", e=e
+            )
+            return text
+
     async def handle(self, ctx: ReplyContext) -> ReplyResult:
         """主入口：处理用户消息并生成回复
 
@@ -437,8 +522,11 @@ class ReplyProcessor:
             reply_turn_trace.finish_trace(
                 trace_id=trace_id, outcome="silence"
             )
+            # 沉默时按概率表情表态（仅群聊，由发送方拿到message_id后执行）
+            react_face_id = self._decide_silence_reaction(ctx)
             return ReplyResult(
                 text="",
+                react_face_id=react_face_id,
                 metadata={
                     "silence": True,
                     "elapsed": round(time.time() - start_time, 3),
@@ -475,8 +563,33 @@ class ReplyProcessor:
             trace_id=trace_id, key="humanize", label="拟人化完成"
         )
 
+        # 口头禅运行时插入：从人格catchphrase按概率前置
+        humanized_text = await self._maybe_prepend_catchphrase(
+            humanized_text, ctx
+        )
+
         segments, gap_delays = ReplyPipeline.build_segments(
             humanized_text, ctx
+        )
+
+        # 拟人化协议扩展决策：输入状态/引用回复/@回复
+        should_set_typing = self._decide_typing_status(
+            ctx, typing_delay
+        )
+        should_quote = HumanizeToolkit.should_quote_reply(
+            is_private=ctx.is_private,
+            quote_enabled=get_config("QUOTE_REPLY_ENABLED", True),
+            history_len=len(history),
+        )
+        at_user_id = (
+            ctx.user_id
+            if HumanizeToolkit.should_at_target(
+                is_private=ctx.is_private,
+                at_enabled=get_config("AT_REPLY_ENABLED", True),
+                is_at_bot=ctx.is_at_bot,
+                should_quote=should_quote,
+            )
+            else None
         )
 
         # 并行执行贴纸决策、TTS决策与持久化
@@ -522,6 +635,9 @@ class ReplyProcessor:
                 else []
             ),
             metadata=metadata,
+            should_set_typing=should_set_typing,
+            should_quote=should_quote,
+            at_user_id=at_user_id,
         )
 
     async def handle_text(

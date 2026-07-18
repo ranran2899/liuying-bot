@@ -52,6 +52,10 @@ class ReplyResult:
         gap_delays: 段间延迟列表（与segments对齐）
         tool_calls: 工具调用记录
         metadata: 附加元信息
+        should_set_typing: 是否在发送前模拟输入状态
+        react_face_id: 沉默时表情表态的face_id，None为不表态
+        should_quote: 是否需要引用回复用户消息
+        at_user_id: 需要@的用户ID，None为不@
     """
 
     text: str
@@ -63,3 +67,7 @@ class ReplyResult:
     gap_delays: list[float] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    should_set_typing: bool = False
+    react_face_id: int | None = None
+    should_quote: bool = False
+    at_user_id: str | None = None

@@ -36,14 +36,42 @@ _TYPO_PAIRS: list[tuple[str, str]] = [
     ("哪", "那"),
     ("买", "卖"),
     ("卖", "买"),
+    ("象", "像"),
+    ("像", "象"),
+    ("需", "须"),
+    ("须", "需"),
+    ("以", "已"),
+    ("已", "以"),
+    ("进", "近"),
+    ("近", "进"),
+    ("因", "应"),
+    ("应", "因"),
+    ("坐", "座"),
+    ("座", "坐"),
 ]
-"""易混字对"""
+"""易混字对（覆盖常见误用，含象/像、需/须、以/已、进/近等）"""
 
 _TYPO_MIN_LEN = 6
 """错别字注入最小文本长度"""
 
 _TYPO_MAX_LEN = 40
 """错别字注入最大文本长度"""
+
+_REACTION_FACE_POOL: dict[str, list[int]] = {
+    "positive": [76, 66, 21, 100, 13],
+    "neutral": [0, 9, 29, 36, 12],
+    "negative": [1, 14, 28, 5, 15],
+}
+"""表情表态face_id池（按情绪分组：赞/爱心/飞吻/拥抱/微笑；惊讶/尴尬/流汗/疑问/呲牙；撇嘴/难过/惊恐/流泪/酷）"""
+
+_CATCHPHRASE_MAX_LEN = 50
+"""口头禅插入的回复最大长度"""
+
+_QUOTE_REPLY_MIN_GAP = 4
+"""触发引用回复的最小历史长度"""
+
+_AT_REPLY_PROBABILITY = 0.5
+"""@回复触发概率（与引用互斥）"""
 
 _PARAGRAPH_SPLIT_PATTERN = re.compile(r"\n\s*\n+")
 """段落分隔模式（连续2+换行/空行）"""
@@ -310,3 +338,113 @@ class HumanizeToolkit:
             "单条尽量不超过40字，口语化，"
             "可以只接半句，不要写成完整段落或书面文。"
         )
+
+    @staticmethod
+    def pick_reaction_face_id(
+        mood: str = "neutral",
+        rng: random.Random | None = None,
+    ) -> int:
+        """按情绪随机选择表情表态face_id
+
+        参数:
+            mood: 情绪倾向（positive/neutral/negative）
+            rng: 随机数生成器
+
+        返回:
+            int: face_id
+        """
+        use_rng = rng or random
+        pool = _REACTION_FACE_POOL.get(mood) or _REACTION_FACE_POOL["neutral"]
+        return use_rng.choice(pool)
+
+    @staticmethod
+    def should_quote_reply(
+        is_private: bool,
+        quote_enabled: bool,
+        history_len: int,
+        min_gap: int = _QUOTE_REPLY_MIN_GAP,
+    ) -> bool:
+        """判断是否需要引用回复
+
+        群聊 + 配置开启 + 历史长度达到阈值时引用，避免上下文较长时歧义。
+
+        参数:
+            is_private: 是否私聊
+            quote_enabled: 引用回复配置是否开启
+            history_len: 历史消息条数
+            min_gap: 触发引用的最小历史长度
+
+        返回:
+            bool: 是否需要引用
+        """
+        if is_private or not quote_enabled:
+            return False
+        return history_len >= min_gap
+
+    @staticmethod
+    def should_at_target(
+        is_private: bool,
+        at_enabled: bool,
+        is_at_bot: bool,
+        should_quote: bool,
+        rng: random.Random | None = None,
+        probability: float = _AT_REPLY_PROBABILITY,
+    ) -> bool:
+        """判断是否需要@回复对象
+
+        群聊 + 配置开启 + 用户未直接@bot + 未引用时按概率@。
+        与引用互斥，避免一条消息又引用又@显得啰嗦。
+
+        参数:
+            is_private: 是否私聊
+            at_enabled: @回复配置是否开启
+            is_at_bot: 用户是否已@bot
+            should_quote: 是否已决定引用回复
+            rng: 随机数生成器
+            probability: @触发概率
+
+        返回:
+            bool: 是否需要@
+        """
+        if is_private or not at_enabled:
+            return False
+        if is_at_bot or should_quote:
+            return False
+        use_rng = rng or random
+        return use_rng.random() < probability
+
+    @staticmethod
+    def maybe_prepend_catchphrase(
+        text: str,
+        catchphrases: list[str],
+        mood: str = "neutral",
+        probability: float = 0.2,
+        rng: random.Random | None = None,
+    ) -> str:
+        """按概率在回复前插入人格口头禅
+
+        仅对短句插入，避免破坏长回复结构。
+        mood=positive时提高概率，negative时降低。
+
+        参数:
+            text: 原始回复文本
+            catchphrases: 口头禅列表
+            mood: 当前情绪
+            probability: 基础触发概率
+            rng: 随机数生成器
+
+        返回:
+            str: 可能前置了口头禅的文本
+        """
+        if not catchphrases or len(text) > _CATCHPHRASE_MAX_LEN:
+            return text
+        use_rng = rng or random
+        adjusted = probability
+        if mood == "positive":
+            adjusted = min(1.0, probability * 1.5)
+        elif mood == "negative":
+            adjusted = probability * 0.5
+        if use_rng.random() >= adjusted:
+            return text
+        phrase = use_rng.choice(catchphrases)
+        return f"{phrase}{text}"
