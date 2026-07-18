@@ -5,8 +5,8 @@
 支持键TTL跟踪，防止内存泄漏。
 """
 
-import time
 from threading import Lock
+import time
 from typing import Any
 
 from liuying.utils.log import logger

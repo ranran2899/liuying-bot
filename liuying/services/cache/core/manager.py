@@ -15,7 +15,7 @@ from typing import Any, ClassVar, Self
 
 from liuying.utils.log import logger
 
-from ..config import LOG_COMMAND, CacheException, CacheMode, KeyType, cache_config
+from ..config import LOG_COMMAND, CacheMode, KeyType, cache_config
 from ..containers.dict import CacheDict
 from ..containers.list import CacheList
 from ..monitor import CacheMonitor
@@ -150,6 +150,28 @@ class CacheManager:
     def _check_enabled_and_mode(self) -> bool:
         """检查缓存是否启用且不是NONE模式"""
         return self._enabled and cache_config.cache_mode != CacheMode.NONE
+
+    async def _delete_cache_key(
+        self, cache_key: str, cache_type: str | None = None
+    ) -> bool:
+        """删除单个缓存键并清理关联的注册器记录和锁
+
+        参数:
+            cache_key: 完整缓存键
+            cache_type: 缓存类型，提供时同步清理注册器键记录
+
+        返回:
+            bool: 是否成功删除
+        """
+        try:
+            await self._backend_mgr.cache_backend.delete(cache_key)
+            if cache_type is not None:
+                self._registry.remove_key(cache_type, cache_key)
+            self._lock_mgr.remove_lock(f"lock:{cache_key}")
+            return True
+        except Exception as e:
+            logger.debug(f"清除缓存键失败: {cache_key}", LOG_COMMAND, e=e)
+            return False
 
     def _get_batch_semaphore(self) -> asyncio.Semaphore:
         """获取批量操作信号量"""
@@ -349,27 +371,14 @@ class CacheManager:
                     if not self._registry.is_valid(resolved_type):
                         return False
                     keys = self._registry.pop_keys(resolved_type).copy()
-
-                    async def _delete_one(cache_key: str) -> bool:
-                        try:
-                            await self._backend_mgr.cache_backend.delete(cache_key)
-                            self._lock_mgr.remove_lock(f"lock:{cache_key}")
-                            return True
-                        except (TimeoutError, OSError) as e:
-                            logger.debug(
-                                f"清除缓存键失败: {cache_key}",
-                                LOG_COMMAND,
-                                e=e,
-                            )
-                            return False
-
                     results = await asyncio.gather(
-                        *(_delete_one(k) for k in keys),
+                        *(self._delete_cache_key(k) for k in keys),
                         return_exceptions=True,
                     )
                     cleaned = sum(1 for r in results if r is True)
                     logger.debug(
-                        f"已清除 {resolved_type} 类型的 {cleaned}/{len(keys)} 个缓存",
+                        f"已清除 {resolved_type} 类型的 "
+                        f"{cleaned}/{len(keys)} 个缓存",
                         LOG_COMMAND,
                     )
                     return True
@@ -425,23 +434,8 @@ class CacheManager:
             return 0
 
         ns_keys = self._registry.get_keys_by_namespace(namespace)
-
-        async def _delete_one(ct: str, ck: str) -> bool:
-            try:
-                await self._backend_mgr.cache_backend.delete(ck)
-                self._registry.remove_key(ct, ck)
-                self._lock_mgr.remove_lock(f"lock:{ck}")
-                return True
-            except Exception as e:
-                logger.debug(
-                    f"清除命名空间缓存键失败: {ck}",
-                    LOG_COMMAND,
-                    e=e,
-                )
-                return False
-
         tasks = [
-            _delete_one(ct, ck)
+            self._delete_cache_key(ck, ct)
             for ct, keys in ns_keys.items()
             for ck in keys
         ]

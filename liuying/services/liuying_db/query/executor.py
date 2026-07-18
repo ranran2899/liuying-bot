@@ -339,6 +339,7 @@ class QueryExecutorMixin:
         count_column: str | Any | None = None,
         desc: bool = True,
         limit: int | None = None,
+        offset: int | None = None,
     ) -> list[tuple[Any, int]]:
         """按指定列分组统计记录数量
 
@@ -347,6 +348,7 @@ class QueryExecutorMixin:
             count_column: 计数列名或列对象，为None时统计全部记录
             desc: 是否按计数降序排列，默认True
             limit: 返回前N条记录，为None时返回全部
+            offset: 跳过前N条记录，与limit配合实现分页
 
         返回:
             list[tuple[Any, int]]: [(分组值, 计数), ...] 按计数排序
@@ -366,6 +368,8 @@ class QueryExecutorMixin:
         )
         if limit is not None:
             stmt = stmt.limit(limit)
+        if offset is not None:
+            stmt = stmt.offset(offset)
         rows = await self._execute_query(stmt, "fetchall")
         return [(row[0], row[1]) for row in rows]
 
@@ -373,12 +377,14 @@ class QueryExecutorMixin:
         self,
         key_column: str | Any,
         value_column: str | Any,
+        limit_per_key: int | None = None,
     ) -> dict[Any, list[Any]]:
         """按 key 列分组，返回 {key: [value, ...]} 映射
 
         参数:
             key_column: 作为字典键的列名或列对象
             value_column: 作为字典值的列名或列对象
+            limit_per_key: 每个分组最多保留的值数量，为None时不限制
 
         返回:
             dict[Any, list[Any]]: 分组映射字典
@@ -389,7 +395,9 @@ class QueryExecutorMixin:
         rows = await self._execute_query(stmt, "fetchall")
         result: dict[Any, list[Any]] = {}
         for row in rows:
-            result.setdefault(row[0], []).append(row[1])
+            values = result.setdefault(row[0], [])
+            if limit_per_key is None or len(values) < limit_per_key:
+                values.append(row[1])
         return result
 
     async def exists(self) -> bool:
@@ -429,26 +437,46 @@ class QueryExecutorMixin:
         stmt = stmt.where(getattr(self.model_class, pk_names[0]) == pk)
         return await self._execute_query(stmt.limit(1), "first")
 
-    async def find_by(self, **kwargs: Any) -> Any | None:
-        """根据指定条件查找单个记录"""
-        return await self.filter(**kwargs).first()
+    async def find_by(
+        self, skip_none: bool = False, **kwargs: Any
+    ) -> Any | None:
+        """根据指定条件查找单个记录
 
-    async def find_all(self, **kwargs: Any) -> list[Any]:
-        """根据指定条件查找所有记录"""
-        return await self.filter(**kwargs).all()
+        参数:
+            skip_none: 为True时忽略值为None的kwargs条件
+            **kwargs: 查询条件
+        """
+        return await self.filter(skip_none=skip_none, **kwargs).first()
+
+    async def find_all(
+        self, skip_none: bool = False, **kwargs: Any
+    ) -> list[Any]:
+        """根据指定条件查找所有记录
+
+        参数:
+            skip_none: 为True时忽略值为None的kwargs条件
+            **kwargs: 查询条件
+        """
+        return await self.filter(skip_none=skip_none, **kwargs).all()
 
     async def paginate(
-        self, page: int = 1, per_page: int = 20
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        max_per_page: int | None = None,
     ) -> dict[str, Any]:
         """分页查询
 
         参数:
             page: 页码，从1开始
             per_page: 每页记录数
+            max_per_page: 每页记录数上限，防止传入过大值导致性能问题
 
         返回:
             dict: 包含分页信息的字典
         """
+        if max_per_page is not None:
+            per_page = min(per_page, max_per_page)
         total = await self.count()
         self._limit = per_page
         self._offset = (page - 1) * per_page
@@ -559,10 +587,16 @@ class QueryExecutorMixin:
             dict_results.append(data)
         return dict_results
 
-    async def explain(self) -> list[Any]:
-        """获取查询执行计划"""
+    async def explain(self, analyze: bool = False) -> list[Any]:
+        """获取查询执行计划
+
+        参数:
+            analyze: 为True时执行 EXPLAIN ANALYZE，实际运行查询并返回
+                     包含执行时间的计划，适合性能调优；默认False仅分析
+        """
         stmt = self._build_base_query()
-        explain_stmt = select(text("EXPLAIN")).select_from(stmt.subquery())
+        sql = "EXPLAIN ANALYZE" if analyze else "EXPLAIN"
+        explain_stmt = select(text(sql)).select_from(stmt.subquery())
         async with self.model_class.get_session(db_name=self._db_name) as session:
             result = await session.execute(explain_stmt)
             return result.fetchall()
@@ -659,11 +693,18 @@ class QueryExecutorMixin:
         )
 
     async def _aggregate_column(
-        self, column: str | Any, func_type: Any
+        self, column: str | Any, func_type: Any, distinct: bool = False
     ) -> Any:
-        """聚合函数的通用方法"""
+        """聚合函数的通用方法
+
+        参数:
+            column: 列名或列对象
+            func_type: 聚合函数，如 func.sum / func.avg
+            distinct: 是否对列值去重后再聚合
+        """
         col = DbUtils.get_column(self.model_class, column)
-        stmt = self._build_base_query(select(func_type(col)))
+        expr = func_type(col.distinct() if distinct else col)
+        stmt = self._build_base_query(select(expr))
         return await self._execute_query(stmt, "scalar")
 
     async def min(self, column: str | Any) -> Any:
@@ -674,13 +715,27 @@ class QueryExecutorMixin:
         """获取指定列的最大值"""
         return await self._aggregate_column(column, func.max)
 
-    async def avg(self, column: str | Any) -> float | None:
-        """获取指定列的平均值"""
-        return await self._aggregate_column(column, func.avg)
+    async def avg(
+        self, column: str | Any, distinct: bool = False
+    ) -> float | None:
+        """获取指定列的平均值
 
-    async def sum(self, column: str | Any) -> Any:
-        """获取指定列的总和"""
-        return await self._aggregate_column(column, func.sum)
+        参数:
+            column: 列名或列对象
+            distinct: 为True时计算 DISTINCT 平均值（去重后求均值）
+        """
+        return await self._aggregate_column(column, func.avg, distinct)
+
+    async def sum(
+        self, column: str | Any, distinct: bool = False
+    ) -> Any:
+        """获取指定列的总和
+
+        参数:
+            column: 列名或列对象
+            distinct: 为True时计算 DISTINCT 总和（去重后求和）
+        """
+        return await self._aggregate_column(column, func.sum, distinct)
 
     # ========== 修改操作方法 ==========
 
@@ -751,6 +806,7 @@ class QueryExecutorMixin:
         objects: list[Any],
         batch_size: int | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
+        refresh: bool = True,
     ) -> list[Any]:
         """批量创建记录
 
@@ -758,6 +814,8 @@ class QueryExecutorMixin:
             objects: 要创建的对象列表
             batch_size: 批量大小，用于分批创建
             progress_callback: 进度回调函数 (当前数量, 总数量)
+            refresh: 是否刷新对象以获取数据库生成的默认值（如自增ID），
+                     为False时跳过刷新以提升性能，但对象不含服务端默认值
 
         返回:
             list: 创建后的对象列表
@@ -773,8 +831,9 @@ class QueryExecutorMixin:
                 processed += len(batch)
                 if progress_callback:
                     progress_callback(processed, total)
-            for obj in objects:
-                await session.refresh(obj)
+            if refresh:
+                for obj in objects:
+                    await session.refresh(obj)
             return objects
 
     async def bulk_update(

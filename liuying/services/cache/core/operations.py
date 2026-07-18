@@ -157,6 +157,23 @@ class CacheOperations:
         offset = random.randint(0, min(jitter, base_ttl // 2))
         return base_ttl + offset
 
+    def _deserialize_data(self, cache_type: str, data: Any) -> Any:
+        """反序列化缓存数据（复用注册器的类型信息）
+
+        参数:
+            cache_type: 缓存类型（已校验）
+            data: 原始缓存数据
+
+        返回:
+            Any: 反序列化后的数据
+        """
+        result_type = self._registry.get_model(cache_type).result_type
+        return (
+            CacheSerializer.deserialize(data, result_type)
+            if result_type
+            else data
+        )
+
     async def get(
         self,
         cache_type: str,
@@ -180,14 +197,12 @@ class CacheOperations:
             return default
 
         cache_key = None
-        start_time = time.time()
+        start_time = time.perf_counter()
         try:
             cache_key = self._registry.build_key(resolved_type, key, namespace)
-            data = await asyncio.wait_for(
-                self._backend_mgr.cache_backend.get(cache_key),
-                timeout=CACHE_TIMEOUT_SECONDS,
-            )
-            elapsed = time.time() - start_time
+            async with asyncio.timeout(CACHE_TIMEOUT_SECONDS):
+                data = await self._backend_mgr.cache_backend.get(cache_key)
+            elapsed = time.perf_counter() - start_time
 
             if data is None:
                 self._monitor.record_miss(resolved_type, elapsed)
@@ -195,14 +210,7 @@ class CacheOperations:
 
             self._monitor.record_hit(resolved_type, elapsed)
             self._degrade_mgr.record_success()
-
-            model = self._registry.get_model(resolved_type)
-            result_type = model.result_type
-            return (
-                CacheSerializer.deserialize(data, result_type)
-                if result_type
-                else data
-            )
+            return self._deserialize_data(resolved_type, data)
         except Exception as e:
             self._handle_operation_error(resolved_type, cache_key, "获取", e)
             return default
@@ -232,7 +240,7 @@ class CacheOperations:
             return False
 
         cache_key = None
-        start_time = time.time()
+        start_time = time.perf_counter()
         try:
             cache_key = self._registry.build_key(resolved_type, key, namespace)
             model = self._registry.get_model(resolved_type)
@@ -241,14 +249,12 @@ class CacheOperations:
             base_ttl = expire if expire is not None else model.expire
             ttl = self.calc_jitter_ttl(base_ttl)
 
-            await asyncio.wait_for(
-                self._backend_mgr.cache_backend.set(
+            async with asyncio.timeout(CACHE_TIMEOUT_SECONDS):
+                await self._backend_mgr.cache_backend.set(
                     cache_key, serialized_value, ttl=ttl
-                ),
-                timeout=CACHE_TIMEOUT_SECONDS,
-            )
+                )
             self._registry.add_key(resolved_type, cache_key, ttl)
-            elapsed = time.time() - start_time
+            elapsed = time.perf_counter() - start_time
             self._monitor.record_set(resolved_type, elapsed)
             self._degrade_mgr.record_success()
             return True
@@ -277,16 +283,14 @@ class CacheOperations:
             return False
 
         cache_key: str | None = None
-        start_time = time.time()
+        start_time = time.perf_counter()
         try:
             cache_key = self._registry.build_key(resolved_type, key, namespace)
-            await asyncio.wait_for(
-                self._backend_mgr.cache_backend.delete(cache_key),
-                timeout=CACHE_TIMEOUT_SECONDS,
-            )
+            async with asyncio.timeout(CACHE_TIMEOUT_SECONDS):
+                await self._backend_mgr.cache_backend.delete(cache_key)
             self._registry.remove_key(resolved_type, cache_key)
             self._lock_mgr.remove_lock(f"lock:{cache_key}")
-            elapsed = time.time() - start_time
+            elapsed = time.perf_counter() - start_time
             self._monitor.record_delete(resolved_type, elapsed)
             self._degrade_mgr.record_success()
             return True
@@ -317,10 +321,10 @@ class CacheOperations:
         cache_key: str | None = None
         try:
             cache_key = self._registry.build_key(resolved_type, key, namespace)
-            exists_result = await asyncio.wait_for(
-                self._backend_mgr.cache_backend.exists(cache_key),
-                timeout=CACHE_TIMEOUT_SECONDS,
-            )
+            async with asyncio.timeout(CACHE_TIMEOUT_SECONDS):
+                exists_result = await self._backend_mgr.cache_backend.exists(
+                    cache_key
+                )
             if exists_result:
                 self._degrade_mgr.record_success()
             return bool(exists_result)
@@ -346,20 +350,12 @@ class CacheOperations:
             Any: 缓存数据，如果不存在返回None
         """
         try:
-            data = await asyncio.wait_for(
-                self._backend_mgr.cache_backend.get(cache_key),
-                timeout=CACHE_TIMEOUT_SECONDS,
-            )
+            async with asyncio.timeout(CACHE_TIMEOUT_SECONDS):
+                data = await self._backend_mgr.cache_backend.get(cache_key)
             if data is None:
                 return None
             self._degrade_mgr.record_success()
-            model = self._registry.get_model(cache_type)
-            result_type = model.result_type
-            return (
-                CacheSerializer.deserialize(data, result_type)
-                if result_type
-                else data
-            )
+            return self._deserialize_data(cache_type, data)
         except Exception as e:
             self._handle_operation_error(cache_type, cache_key, "获取", e)
             return None
@@ -450,13 +446,11 @@ class CacheOperations:
             Any: 缓存数据，如果不存在返回默认值
         """
         cache_key = self._build_raw_key(key, namespace)
-        start_time = time.time()
+        start_time = time.perf_counter()
         try:
-            data = await asyncio.wait_for(
-                self._backend_mgr.cache_backend.get(cache_key),
-                timeout=CACHE_TIMEOUT_SECONDS,
-            )
-            elapsed = time.time() - start_time
+            async with asyncio.timeout(CACHE_TIMEOUT_SECONDS):
+                data = await self._backend_mgr.cache_backend.get(cache_key)
+            elapsed = time.perf_counter() - start_time
             if data is None:
                 self._monitor.record_miss(self.RAW_TYPE, elapsed)
                 return default
@@ -486,18 +480,16 @@ class CacheOperations:
             bool: 是否成功
         """
         cache_key = self._build_raw_key(key, namespace)
-        start_time = time.time()
+        start_time = time.perf_counter()
         try:
             serialized_value = CacheSerializer.serialize(value)
             base_expire = expire if expire is not None else cache_config.redis_expire
             ttl = self.calc_jitter_ttl(base_expire)
-            await asyncio.wait_for(
-                self._backend_mgr.cache_backend.set(
+            async with asyncio.timeout(CACHE_TIMEOUT_SECONDS):
+                await self._backend_mgr.cache_backend.set(
                     cache_key, serialized_value, ttl=ttl
-                ),
-                timeout=CACHE_TIMEOUT_SECONDS,
-            )
-            elapsed = time.time() - start_time
+                )
+            elapsed = time.perf_counter() - start_time
             self._monitor.record_set(self.RAW_TYPE, elapsed)
             self._degrade_mgr.record_success()
             return True
@@ -520,11 +512,12 @@ class CacheOperations:
             bool: 是否成功
         """
         cache_key = self._build_raw_key(key, namespace)
-        start_time = time.time()
+        start_time = time.perf_counter()
         try:
-            await self._backend_mgr.cache_backend.delete(cache_key)
+            async with asyncio.timeout(CACHE_TIMEOUT_SECONDS):
+                await self._backend_mgr.cache_backend.delete(cache_key)
             self._lock_mgr.remove_lock(f"lock:{cache_key}")
-            elapsed = time.time() - start_time
+            elapsed = time.perf_counter() - start_time
             self._monitor.record_delete(self.RAW_TYPE, elapsed)
             self._degrade_mgr.record_success()
             return True
@@ -548,10 +541,10 @@ class CacheOperations:
         """
         cache_key = self._build_raw_key(key, namespace)
         try:
-            exists_result = await asyncio.wait_for(
-                self._backend_mgr.cache_backend.exists(cache_key),
-                timeout=CACHE_TIMEOUT_SECONDS,
-            )
+            async with asyncio.timeout(CACHE_TIMEOUT_SECONDS):
+                exists_result = await self._backend_mgr.cache_backend.exists(
+                    cache_key
+                )
             if exists_result:
                 self._degrade_mgr.record_success()
             return bool(exists_result)

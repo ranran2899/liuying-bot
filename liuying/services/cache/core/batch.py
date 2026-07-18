@@ -178,12 +178,11 @@ class BatchExecutor:
 
         async def _get_single(key: KeyType) -> tuple[str, Any, str | None]:
             async with sem:
+                cache_key = self._registry.build_key(resolved_type, key)
                 try:
-                    cache_key = self._registry.build_key(resolved_type, key)
                     result = await get_func(resolved_type, key)
                     return cache_key, result, None
                 except Exception as e:
-                    cache_key = self._registry.build_key(resolved_type, key)
                     return cache_key, None, str(e)
 
         tasks = [_get_single(key) for key in keys]
@@ -218,12 +217,11 @@ class BatchExecutor:
 
         async def _set_single(key: KeyType, value: Any) -> tuple[str, bool, str | None]:
             async with sem:
+                cache_key = self._registry.build_key(resolved_type, key)
                 try:
-                    cache_key = self._registry.build_key(resolved_type, key)
                     success = await set_func(resolved_type, key, value, expire)
                     return cache_key, success, None
                 except Exception as e:
-                    cache_key = self._registry.build_key(resolved_type, key)
                     return cache_key, False, str(e)
 
         tasks = [_set_single(key, value) for key, value in items.items()]
@@ -256,12 +254,11 @@ class BatchExecutor:
 
         async def _delete_single(key: KeyType) -> tuple[str, bool, str | None]:
             async with sem:
+                cache_key = self._registry.build_key(resolved_type, key)
                 try:
-                    cache_key = self._registry.build_key(resolved_type, key)
                     success = await delete_func(resolved_type, key)
                     return cache_key, success, None
                 except Exception as e:
-                    cache_key = self._registry.build_key(resolved_type, key)
                     return cache_key, False, str(e)
 
         tasks = [_delete_single(key) for key in keys]
