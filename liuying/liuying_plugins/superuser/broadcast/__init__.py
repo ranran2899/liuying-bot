@@ -39,8 +39,6 @@ from .message_processor import (
     send_broadcast_and_notify,
 )
 
-BROADCAST_SEND_DELAY_RANGE = (1, 3)
-
 __plugin_meta__ = PluginMetadata(
     name="广播",
     description="昭告天下！",
@@ -70,7 +68,7 @@ __plugin_meta__ = PluginMetadata(
     - recall (广播撤回的别名)
     """.strip(),
     extra=PluginExtraData(
-        author="HibiKier",
+        author="liuying",
         version="1.2",
         plugin_type=PluginType.SUPERUSER,
         tasks=[Task(module="broadcast", name="广播", create_status=True)],

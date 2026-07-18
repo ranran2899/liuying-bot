@@ -1,9 +1,9 @@
 from typing import Any, Literal
 
-from nonebot.compat import model_dump
 from pydantic import BaseModel
 
 from liuying.utils.enum import PluginType
+from liuying.utils.pydantic_compat import model_dump
 
 type2name: dict[str, str] = {
     "NORMAL": "普通插件",

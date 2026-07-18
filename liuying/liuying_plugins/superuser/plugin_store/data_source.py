@@ -28,7 +28,7 @@ from .models import StorePluginInfo
 
 
 def row_style(column: str, text: str) -> RowStyle:
-    """被动技能文本风格
+    """插件商店列表文本风格
 
     参数:
         column: 表头
@@ -528,7 +528,6 @@ class StoreManager:
 
         异常:
             PluginStoreException: 插件不存在
-            PluginStoreException: 插件不存在
 
         返回:
             str: 插件模块名
@@ -540,12 +539,11 @@ class StoreManager:
             if idx < 0 or idx >= len(all_plugin_list):
                 raise PluginStoreException("插件ID不存在...")
             return all_plugin_list[idx].module
-        elif isinstance(plugin_id, str):
-            if plugin_id in [v.module for v in all_plugin_list]:
-                return plugin_id
 
-            for plugin_info in all_plugin_list:
-                if plugin_info.name.lower() == plugin_id.lower():
-                    return plugin_info.module
+        for plugin_info in all_plugin_list:
+            if plugin_info.module == plugin_id:
+                return plugin_info.module
+            if plugin_info.name.lower() == plugin_id.lower():
+                return plugin_info.module
 
-            raise PluginStoreException("插件 Module / 名称 不存在...")
+        raise PluginStoreException("插件 Module / 名称 不存在...")

@@ -2,7 +2,7 @@ from nonebot_plugin_alconna import AlconnaMatch, Match
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.models._bot import BotConsole
-from liuying.services.log import logger
+from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
 from .command import bot_manage

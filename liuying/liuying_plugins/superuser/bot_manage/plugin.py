@@ -3,16 +3,16 @@ from nonebot_plugin_uninfo import Uninfo
 
 from liuying.models._bot import BotConsole
 from liuying.models.plugin_info import PluginInfo
-from liuying.services.log import logger
 from liuying.utils.enum import PluginType
 from liuying.utils.image import BuildImage, ImageTemplate, RowStyle
+from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
 from .command import bot_manage
 
 
-def task_row_style(column: str, text: str) -> RowStyle:
-    """被动技能文本风格
+def plugin_row_style(column: str, text: str) -> RowStyle:
+    """插件列表文本风格
 
     参数:
         column: 表头
@@ -52,7 +52,7 @@ async def bot_plugin(session: Uninfo, bot_id: Match[str] = AlconnaMatch("bot_id"
         data_dict = await BotConsole.get_plugins(status=False)
     db_plugin_list = (
         await PluginInfo.filter(load_status=True)
-        .filter(PluginInfo.plugin_type != PluginType.HIDDEN)
+        .filter(plugin_type__ne=PluginType.HIDDEN)
         .all()
     )
     img_list = []
@@ -77,7 +77,7 @@ async def bot_plugin(session: Uninfo, bot_id: Match[str] = AlconnaMatch("bot_id"
             None,
             column_name,
             column_data,
-            text_style=task_row_style,
+            text_style=plugin_row_style,
         )
         img_list.append(img)
     result = await BuildImage.auto_paste(img_list, 3)

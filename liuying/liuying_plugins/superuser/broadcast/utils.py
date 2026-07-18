@@ -5,7 +5,7 @@ from nonebot_plugin_alconna import UniMessage
 from nonebot_plugin_alconna.uniseg import Reference
 from nonebot_plugin_alconna.uniseg.segment import CustomNode, Video
 
-from liuying.services.log import logger
+from liuying.utils.log import logger
 
 
 def uni_segment_to_v11_segment_dict(

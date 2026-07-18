@@ -6,9 +6,9 @@ from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.config import Config
 from liuying.configs.utils import PluginExtraData, RegisterConfig
-from liuying.services.log import logger
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.enum import PluginType
+from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
 __plugin_meta__ = PluginMetadata(
@@ -18,7 +18,7 @@ __plugin_meta__ = PluginMetadata(
     重载配置
     """.strip(),
     extra=PluginExtraData(
-        author="HibiKier",
+        author="liuying",
         version="0.1",
         plugin_type=PluginType.SUPERUSER,
         configs=[

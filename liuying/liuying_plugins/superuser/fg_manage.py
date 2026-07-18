@@ -48,9 +48,8 @@ async def _(
 ):
     try:
         fl = await bot.get_friend_list()
-        msg = ["{user_id} {nickname}".format_map(g) for g in fl]
-        msg = "\n".join(msg)
-        msg = f"| UID | 昵称 | 共{len(fl)}个好友\n" + msg
+        lines = ["{user_id} {nickname}".format_map(g) for g in fl]
+        msg = f"| UID | 昵称 | 共{len(fl)}个好友\n" + "\n".join(lines)
         await MessageUtils.build_message(msg).send()
         logger.info("查看好友列表", "好友列表", session=session)
     except Exception as e:
@@ -65,9 +64,8 @@ async def _(
 ):
     try:
         gl = await bot.get_group_list()
-        msg = ["{group_id} {group_name}".format_map(g) for g in gl]
-        msg = "\n".join(msg)
-        msg = f"| GID | 名称 | 共{len(gl)}个群组\n" + msg
+        lines = ["{group_id} {group_name}".format_map(g) for g in gl]
+        msg = f"| GID | 名称 | 共{len(gl)}个群组\n" + "\n".join(lines)
         await MessageUtils.build_message(msg).send()
         logger.info("查看群组列表", "群组列表", session=session)
     except Exception as e:

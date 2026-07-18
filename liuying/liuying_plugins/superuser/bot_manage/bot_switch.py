@@ -2,7 +2,7 @@ from nonebot_plugin_alconna import AlconnaMatch, Match
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.models._bot import BotConsole
-from liuying.services.log import logger
+from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
 from .command import bot_manage
@@ -17,7 +17,7 @@ async def enable_bot_switch(
     _bot_id = bot_id.result if bot_id.available else session.self_id
 
     logger.info(
-        f"开启 {_bot_id} ",
+        f"开启 {_bot_id}",
         "bot_manage.bot_switch.enable",
         session=session,
     )
@@ -26,7 +26,7 @@ async def enable_bot_switch(
     except ValueError:
         await MessageUtils.build_message(f"bot_id {_bot_id} 不存在").finish()
 
-    await MessageUtils.build_message(f"已开启 {_bot_id} ").finish()
+    await MessageUtils.build_message(f"已开启 {_bot_id}").finish()
 
 
 @bot_manage.assign("bot_switch.disable")
@@ -38,7 +38,7 @@ async def disable_bot_switch(
     _bot_id = bot_id.result if bot_id.available else session.self_id
 
     logger.info(
-        f"禁用 {_bot_id} ",
+        f"禁用 {_bot_id}",
         "bot_manage.bot_switch.disable",
         session=session,
     )
@@ -47,4 +47,4 @@ async def disable_bot_switch(
     except ValueError:
         await MessageUtils.build_message(f"bot_id {_bot_id} 不存在").finish()
 
-    await MessageUtils.build_message(f"已禁用 {_bot_id} ").finish()
+    await MessageUtils.build_message(f"已禁用 {_bot_id}").finish()

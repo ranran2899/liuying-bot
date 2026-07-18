@@ -2,13 +2,14 @@ from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import Alconna, Args, on_alconna
 from nonebot_plugin_uninfo import Uninfo
+from sqlalchemy import text
 
 from liuying.configs.config import BotConfig
 from liuying.configs.utils import PluginExtraData
 from liuying.services.liuying_db import session_manager
-from liuying.services.log import logger
 from liuying.utils.enum import PluginType
 from liuying.utils.image import ImageTemplate
+from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
 DANGEROUS_KEYWORDS = {"drop", "delete", "truncate", "alter", "update", "insert"}
@@ -114,9 +115,18 @@ def _parse_sql_type(sql_type: str) -> str:
     返回:
         str: 实际的数据库类型
     """
-    if "+" in sql_type:
-        sql_type = sql_type.split("+")[0]
-    return sql_type
+    return sql_type.split("+")[0] if "+" in sql_type else sql_type
+
+
+def _rows_to_table_data(rows) -> list[list]:
+    """将查询行转换为表格数据"""
+    data_list = []
+    for row in rows:
+        if len(row) == 1:
+            data_list.append([row[0], ""])
+        else:
+            data_list.append([row[0], row[1] if row[1] else ""])
+    return data_list
 
 
 @_matcher.handle()
@@ -155,8 +165,6 @@ async def _(session: Uninfo, sql_text: str):
 
     try:
         async with session_manager.get_session() as db_session:
-            from sqlalchemy import text
-
             if sql_text.lower().startswith("select"):
                 result = await db_session.execute(text(sql_text))
                 rows = result.fetchall()
@@ -203,8 +211,6 @@ async def _(session: Uninfo):
     """
     try:
         async with session_manager.get_session() as db_session:
-            from sqlalchemy import text
-
             sql_type = _parse_sql_type(BotConfig.get_sql_type())
             select_sql = type2sql.get(sql_type)
 
@@ -217,19 +223,12 @@ async def _(session: Uninfo):
             result = await db_session.execute(text(select_sql))
             rows = result.fetchall()
 
-            column_name = ["表名", "简介"]
-            data_list = []
-
-            for row in rows:
-                if len(row) == 1:
-                    data_list.append([row[0], ""])
-                else:
-                    data_list.append([row[0], row[1] if row[1] else ""])
+            data_list = _rows_to_table_data(rows)
 
             logger.info("查看数据库所有表", "查看所有表", session=session)
 
             table = await ImageTemplate.table_page(
-                "数据库表", f"总共有 {len(data_list)} 张表", column_name, data_list
+                "数据库表", f"总共有 {len(data_list)} 张表", ["表名", "简介"], data_list
             )
             await MessageUtils.build_message(table).send()
 
@@ -250,8 +249,6 @@ async def _(session: Uninfo, db_name: str):
     """
     try:
         async with session_manager.get_session() as db_session:
-            from sqlalchemy import text
-
             sql_type = _parse_sql_type(BotConfig.get_sql_type())
 
             match sql_type:
@@ -280,21 +277,14 @@ async def _(session: Uninfo, db_name: str):
                     f"数据库 {db_name} 中没有表或数据库不存在"
                 ).finish()
 
-            column_name = ["表名", "简介"]
-            data_list = []
-
-            for row in rows:
-                if len(row) == 1:
-                    data_list.append([row[0], ""])
-                else:
-                    data_list.append([row[0], row[1] if row[1] else ""])
+            data_list = _rows_to_table_data(rows)
 
             logger.info(f"查看数据库 {db_name} 所有表", "查看数据库表", session=session)
 
             table = await ImageTemplate.table_page(
                 f"数据库: {db_name}",
                 f"总共有 {len(data_list)} 张表",
-                column_name,
+                ["表名", "简介"],
                 data_list,
             )
             await MessageUtils.build_message(table).send()

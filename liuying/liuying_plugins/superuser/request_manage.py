@@ -49,7 +49,7 @@ __plugin_meta__ = PluginMetadata(
     description="好友与邀请群组请求处理",
     usage=usage,
     extra=PluginExtraData(
-        author="HibiKier",
+        author="liuying",
         version="0.1",
         plugin_type=PluginType.SUPERUSER,
     ).to_dict(),
@@ -257,11 +257,14 @@ async def _(
                 await background.paste(_id_img, (10, 0), center_type="height")
                 img_list.append(background)
             if img_list:
-                A = await BuildImage.auto_paste(img_list, 1)
+                combined = await BuildImage.auto_paste(img_list, 1)
                 result_image = BuildImage(
-                    A.width, A.height + 30, color=(255, 255, 255), font_size=20
+                    combined.width,
+                    combined.height + 30,
+                    color=(255, 255, 255),
+                    font_size=20,
                 )
-                await result_image.paste(A, (0, 30))
+                await result_image.paste(combined, (0, 30))
                 _type_text = "好友请求" if i == 0 else "群组请求"
                 await result_image.text((15, 13), _type_text, fill=(140, 140, 143))
                 req_image_list.append(result_image)

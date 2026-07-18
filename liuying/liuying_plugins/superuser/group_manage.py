@@ -19,8 +19,8 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.configs.config import BotConfig
 from liuying.configs.utils import PluginExtraData
 from liuying.models._group import GroupConsole
-from liuying.services.log import logger
 from liuying.utils.enum import PluginType
+from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
 __plugin_meta__ = PluginMetadata(
@@ -50,7 +50,7 @@ __plugin_meta__ = PluginMetadata(
         退群 12344566                            : 退出指定群组
     """.strip(),
     extra=PluginExtraData(
-        author="HibiKier",
+        author="liuying",
         version="0.1",
         plugin_type=PluginType.SUPERUSER,
     ).to_dict(),
@@ -124,10 +124,8 @@ _matcher.shortcut(
 )
 
 
-def CheckGroupId():
-    """
-    检测群组id
-    """
+def check_group_id():
+    """检测群组id"""
 
     async def dependency(
         session: Uninfo,
@@ -136,7 +134,7 @@ def CheckGroupId():
     ):
         gid = session.group.id if session.group else None
         if group_id.available:
-            gid = group_id.result
+            gid = str(group_id.result)
         if not gid:
             await MessageUtils.build_message("群组id不能为空...").finish()
         state["group_id"] = gid
@@ -144,7 +142,7 @@ def CheckGroupId():
     return Depends(dependency)
 
 
-@_matcher.assign("modify-level", parameterless=[CheckGroupId()])
+@_matcher.assign("modify-level", parameterless=[check_group_id()])
 async def _(session: Uninfo, arparma: Arparma, state: T_State, level: int):
     gid = state["group_id"]
     group, _ = await GroupConsole.get_or_create(group_id=gid)
@@ -160,7 +158,7 @@ async def _(session: Uninfo, arparma: Arparma, state: T_State, level: int):
     )
 
 
-@_matcher.assign("super-handle", parameterless=[CheckGroupId()])
+@_matcher.assign("super-handle", parameterless=[check_group_id()])
 async def _(session: Uninfo, arparma: Arparma, state: T_State):
     gid = state["group_id"]
     group = await GroupConsole.get_group(group_id=gid)
@@ -174,7 +172,7 @@ async def _(session: Uninfo, arparma: Arparma, state: T_State):
     logger.info(f"{s}群白名单", arparma.header_result, session=session, target=gid)
 
 
-@_matcher.assign("auth-handle", parameterless=[CheckGroupId()])
+@_matcher.assign("auth-handle", parameterless=[check_group_id()])
 async def _(session: Uninfo, arparma: Arparma, state: T_State):
     gid = state["group_id"]
     is_delete = arparma.find("delete")

@@ -22,8 +22,8 @@ from nonebot_plugin_alconna.uniseg.tools import reply_fetch
 from nonebot_plugin_session import EventSession
 
 from liuying.models._group import GroupConsole
-from liuying.services.log import logger
 from liuying.utils.common_utils import CommonUtils
+from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
 from .broadcast_manager import BroadcastManager
@@ -267,8 +267,6 @@ async def _extract_broadcast_content(
                             try:
                                 json_data_str = seg.data.get("data", "{}")
                                 if isinstance(json_data_str, str):
-                                    import json
-
                                     json_data = json.loads(json_data_str)
                                     if (
                                         json_data.get("app") == "com.tencent.multimsg"

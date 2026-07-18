@@ -3,7 +3,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 from nonebot_plugin_alconna import Alconna, Arparma, on_alconna
-from nonebot_plugin_session import EventSession
+from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.utils import PluginExtraData
 from liuying.utils.enum import PluginType
@@ -19,7 +19,7 @@ __plugin_meta__ = PluginMetadata(
     更新好友信息
     """.strip(),
     extra=PluginExtraData(
-        author="HibiKier",
+        author="liuying",
         version="0.1",
         plugin_type=PluginType.SUPERUSER,
     ).to_dict(),
@@ -50,7 +50,7 @@ _friend_matcher = on_alconna(
 @_group_matcher.handle()
 async def _(
     bot: Bot,
-    session: EventSession,
+    session: Uninfo,
     arparma: Arparma,
 ):
     try:
@@ -71,7 +71,7 @@ async def _(
 @_friend_matcher.handle()
 async def _(
     bot: Bot,
-    session: EventSession,
+    session: Uninfo,
     arparma: Arparma,
 ):
     try:

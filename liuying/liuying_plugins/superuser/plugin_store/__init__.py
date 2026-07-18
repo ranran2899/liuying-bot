@@ -108,7 +108,7 @@ async def _(session: Uninfo, plugin_id: str, source: Match[str]):
             f"正在添加插件 Module/名称: {plugin_id}"
         ).send()
     source_str = source.result if source.available else None
-    if source_str and source_str not in ["ali", "git"]:
+    if source_str and source_str not in {"ali", "git"}:
         await MessageUtils.build_message(
             f"源类型错误: {source_str} 请使用 ali 或 git"
         ).finish()

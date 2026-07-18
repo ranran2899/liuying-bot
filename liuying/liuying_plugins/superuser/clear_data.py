@@ -10,9 +10,9 @@ from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.path_config import TEMP_PATH
 from liuying.configs.utils import PluginExtraData
-from liuying.services.log import logger
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.enum import PluginType
+from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.utils import ResourceDirManager
 
@@ -23,7 +23,7 @@ __plugin_meta__ = PluginMetadata(
     清理临时数据
     """.strip(),
     extra=PluginExtraData(
-        author="HibiKier",
+        author="liuying",
         version="0.1",
         plugin_type=PluginType.SUPERUSER,
     ).to_dict(),
@@ -59,26 +59,25 @@ async def _(session: Uninfo):
 def _clear_data() -> float:
     logger.debug("开始清理临时文件...")
     size = 0
-    dir_list = [dir_ for dir_ in ResourceDirManager.temp_path if dir_.exists()]
-    for dir_ in dir_list:
-        logger.debug(f"尝试清理文件夹: {dir_.absolute()}", "清理临时数据")
-        dir_size = 0
-        for file in os.listdir(dir_):
-            file = dir_ / file
-            if file.is_file():
-                try:
-                    if time.time() - os.path.getatime(file) > 10:
-                        file_size = os.path.getsize(file)
-                        file.unlink()
-                        size += file_size
-                        dir_size += file_size
-                        logger.debug(f"移除临时文件: {file.absolute()}", "清理临时数据")
-                except Exception as e:
-                    logger.error(
-                        f"清理临时数据错误，临时文件夹: {dir_.absolute()}...",
-                        "清理临时数据",
-                        e=e,
-                    )
+    dir_list = [d for d in ResourceDirManager.temp_path if d.exists()]
+    for d in dir_list:
+        logger.debug(f"尝试清理文件夹: {d.absolute()}", "清理临时数据")
+        for file in os.listdir(d):
+            file = d / file
+            if not file.is_file():
+                continue
+            try:
+                if time.time() - os.path.getatime(file) > 10:
+                    file_size = os.path.getsize(file)
+                    file.unlink()
+                    size += file_size
+                    logger.debug(f"移除临时文件: {file.absolute()}", "清理临时数据")
+            except Exception as e:
+                logger.error(
+                    f"清理临时数据错误，临时文件夹: {d.absolute()}...",
+                    "清理临时数据",
+                    e=e,
+                )
         logger.debug(f"清理临时文件夹大小: {size / 1024 / 1024:.2f}MB", "清理临时数据")
     return float(size)
 

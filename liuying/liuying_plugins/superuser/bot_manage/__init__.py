@@ -8,8 +8,8 @@ from liuying.configs.utils import PluginExtraData
 from liuying.models._bot import BotConsole
 from liuying.models.plugin_info import PluginInfo
 from liuying.models.task_info import TaskInfo
-from liuying.services.log import logger
 from liuying.utils.enum import PluginType
+from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
 
 driver = nonebot.get_driver()
@@ -30,15 +30,18 @@ __plugin_meta__ = PluginMetadata(
         bot醒来                    : bot醒来
     """.strip(),
     extra=PluginExtraData(
-        author="",
+        author="liuying",
         version="0.1",
         plugin_type=PluginType.SUPERUSER,
     ).to_dict(),
 )
 
-from .bot_switch import *  # noqa: F403
-from .plugin import *  # noqa: F403
-from .task import *  # noqa: F403
+from . import bot_switch, full_function, plugin, task  # noqa: F401
+
+
+def _filter_blocked_items(items_list: list[str], block_list: list[str]) -> list[str]:
+    """过滤被block的项目"""
+    return [item for item in items_list if item not in block_list]
 
 
 @driver.on_bot_connect
@@ -48,24 +51,9 @@ async def init_bot_console(bot: Bot):
     参数:
         bot: Bot
     """
-
-    async def _filter_blocked_items(
-        items_list: list[str], block_list: list[str]
-    ) -> list[str]:
-        """过滤被block的项目
-
-        参数:
-            items_list: 需要过滤的项目列表
-            block_list: block列表
-
-        返回:
-            list: 过滤后且经过格式化的项目列表
-        """
-        return [item for item in items_list if item not in block_list]
-
     plugin_list = [
-        plugin.module
-        for plugin in await PluginInfo.filter()
+        p.module
+        for p in await PluginInfo.filter()
         .where_in(
             "plugin_type", [PluginType.NORMAL, PluginType.DEPENDANT, PluginType.ADMIN]
         )
@@ -80,10 +68,10 @@ async def init_bot_console(bot: Bot):
     )
 
     if not created:
-        task_list = await _filter_blocked_items(
+        task_list = _filter_blocked_items(
             task_list, await bot_data.get_tasks(bot.self_id, False)
         )
-        plugin_list = await _filter_blocked_items(
+        plugin_list = _filter_blocked_items(
             plugin_list, await bot_data.get_plugins(bot.self_id, False)
         )
 
