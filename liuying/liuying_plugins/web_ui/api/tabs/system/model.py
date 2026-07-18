@@ -31,7 +31,7 @@ class DeleteFile(BaseModel):
 
 class RenameFile(BaseModel):
     """
-    删除文件
+    重命名文件
     """
 
     parent: str | None

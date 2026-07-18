@@ -23,10 +23,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
 token_file = DATA_PATH / "web_ui" / "token.json"
 token_file.parent.mkdir(parents=True, exist_ok=True)
-token_data = {"token": []}
+token_data: dict = {"token": []}
 if token_file.exists():
     with contextlib.suppress(json.JSONDecodeError):
-        token_data = json.load(open(token_file, encoding="utf8"))
+        with open(token_file, encoding="utf8") as f:
+            token_data = json.load(f)
 
 
 def validate_path(path_str: str | None) -> tuple[Path | None, str | None]:

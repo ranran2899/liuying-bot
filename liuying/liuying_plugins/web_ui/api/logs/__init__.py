@@ -1,1 +1,3 @@
-from .logs import *  # noqa: F403
+from .logs import router
+
+__all__ = ["router"]

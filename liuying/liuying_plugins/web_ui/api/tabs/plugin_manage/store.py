@@ -3,12 +3,16 @@ from fastapi.responses import JSONResponse
 from nonebot import require
 from nonebot.compat import model_dump
 
+from liuying.liuying_plugins.superuser.plugin_store.data_source import StoreManager
 from liuying.models.plugin_info import PluginInfo
 from liuying.utils.log import logger
 
 from ....base_model import Result
 from ....utils import authentication
 from .model import PluginIr
+
+# 确保插件商店依赖已加载
+require("liuying.liuying_plugins.superuser.plugin_store")
 
 router = APIRouter(prefix="/store")
 
@@ -22,11 +26,6 @@ router = APIRouter(prefix="/store")
 )
 async def _() -> Result[dict]:
     try:
-        require("liuying.liuying_plugins.superuser.plugin_store")
-        from liuying.liuying_plugins.superuser.plugin_store.data_source import (
-            StoreManager,
-        )
-
         plugin_list, extra_plugin_list = await StoreManager.get_data()
         plugin_list = [
             {**model_dump(plugin), "name": plugin.name, "id": idx}
@@ -50,11 +49,6 @@ async def _() -> Result[dict]:
 )
 async def _(param: PluginIr) -> Result:
     try:
-        require("liuying.liuying_plugins.superuser.plugin_store")
-        from liuying.liuying_plugins.superuser.plugin_store.data_source import (
-            StoreManager,
-        )
-
         result = await StoreManager.add_plugin(param.id)  # type: ignore
         return Result.ok(info=result)
     except Exception as e:
@@ -70,11 +64,6 @@ async def _(param: PluginIr) -> Result:
 )
 async def _(param: PluginIr) -> Result:
     try:
-        require("liuying.liuying_plugins.superuser.plugin_store")
-        from liuying.liuying_plugins.superuser.plugin_store.data_source import (
-            StoreManager,
-        )
-
         result = await StoreManager.update_plugin(param.id)  # type: ignore
         return Result.ok(info=result)
     except Exception as e:
@@ -90,11 +79,6 @@ async def _(param: PluginIr) -> Result:
 )
 async def _(param: PluginIr) -> Result:
     try:
-        require("liuying.liuying_plugins.superuser.plugin_store")
-        from liuying.liuying_plugins.superuser.plugin_store.data_source import (
-            StoreManager,
-        )
-
         result = await StoreManager.remove_plugin(param.id)  # type: ignore
         return Result.ok(info=result)
     except Exception as e:

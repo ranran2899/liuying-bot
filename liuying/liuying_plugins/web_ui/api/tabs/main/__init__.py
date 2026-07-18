@@ -233,23 +233,17 @@ async def _(bot_id: str) -> Result[BotBlockModule]:
     description="修改bot全局开关",
 )
 async def _(param: BotManageUpdateParam):
-    try:
-        bot_data = await BotConsole.filter(bot_id=param.bot_id).first()
-        if not bot_data:
-            return Result.fail("Bot数据不存在...")
-        bot_data.block_plugins = CommonUtils.convert_module_format(param.block_plugins)
-        bot_data.block_tasks = CommonUtils.convert_module_format(param.block_tasks)
-        await bot_data.save(update_fields=["block_plugins", "block_tasks"])
-        return Result.ok()
-    except Exception as e:
-        logger.error(
-            f"{router.prefix}/update_bot_manage 调用错误", command="WebUi", e=e
-        )
-        return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
+    bot_data = await BotConsole.filter(bot_id=param.bot_id).first()
+    if not bot_data:
+        return Result.fail("Bot数据不存在...")
+    bot_data.block_plugins = CommonUtils.convert_module_format(param.block_plugins)
+    bot_data.block_tasks = CommonUtils.convert_module_format(param.block_tasks)
+    await bot_data.save(update_fields=["block_plugins", "block_tasks"])
+    return Result.ok()
 
 
 @ws_router.websocket("/system_status")
-async def system_logs_realtime(websocket: WebSocket, sleep: int = 5):
+async def system_status_realtime(websocket: WebSocket, sleep: int = 5):
     await websocket.accept()
     logger.debug("ws system_status is connect")
     with contextlib.suppress(

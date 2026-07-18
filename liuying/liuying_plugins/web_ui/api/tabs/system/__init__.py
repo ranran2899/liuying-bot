@@ -1,5 +1,5 @@
 import os
-from pathlib import Path
+import re
 import shutil
 
 import aiofiles
@@ -15,6 +15,23 @@ from .model import AddFile, DeleteFile, DirFile, RenameFile, SaveFile
 router = APIRouter(prefix="/system")
 
 IMAGE_TYPE = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg"]
+
+# 安全文件名：不含路径分隔符、通配符、控制字符，非 "." 或 ".."
+_SAFE_FILENAME_RE = re.compile(r"^[^\\/:\*\?\"<>\|\x00-\x1f]+$")
+
+
+def _is_safe_filename(name: str | None) -> bool:
+    """校验文件名是否安全
+
+    参数:
+        name: 待校验的文件名
+
+    返回:
+        bool: 安全返回 True，否则 False
+    """
+    if not name or name in (".", ".."):
+        return False
+    return bool(_SAFE_FILENAME_RE.match(name))
 
 
 @router.get(
@@ -119,8 +136,15 @@ async def _(param: RenameFile) -> Result:
         return Result.fail(error)
     if not parent_path:
         return Result.fail("无效的路径")
+    if not _is_safe_filename(param.old_name):
+        return Result.fail("无效的旧文件名")
+    if not _is_safe_filename(param.name):
+        return Result.fail("无效的新文件名")
 
-    path = (parent_path / param.old_name) if param.parent else Path(param.old_name)
+    path = parent_path / param.old_name
+    final_path, error = validate_path(str(path))
+    if error or not final_path:
+        return Result.fail(error or "无效的路径")
     if not path.exists():
         return Result.warning_("文件不存在...")
     try:
@@ -143,8 +167,15 @@ async def _(param: RenameFile) -> Result:
         return Result.fail(error)
     if not parent_path:
         return Result.fail("无效的路径")
+    if not _is_safe_filename(param.old_name):
+        return Result.fail("无效的旧文件夹名")
+    if not _is_safe_filename(param.name):
+        return Result.fail("无效的新文件夹名")
 
-    path = (parent_path / param.old_name) if param.parent else Path(param.old_name)
+    path = parent_path / param.old_name
+    final_path, error = validate_path(str(path))
+    if error or not final_path:
+        return Result.fail(error or "无效的路径")
     if not path.exists() or path.is_file():
         return Result.warning_("文件夹不存在...")
     try:
@@ -168,12 +199,17 @@ async def _(param: AddFile) -> Result:
         return Result.fail(error)
     if not parent_path:
         return Result.fail("无效的路径")
+    if not _is_safe_filename(param.name):
+        return Result.fail("无效的文件名")
 
-    path = (parent_path / param.name) if param.parent else Path(param.name)
+    path = parent_path / param.name
+    final_path, error = validate_path(str(path))
+    if error or not final_path:
+        return Result.fail(error or "无效的路径")
     if path.exists():
         return Result.warning_("文件已存在...")
     try:
-        path.open("w")
+        path.touch()
         return Result.ok("新建文件成功!")
     except Exception as e:
         return Result.warning_(f"新建文件失败: {e!s}")
@@ -192,8 +228,13 @@ async def _(param: AddFile) -> Result:
         return Result.fail(error)
     if not parent_path:
         return Result.fail("无效的路径")
+    if not _is_safe_filename(param.name):
+        return Result.fail("无效的文件夹名")
 
-    path = (parent_path / param.name) if param.parent else Path(param.name)
+    path = parent_path / param.name
+    final_path, error = validate_path(str(path))
+    if error or not final_path:
+        return Result.fail(error or "无效的路径")
     if path.exists():
         return Result.warning_("文件夹已存在...")
     try:

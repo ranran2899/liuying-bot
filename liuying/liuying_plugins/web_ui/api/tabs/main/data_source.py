@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from pathlib import Path
 import time
@@ -33,7 +34,7 @@ driver: Driver = nonebot.get_driver()
 
 class BotLive:
     def __init__(self):
-        self._data = {}
+        self._data: dict[str, int] = {}
 
     def add(self, bot_id: str):
         self._data[bot_id] = int(time.time())
@@ -92,8 +93,9 @@ class ApiDataSource:
         """
         version_file = Path() / "__version__"
         if version_file.exists():
-            if text := version_file.open(encoding="utf-8").read():
-                return text.replace("__version__: ", "").strip()
+            with version_file.open(encoding="utf-8") as f:
+                if text := f.read():
+                    return text.replace("__version__: ", "").strip()
         return "unknown"
 
     @classmethod
@@ -146,7 +148,9 @@ class ApiDataSource:
         if not bots:
             return None
         select_bot: BaseInfo
-        bot_list = [await cls.__build_bot_info(bot) for _, bot in bots.items()]
+        bot_list = await asyncio.gather(
+            *[cls.__build_bot_info(bot) for _, bot in bots.items()]
+        )
         # 获取指定qq号的bot信息，若无指定   则获取第一个
         if _bl := [b for b in bot_list if b.self_id == bot_id]:
             select_bot = _bl[0]

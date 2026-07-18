@@ -26,4 +26,4 @@ async def system_logs_realtime(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        LOG_STORAGE.listeners.remove(log_listener)
+        LOG_STORAGE.listeners.discard(log_listener)

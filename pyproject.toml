@@ -24,9 +24,9 @@ httpx = "*"
 websockets = "*"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.51"}
 pymysql = ">=1.0,<2.0"  # 用于MySQL支持
-nonebot-plugin-uninfo = "^0.11.0"
+nonebot-plugin-uninfo = "==0.11.1"
 nonebot-plugin-waiter = "^0.8.1"
-nonebot-plugin-alconna = "^0.62.0"
+nonebot-plugin-alconna = "==0.62.1"
 nonebot-plugin-session = "^0.3.2"
 nonebot_plugin_localstore = "^0.7.4"
 nonebot-plugin-htmlrender = "^0.6.7"

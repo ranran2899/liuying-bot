@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import text
 
 from liuying.configs.config import BotConfig
@@ -47,6 +49,23 @@ type2sql_column = {
     "postgres": SELECT_TABLE_COLUMN_PSQL_SQL,
 }
 
+# 安全表名：仅字母、数字、下划线、点号、连字符
+_SAFE_TABLE_NAME_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
+
+
+def _is_safe_table_name(name: str | None) -> bool:
+    """校验表名是否安全
+
+    参数:
+        name: 待校验的表名
+
+    返回:
+        bool: 安全返回 True，否则 False
+    """
+    if not name or len(name) > 128:
+        return False
+    return bool(_SAFE_TABLE_NAME_RE.match(name))
+
 
 def _normalize_sql_type(sql_type: str) -> str:
     """规范化数据库类型名称，去除驱动后缀（如 sqlite+aiosqlite -> sqlite）
@@ -76,7 +95,12 @@ class ApiDataSource:
 
         返回:
             list[Column]: 字段数据
+
+        异常:
+            ValueError: 表名包含非法字符
         """
+        if not _is_safe_table_name(table_name):
+            raise ValueError("表名包含非法字符")
         sql_type = _normalize_sql_type(BotConfig.get_sql_type())
         sql = type2sql_column[sql_type]
         async with session_manager.get_session() as session:

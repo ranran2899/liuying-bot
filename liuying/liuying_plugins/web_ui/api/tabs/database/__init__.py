@@ -30,22 +30,22 @@ async def _():
         if plugin.metadata and plugin.metadata.extra:
             sql_list = plugin.metadata.extra.get("sql_list")
         if module in ApiDataSource.SQL_DICT:
-            raise ValueError(f"{module} 常用SQL module 重复")
+            logger.warning(f"{module} 常用SQL module 重复，跳过注册", command="WebUi")
+            continue
         if sql_list:
-            SqlModel(
+            ApiDataSource.SQL_DICT[module] = SqlModel(
                 name="",
                 module=module,
                 sql_list=sql_list,
             )
-            ApiDataSource.SQL_DICT[module] = SqlModel
     if ApiDataSource.SQL_DICT:
         result = await PluginInfo.filter(
             module__in=ApiDataSource.SQL_DICT.keys()
         ).values_list("module", "name")
         module2name = {r[0]: r[1] for r in result}
         for s in ApiDataSource.SQL_DICT:
-            module = ApiDataSource.SQL_DICT[s].module
-            ApiDataSource.SQL_DICT[s].name = module2name.get(module, module)
+            sql_model = ApiDataSource.SQL_DICT[s]
+            sql_model.name = module2name.get(sql_model.module, sql_model.module)
 
 
 @router.get(

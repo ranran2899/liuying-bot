@@ -41,10 +41,12 @@ class MenuManager:
         if self.file.exists():
             try:
                 temp_menu = []
-                self.menu = json.load(self.file.open(encoding="utf8"))
-                self_menu_name = [menu["name"] for menu in self.menu]
+                with self.file.open(encoding="utf8") as f:
+                    self.menu = json.load(f)
+                # 提取已存菜单的 module 标识，用于与默认菜单比对
+                self_menu_module = [m.get("module") for m in self.menu]
                 for module in [m.module for m in default_menus]:
-                    if module in self_menu_name:
+                    if module in self_menu_module:
                         temp_menu.append(
                             MenuItem(
                                 **next(m for m in self.menu if m["module"] == module)

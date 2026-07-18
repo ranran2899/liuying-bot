@@ -105,8 +105,12 @@ async def _(db_url: str) -> Result:
 async def run_restart_command(bat_path: Path, port: int):
     """在后台执行重启命令"""
     await asyncio.sleep(1)  # 确保 FastAPI 已返回响应
-    subprocess.Popen([bat_path, str(port)], shell=True)  # noqa: ASYNC220
+    subprocess.Popen([str(bat_path), str(port)])  # noqa: ASYNC220
     sys.exit(0)  # 退出当前进程
+
+
+# 后台任务引用集合，防止任务被 GC 回收
+_background_tasks: set[asyncio.Task] = set()
 
 
 @router.post(
@@ -128,7 +132,7 @@ async def _() -> Result:
     if time.time() - float(set_time) > 10 * 60:
         return Result.fail("重启标志文件已过期，请重新设置配置。")
     flag_file.unlink()
-    try:
-        return Result.ok(info="执行重启命令成功")
-    finally:
-        asyncio.create_task(run_restart_command(BAT_FILE, port))
+    task = asyncio.create_task(run_restart_command(BAT_FILE, port))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return Result.ok(info="执行重启命令成功")
