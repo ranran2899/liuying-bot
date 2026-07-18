@@ -125,42 +125,28 @@ class PromptBuilder:
 
             # 话题线程追踪：记录用户消息并注入当前话题上下文
             if get_config("THREAD_TRACKER_ENABLED", True):
-                try:
-                    thread_tracker.track_message(
-                        group_id=ctx.group_id,
-                        user_id=ctx.user_id,
-                        text=ctx.text,
-                    )
-                    thread_ctx = thread_tracker.get_thread_context(
-                        ctx.group_id
-                    )
-                    if thread_ctx:
-                        parts.append(
-                            f"\n{thread_ctx}\n"
-                        )
-                except Exception as e:
-                    logger.debug(
-                        f"话题线程追踪失败: {e}",
-                        command="AI",
-                        e=e,
+                thread_tracker.track_message(
+                    group_id=ctx.group_id,
+                    user_id=ctx.user_id,
+                    text=ctx.text,
+                )
+                thread_ctx = thread_tracker.get_thread_context(
+                    ctx.group_id
+                )
+                if thread_ctx:
+                    parts.append(
+                        f"\n{thread_ctx}\n"
                     )
 
             # 注入群社交上下文（角色/关系/复读跟随提示）
             if get_config("SOCIAL_INTELLIGENCE_ENABLED", True):
-                try:
-                    social_prompt = (
-                        group_social.build_social_prompt_block(
-                            ctx.group_id, ctx.user_id
-                        )
+                social_prompt = (
+                    group_social.build_social_prompt_block(
+                        ctx.group_id, ctx.user_id
                     )
-                    if social_prompt:
-                        parts.append(social_prompt)
-                except Exception as e:
-                    logger.debug(
-                        f"注入群社交上下文失败: {e}",
-                        command="AI",
-                        e=e,
-                    )
+                )
+                if social_prompt:
+                    parts.append(social_prompt)
 
         if get_config("SAFETY_FILTER_ENABLED", True):
             parts.append(SafetyFilter.build_prompt_injection_guard())

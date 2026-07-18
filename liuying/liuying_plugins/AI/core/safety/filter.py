@@ -221,8 +221,12 @@ class SafetyFilter:
         if on_response:
             try:
                 on_response(response)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    f"on_response回调失败: {e}",
+                    command="AI",
+                    e=e,
+                )
 
         text = extract(response) or ""
         block = SafetyFilter.detect_api_block(response)
@@ -246,8 +250,12 @@ class SafetyFilter:
         if on_response:
             try:
                 on_response(response2)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    f"on_response回调失败: {e}",
+                    command="AI",
+                    e=e,
+                )
 
         text2 = extract(response2) or ""
         block2 = SafetyFilter.detect_api_block(response2)

@@ -2,6 +2,8 @@
 
 群空闲发话、私聊问候等定时任务。
 基于 task_manager 注册定时任务。
+所有提示词通过 persona_manager 的场景化模板渲染，
+确保切换默认人设后主动行为也保持一致风格。
 """
 
 from datetime import datetime, timedelta
@@ -17,24 +19,17 @@ from ..config import get_config
 from ..core.context import context_manager
 from ..core.json_utils import extract_json_payload
 from ..core.llm import llm_helper
+from ..core.persona import persona_manager
 from ..models.group_context import GroupContextSnapshot
 
 _PROACTIVE_TASK_ID = "ai_proactive_group_message"
 """群主动发话任务ID"""
 
-_PROACTIVE_GROUP_PROMPT = """现在群里安静了一段时间，作为流萤，决定是否要主动说点什么。
+_PROACTIVE_PRIVATE_TASK_ID = "ai_proactive_private_greeting"
+"""私聊问候任务ID"""
 
-当前时段: {time_period}
-时段氛围: {time_flavor}
-群风格: {group_style}
-最近活跃时间: {last_active}
-
-请用JSON格式返回决策:
-- should_send: 是否发送消息（true/false）
-- message: 要发送的消息内容（should_send为true时填写，不超过50字）
-- reason: 决策理由
-
-只返回JSON，不要其他内容。"""
+_PROACTIVE_FAVOR_THRESHOLD = 5
+"""私聊问候触发的好感度阈值（亲密及以上）"""
 
 
 class ProactiveHelper:
@@ -133,7 +128,8 @@ class ProactiveHelper:
             else "未知"
         )
 
-        prompt = _PROACTIVE_GROUP_PROMPT.format(
+        prompt = await persona_manager.get_active_persona_template(
+            "proactive_group",
             time_period=period,
             time_flavor=time_flavor,
             group_style=group_style or "未设置",
@@ -255,8 +251,8 @@ class ProactiveHelper:
             str: 问候消息，失败返回空串
         """
         try:
-            prompt = _GREETING_PROMPT.format(
-                greeting_type=greeting_type
+            prompt = await persona_manager.get_active_persona_template(
+                "private_greeting", greeting_type=greeting_type
             )
             response = await llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
@@ -292,22 +288,6 @@ class ProactiveHelper:
             logger.warning(
                 f"发送私聊问候失败: {e}", command="AI", e=e
             )
-
-
-_PROACTIVE_PRIVATE_TASK_ID = "ai_proactive_private_greeting"
-"""私聊问候任务ID"""
-
-_PROACTIVE_FAVOR_THRESHOLD = 5
-"""私聊问候触发的好感度阈值（亲密及以上）"""
-
-_GREETING_PROMPT = """请以流萤的口吻为一位高好感度好友发送一条{greeting_type}问候。
-
-要求：
-1. 自然亲切，符合好友关系
-2. 不超过30字
-3. 不要使用称呼，直接说问候内容
-
-只返回问候文本，不要其他内容。"""
 
 
 async def setup_proactive_jobs() -> None:

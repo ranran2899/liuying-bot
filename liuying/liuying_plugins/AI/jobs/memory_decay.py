@@ -4,6 +4,7 @@
 基于 task_manager 注册定时任务。
 """
 
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from liuying.utils.apscheduler import task_manager
@@ -97,26 +98,28 @@ class MemoryDecayHelper:
     @staticmethod
     async def _get_active_users_in_window(
         hours: int = 24,
-    ) -> list[tuple[str, str | None, str]]:
+    ) -> list[tuple[str, str | None, str | None]]:
         """获取时间窗口内的活跃用户
 
         按用户+群组+人格三元组去重，确保不同人格的记忆独立巩固。
+        保留 persona_name 原值用于后续过滤，避免 None 被
+        归一化为 "default" 后 filter 无法命中真实 None 记录。
 
         参数:
             hours: 时间窗口（小时）
 
         返回:
-            list[tuple[str, str | None, str]]: (user_id, group_id, persona_name) 列表
+            list[tuple[str, str | None, str | None]]:
+                (user_id, group_id, persona_name) 列表
         """
         cutoff = datetime.now() - timedelta(hours=hours)
         records = await ConversationRecord.filter(
             create_time__gt=cutoff,
             role="user",
         ).all()
-        seen: set[tuple[str, str | None, str]] = set()
+        seen: set[tuple[str, str | None, str | None]] = set()
         for r in records:
-            persona = r.persona_name or "default"
-            key = (r.user_id, r.group_id, persona)
+            key = (r.user_id, r.group_id, r.persona_name)
             if key not in seen:
                 seen.add(key)
         return list(seen)
@@ -127,41 +130,53 @@ class MemoryDecayHelper:
 
         每2小时执行，检查用户消息历史达阈值则更新画像。
         按 persona_name 分组统计与拉取历史，保证人设间数据隔离。
+        优化：一次查询所有近期 user 消息并在 Python 内存分组计数，
+        消除循环内 count 查询的 N+1 问题。
         """
         if not get_config("MEMORY_ENABLED", True):
             return
 
         try:
-            users = (
-                await MemoryDecayHelper._get_active_users_in_window(
-                    hours=2
-                )
-            )
+            cutoff = datetime.now() - timedelta(hours=2)
+            records = await ConversationRecord.filter(
+                create_time__gt=cutoff,
+                role="user",
+            ).all()
+
+            # Python 内存按 (user_id, group_id, persona_name) 分组计数，
+            # 避免循环内 N 次 count 查询的 N+1 问题
+            counter: dict[
+                tuple[str, str | None, str | None], int
+            ] = defaultdict(int)
+            for r in records:
+                counter[
+                    (r.user_id, r.group_id, r.persona_name)
+                ] += 1
+
             updated = 0
-            for user_id, group_id, persona_name in users:
-                count = await ConversationRecord.filter(
-                    user_id=user_id,
-                    persona_name=persona_name,
-                    create_time__gt=datetime.now()
-                    - timedelta(hours=2),
-                ).count()
-                if count >= _PERSONA_UPDATE_THRESHOLD:
-                    history_records = (
-                        await ConversationRecord.get_history(
-                            user_id,
-                            group_id,
-                            limit=_PERSONA_UPDATE_THRESHOLD,
-                            persona_name=persona_name,
-                        )
+            for (
+                user_id,
+                group_id,
+                persona_name,
+            ), count in counter.items():
+                if count < _PERSONA_UPDATE_THRESHOLD:
+                    continue
+                history_records = (
+                    await ConversationRecord.get_history(
+                        user_id,
+                        group_id,
+                        limit=_PERSONA_UPDATE_THRESHOLD,
+                        persona_name=persona_name,
                     )
-                    history = [
-                        {"role": r.role, "content": r.content}
-                        for r in reversed(history_records)
-                    ]
-                    await persona_manager.update_user_persona(
-                        user_id, history
-                    )
-                    updated += 1
+                )
+                history = [
+                    {"role": r.role, "content": r.content}
+                    for r in reversed(history_records)
+                ]
+                await persona_manager.update_user_persona(
+                    user_id, history
+                )
+                updated += 1
             if updated > 0:
                 logger.info(
                     f"用户画像更新完成，更新{updated}个",

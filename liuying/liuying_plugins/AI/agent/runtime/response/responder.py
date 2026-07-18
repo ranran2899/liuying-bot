@@ -369,7 +369,7 @@ class PersonaResponder:
             logger.debug(
                 f"加载人格失败，使用默认: {e}", command="AI"
             )
-            persona_prompt = "你是流萤，一个温柔、有活力的AI伙伴。"
+            persona_prompt = persona_mgr.get_persona_fallback_prompt()
 
         mode_hint = self._get_mode_hint(output_mode)
         return f"{persona_prompt}\n\n{mode_hint}"

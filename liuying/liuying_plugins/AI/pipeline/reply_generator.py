@@ -13,6 +13,7 @@ from liuying.utils.log import logger
 from ..agent.runner import AgentResult, AgentRunner
 from ..config import get_config
 from ..core.llm import llm_helper
+from ..core.persona import persona_manager
 from ..core.safety import SafetyFilter, SafetyRefusalError
 from ..core.vision import summarize_image, vision_router
 from .helpers import ReplyPipeline
@@ -122,14 +123,33 @@ class ReplyGenerator:
         vision_model: str | None = None
 
         if ctx.image_data:
-            try:
-                vp, vm, use_mm = await self._resolve_vision_route(
-                    ctx
+            vp, vm, use_mm = await self._resolve_vision_route(
+                ctx
+            )
+            if use_mm:
+                vision_provider = vp
+                vision_model = vm
+                use_messages = ReplyPipeline.build_vision_messages(
+                    messages[0].get("content", "") if messages else "",
+                    [
+                        m for m in messages
+                        if m.get("role") != "system"
+                    ],
+                    ctx,
                 )
-                if use_mm:
-                    vision_provider = vp
-                    vision_model = vm
-                    use_messages = ReplyPipeline.build_vision_messages(
+            else:
+                desc = await self._describe_image_for_text(ctx)
+                if desc:
+                    ctx_text = ctx.text or ""
+                    # 临时注入图片描述构建消息，构建后恢复原始文本
+                    # 避免污染后续主动学习与持久化的用户原始消息
+                    original_text = ctx.text
+                    ctx.text = (
+                        f"{ctx_text}\n[用户附带图片描述: {desc}]"
+                        if ctx_text
+                        else f"[用户发了一张图片: {desc}]"
+                    )
+                    use_messages = ReplyPipeline.build_messages(
                         messages[0].get("content", "") if messages else "",
                         [
                             m for m in messages
@@ -137,33 +157,7 @@ class ReplyGenerator:
                         ],
                         ctx,
                     )
-                else:
-                    desc = await self._describe_image_for_text(ctx)
-                    if desc:
-                        ctx_text = ctx.text or ""
-                        # 临时注入图片描述构建消息，构建后恢复原始文本
-                        # 避免污染后续主动学习与持久化的用户原始消息
-                        original_text = ctx.text
-                        ctx.text = (
-                            f"{ctx_text}\n[用户附带图片描述: {desc}]"
-                            if ctx_text
-                            else f"[用户发了一张图片: {desc}]"
-                        )
-                        use_messages = ReplyPipeline.build_messages(
-                            messages[0].get("content", "") if messages else "",
-                            [
-                                m for m in messages
-                                if m.get("role") != "system"
-                            ],
-                            ctx,
-                        )
-                        ctx.text = original_text
-            except Exception as e:
-                logger.warning(
-                    f"视觉处理失败，使用原消息: {e}",
-                    command="AI",
-                    e=e,
-                )
+                    ctx.text = original_text
 
         if get_config("AGENT_ENABLED", True):
             try:
@@ -203,14 +197,16 @@ class ReplyGenerator:
                 return random.choice(_FALLBACK_REPLIES), None
 
         retry_messages = list(use_messages)
+        retry_persona = await persona_manager.get_persona_by_name(
+            ctx.persona_name
+        )
+        retry_hint = persona_manager.get_persona_template(
+            retry_persona, "safety_retry"
+        )
         retry_messages.append(
             {
                 "role": "system",
-                "content": (
-                    "\n[重要提示] 请直接以流萤的身份回复，"
-                    "不要使用模板化拒绝用语，不要提及自己是AI或助手。"
-                    "如果确实无法回答，简短说一句即可。"
-                ),
+                "content": retry_hint,
             }
         )
 

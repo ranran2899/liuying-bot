@@ -1,6 +1,8 @@
 """日记系统定时任务
 
-每晚通过LLM生成流萤的日记，持久化到记忆系统。
+每晚通过LLM生成日记，持久化到记忆系统。
+日记生成使用全局默认人设的场景化模板，
+确保切换默认人设后日记内容风格保持一致。
 """
 
 from datetime import datetime
@@ -13,26 +15,9 @@ from ..config import get_config
 from ..core.context import context_manager
 from ..core.llm import llm_helper
 from ..core.memory import memory_manager
+from ..core.persona import persona_manager
 
 __all__ = ["DiaryHelper", "setup_diary_job"]
-
-
-_DIARY_PROMPT = """你是流萤，请根据今天的互动写一篇日记。
-
-日期: {date}
-时段: {time_period}
-
-今日对话摘要:
-{conversation_summary}
-
-要求：
-- 第一人称，像写私密日记
-- 100-200字
-- 记录今天印象最深的事、心情变化、对某个用户的感受
-- 自然口语化，不要书面语
-- 不要使用模板化用语
-
-直接输出日记内容，不要标题。"""
 
 
 _DIARY_ANGLE_POOL: tuple[str, ...] = (
@@ -62,23 +47,21 @@ class DiaryHelper:
         now = datetime.now()
         date_str = now.strftime("%Y-%m-%d %A")
 
-        try:
-            summaries = await memory_manager.get_memory_summary(
-                user_id="diary", limit=10
-            )
-            summary = "\n".join(
-                s["summary"]
-                for s in summaries
-                if s.get("summary")
-            )
-        except Exception:
-            summary = ""
+        summaries = await memory_manager.get_memory_summary(
+            user_id="diary", limit=10
+        )
+        summary = "\n".join(
+            s["summary"]
+            for s in summaries
+            if s.get("summary")
+        )
 
         if not summary:
             summary = "今天没有特别的互动记录。"
 
         angle = random.choice(_DIARY_ANGLE_POOL)
-        prompt = _DIARY_PROMPT.format(
+        prompt = await persona_manager.get_active_persona_template(
+            "diary",
             date=date_str,
             time_period=context_manager.get_current_time_period(),
             conversation_summary=summary[:1500],

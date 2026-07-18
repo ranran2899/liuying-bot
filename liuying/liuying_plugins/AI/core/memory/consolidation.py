@@ -73,28 +73,28 @@ class ConsolidationMixin:
         now = datetime.now()
         count = 0
 
-        working_expired = await MemoryItem.filter(
+        # 批量降级 working -> episodic，避免循环 save 的 N+1 问题
+        working_expired_ids = await MemoryItem.filter(
             tier="working",
-        ).all()
-        for memory in working_expired:
-            if memory.expire_time and now > memory.expire_time:
-                memory.tier = "episodic"
-                memory.expire_time = None
-                await memory.save(
-                    update_fields=["tier", "expire_time"]
-                )
-                count += 1
+            expire_time__lt=now,
+        ).values_list("id", flat=True)
+        if working_expired_ids:
+            await MemoryItem.filter(
+                id__in=working_expired_ids
+            ).update(tier="episodic", expire_time=None)
+            count += len(working_expired_ids)
 
+        # 批量硬删过期 episodic，向量索引需逐条调用外部 API（无法批量），
+        # DB 侧用批量 delete 收尾
         episodic_cutoff = now - timedelta(days=_EPISODIC_EXPIRE_DAYS)
         episodic_expired = await MemoryItem.filter(
             tier="episodic",
             is_protected=False,
+            reinforcement_count=0,
+            create_time__lt=episodic_cutoff,
         ).all()
-        for memory in episodic_expired:
-            if (
-                memory.reinforcement_count == 0
-                and memory.create_time < episodic_cutoff
-            ):
+        if episodic_expired:
+            for memory in episodic_expired:
                 try:
                     await self._db.delete_document(memory.id)
                 except Exception as e:
@@ -103,8 +103,10 @@ class ConsolidationMixin:
                         command="AI",
                         e=e,
                     )
-                await memory.delete()
-                count += 1
+            await MemoryItem.filter(
+                id__in=[m.id for m in episodic_expired]
+            ).delete()
+            count += len(episodic_expired)
 
         if count > 0:
             logger.info(
@@ -163,24 +165,28 @@ class ConsolidationMixin:
                 salience=0.8,
                 persona_name=persona_name,
             )
-            working_mems_query = MemoryItem.filter(
+            # 批量降级 working -> background，并用 SQL 原子递增
+            # reinforcement_count，避免循环 save 的 N+1 问题
+            consolidated_ids = await MemoryItem.filter(
                 user_id=user_id,
                 persona_name=persona_name,
                 tier="working",
-            )
-            working_mems = await working_mems_query.all()
-            for mem in working_mems:
-                if mem.create_time < cutoff:
-                    mem.reinforcement_count += 1
-                    mem.tier = "background"
-                    await mem.save(
-                        update_fields=["reinforcement_count", "tier"]
-                    )
+                create_time__lt=cutoff,
+            ).values_list("id", flat=True)
+            if consolidated_ids:
+                await MemoryItem.filter(
+                    id__in=consolidated_ids
+                ).update(
+                    reinforcement_count=(
+                        MemoryItem.reinforcement_count + 1
+                    ),
+                    tier="background",
+                )
             logger.info(
                 f"记忆巩固完成: {user_id} persona={persona_name}",
                 command="AI",
             )
-            return len(working_mems)
+            return len(consolidated_ids)
         except Exception as e:
             logger.warning(
                 f"记忆巩固失败: {e}", command="AI", e=e

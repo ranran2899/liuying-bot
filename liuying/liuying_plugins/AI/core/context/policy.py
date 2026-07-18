@@ -77,6 +77,20 @@ _COMPRESS_SYSTEM_PROMPT = (
 )
 """压缩时的系统提示词"""
 
+_SUMMARY_CHUNK_PREFIX = "## 较早上下文摘要"
+"""压缩摘要块前缀（产出与解析共用，避免硬编码漂移）"""
+
+_VALID_ROLES: frozenset[str] = frozenset({
+    "user", "assistant", "system", "tool",
+})
+"""有效消息角色白名单"""
+
+_ROLE_LINE_PATTERN = re.compile(
+    r"^\s*([A-Za-z_]+)\s*[:：]\s?(.*)$",
+    re.DOTALL,
+)
+"""压缩块行首 role 匹配模式，兼容中英文冒号"""
+
 
 class ContextPolicy:
     """上下文策略集合
@@ -222,7 +236,7 @@ class ContextPolicy:
                     break
 
             if summary_text:
-                summary_chunk = f"## 较早上下文摘要\n{summary_text}"
+                summary_chunk = f"{_SUMMARY_CHUNK_PREFIX}\n{summary_text}"
 
         compressed = (
             [summary_chunk, *recent_chunks] if summary_chunk else list(recent_chunks)
@@ -235,6 +249,41 @@ class ContextPolicy:
             compressed.pop(0)
 
         return compressed
+
+    @staticmethod
+    def parse_compressed_chunks(
+        chunks: list[str],
+    ) -> list[dict[str, str]]:
+        """将压缩后的chunk列表解析回消息字典列表
+
+        解析规则：
+        - 以 _SUMMARY_CHUNK_PREFIX 开头的块作为 system 消息整体保留
+        - 形如 "role: content" / "role：content" 的块按 role/content 切分
+          （role 大小写不敏感，需命中 _VALID_ROLES 白名单）
+        - 无法识别格式的块整体作为 system 消息保留，避免内容丢失
+
+        参数:
+            chunks: 压缩后的chunk列表
+
+        返回:
+            list[dict[str, str]]: 消息字典列表
+        """
+        result: list[dict[str, str]] = []
+        for chunk in chunks:
+            if not chunk:
+                continue
+            if chunk.startswith(_SUMMARY_CHUNK_PREFIX):
+                result.append({"role": "system", "content": chunk})
+                continue
+            match = _ROLE_LINE_PATTERN.match(chunk)
+            if match:
+                role = match.group(1).lower()
+                content = match.group(2)
+                if role in _VALID_ROLES:
+                    result.append({"role": role, "content": content})
+                    continue
+            result.append({"role": "system", "content": chunk})
+        return result
 
     @staticmethod
     def _token_similarity(a: str, b: str) -> float:

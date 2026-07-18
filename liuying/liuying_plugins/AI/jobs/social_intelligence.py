@@ -21,6 +21,7 @@ from ..config import get_config
 from ..core.context import context_manager
 from ..core.group import ProfileToolkit
 from ..core.llm import llm_helper
+from ..core.persona import persona_manager
 from ..core.runtime import ProtocolHelper
 from ..core.social import social_gate, social_quota
 from ..core.social.framework import (
@@ -53,42 +54,6 @@ _FESTIVAL_MAP: dict[str, str] = {
     "12-25": "圣诞节",
 }
 """固定日期节日映射"""
-
-
-_GREETING_PROMPT = """你是流萤，请生成一句自然的{greeting_type}问候语。
-
-当前时段: {time_period}
-{festival_line}{group_style}
-
-要求：
-- 简短自然，不超过30字
-- 符合流萤的性格和当前时段氛围
-- 不要使用模板化用语
-
-直接输出问候语，不要解释。"""
-
-
-_NEWS_PROMPT = """请生成一条适合在群聊分享的轻松话题或新闻摘要。
-
-当前时段: {time_period}
-
-要求：
-- 简短有趣，不超过40字
-- 适合群聊氛围
-- 可以是科技/游戏/生活类话题
-
-直接输出内容，不要解释。"""
-
-
-_TOPIC_FOLLOWUP_PROMPT = """基于最近的群聊摘要，生成一句自然的延续话题。
-
-群聊摘要: {summary}
-
-要求：
-- 简短自然，不超过30字
-- 像真人继续之前的聊天
-
-直接输出内容，不要解释。"""
 
 
 class SocialIntelligenceHelper:
@@ -283,9 +248,12 @@ class SocialIntelligenceHelper:
             "PROACTIVE_POKE_DAILY_LIMIT",
             _PROACTIVE_POKE_DAILY_LIMIT,
         )
+        # 直接抽样所需数量，避免对全量列表 shuffle 的浪费
+        candidates = random.sample(
+            users, min(daily_limit, len(users))
+        )
         poked = 0
-        random.shuffle(users)
-        for user in users:
+        for user in candidates:
             if poked >= daily_limit:
                 break
             if not user.user_id:
@@ -335,7 +303,8 @@ class SocialIntelligenceHelper:
                 )
             )
             style_prompt = ProfileToolkit.build_group_style_prompt_block(style)
-            return _GREETING_PROMPT.format(
+            return await persona_manager.get_active_persona_template(
+                "greeting",
                 greeting_type="早安",
                 time_period=time_period,
                 festival_line=festival_line,
@@ -359,7 +328,8 @@ class SocialIntelligenceHelper:
                 )
             )
             style_prompt = ProfileToolkit.build_group_style_prompt_block(style)
-            return _GREETING_PROMPT.format(
+            return await persona_manager.get_active_persona_template(
+                "greeting",
                 greeting_type="晚安",
                 time_period=time_period,
                 festival_line="",
@@ -377,7 +347,9 @@ class SocialIntelligenceHelper:
         async def _build_prompt(
             _group: GroupContextSnapshot, time_period: str
         ) -> str:
-            return _NEWS_PROMPT.format(time_period=time_period)
+            return await persona_manager.get_active_persona_template(
+                "news", time_period=time_period
+            )
 
         await SocialIntelligenceHelper._generate_and_send_to_groups(
             _build_prompt, scenario="新闻推送"
@@ -412,8 +384,8 @@ class SocialIntelligenceHelper:
             ):
                 continue
 
-            prompt = _TOPIC_FOLLOWUP_PROMPT.format(
-                summary=summary[:200]
+            prompt = await persona_manager.get_active_persona_template(
+                "topic_followup", summary=summary[:200]
             )
             try:
                 text = await llm_helper.chat_text(
@@ -479,9 +451,13 @@ def register_social_triggers() -> None:
     把早安/晚安/新闻/话题延续4个任务注册为SocialTrigger，
     由social_trigger_registry.setup_to_scheduler统一调度。
     """
-    enabled_fn = lambda _cfg: get_config(
-        "SOCIAL_INTELLIGENCE_ENABLED", True
-    )
+
+    def _social_enabled(_cfg: Any) -> bool:
+        return get_config("SOCIAL_INTELLIGENCE_ENABLED", True)
+
+    def _poke_enabled(_cfg: Any) -> bool:
+        return get_config("PROACTIVE_POKE_ENABLED", False)
+
     social_trigger_registry.register(
         SocialTrigger(
             name="morning_greeting",
@@ -490,7 +466,7 @@ def register_social_triggers() -> None:
             ),
             schedule_kind="cron",
             schedule_args={"hour": 8, "minute": 0},
-            enabled=enabled_fn,
+            enabled=_social_enabled,
         )
     )
     social_trigger_registry.register(
@@ -501,7 +477,7 @@ def register_social_triggers() -> None:
             ),
             schedule_kind="cron",
             schedule_args={"hour": 22, "minute": 30},
-            enabled=enabled_fn,
+            enabled=_social_enabled,
         )
     )
     social_trigger_registry.register(
@@ -512,7 +488,7 @@ def register_social_triggers() -> None:
             ),
             schedule_kind="interval",
             schedule_args={"hours": 4},
-            enabled=enabled_fn,
+            enabled=_social_enabled,
         )
     )
     social_trigger_registry.register(
@@ -523,7 +499,7 @@ def register_social_triggers() -> None:
             ),
             schedule_kind="interval",
             schedule_args={"hours": 2},
-            enabled=enabled_fn,
+            enabled=_social_enabled,
         )
     )
     social_trigger_registry.register(
@@ -534,9 +510,7 @@ def register_social_triggers() -> None:
             ),
             schedule_kind="interval",
             schedule_args={"hours": 6},
-            enabled=lambda _cfg: get_config(
-                "PROACTIVE_POKE_ENABLED", False
-            ),
+            enabled=_poke_enabled,
         )
     )
 

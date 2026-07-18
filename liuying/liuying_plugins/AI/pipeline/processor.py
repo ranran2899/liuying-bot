@@ -21,7 +21,6 @@ from ..agent.runner import AgentResult
 from ..config import get_config
 from ..core.active_learning import active_learning
 from ..core.context import ContextPolicy
-from ..core.emotion import emotion_manager
 from ..core.group import GroupMuteTracker
 from ..core.llm import (
     TokenTrackingHelper,
@@ -30,7 +29,6 @@ from ..core.llm import (
 from ..core.peer_awareness import peer_awareness
 from ..core.persona import persona_manager
 from ..core.reply_turn_trace import reply_turn_trace
-from ..core.runtime import ProtocolHelper
 from ..core.safety import token_quota_service
 from ..models.conversation_record import ConversationRecord
 from .helpers import ReplyPipeline
@@ -157,21 +155,9 @@ class ReplyProcessor:
                 call_ai_api=_call_compress,
             )
 
-            result: list[dict[str, str]] = []
-            for chunk in compressed_chunks:
-                if chunk.startswith("## 较早上下文摘要"):
-                    result.append(
-                        {"role": "system", "content": chunk}
-                    )
-                else:
-                    parts = chunk.split(": ", 1)
-                    if len(parts) == 2:
-                        result.append(
-                            {"role": parts[0], "content": parts[1]}
-                        )
-                    else:
-                        result.append({"role": "system", "content": chunk})
-            return result
+            return ContextPolicy.parse_compressed_chunks(
+                compressed_chunks
+            )
         except Exception as e:
             logger.debug(
                 f"上下文压缩失败，降级到原始历史: {e}",
@@ -335,26 +321,20 @@ class ReplyProcessor:
         返回:
             str: 可能前置了口头禅的文本
         """
-        try:
-            persona = await persona_manager.get_user_persona_config(
-                ctx.user_id
-            )
-            traits = persona.get("traits") or {}
-            if not isinstance(traits, dict):
-                return text
-            catchphrases = traits.get("catchphrase") or []
-            if not catchphrases or not isinstance(
-                catchphrases, list
-            ):
-                return text
-            return HumanizeToolkit.maybe_prepend_catchphrase(
-                text, catchphrases
-            )
-        except Exception as e:
-            logger.debug(
-                f"口头禅插入失败: {e}", command="AI", e=e
-            )
+        persona = await persona_manager.get_user_persona_config(
+            ctx.user_id
+        )
+        traits = persona.get("traits") or {}
+        if not isinstance(traits, dict):
             return text
+        catchphrases = traits.get("catchphrase") or []
+        if not catchphrases or not isinstance(
+            catchphrases, list
+        ):
+            return text
+        return HumanizeToolkit.maybe_prepend_catchphrase(
+            text, catchphrases
+        )
 
     async def handle(self, ctx: ReplyContext) -> ReplyResult:
         """主入口：处理用户消息并生成回复
