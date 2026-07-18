@@ -57,15 +57,11 @@ async def append_token_usage(lines: list[str]) -> None:
     参数:
         lines: 状态文本行列表，原地追加
     """
-    try:
-        provider_summary = await token_tracker.get_provider_summary()
-        model_summary = await token_tracker.get_model_summary()
-        daily_total = await token_tracker.get_total()
-        weekly = await TokenUsage.get_range_summary(7)
-        all_time = await TokenUsage.get_total_summary()
-    except Exception:
-        # 数据库未就绪时静默跳过
-        return
+    provider_summary = await token_tracker.get_provider_summary()
+    model_summary = await token_tracker.get_model_summary()
+    daily_total = await token_tracker.get_total()
+    weekly = await TokenUsage.get_range_summary(7)
+    all_time = await TokenUsage.get_total_summary()
 
     lines.append("")
     lines.append("Token 消耗统计:")

@@ -134,7 +134,7 @@ class OpenAIChatCapability:
         )
         await token_tracker.record(
             provider=provider.name,
-            model=model,
+            model=actual_model,
             **ResponseParser.extract_usage(response),
         )
         return result

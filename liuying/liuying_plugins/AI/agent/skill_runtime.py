@@ -330,13 +330,11 @@ class SkillpackLoader:
     def _load_skill_module(
         self,
         script_path: Path,
-        sys_paths: list[str] | None = None,
     ) -> Any:
         """加载技能模块
 
         参数:
             script_path: 脚本路径
-            sys_paths: 额外sys.path
 
         返回:
             Any: 模块对象
@@ -344,10 +342,6 @@ class SkillpackLoader:
         异常:
             ImportError: 加载失败
         """
-        for p in sys_paths or []:
-            if p not in sys.path:
-                sys.path.insert(0, p)
-
         module_name = (
             f"_skill_{script_path.stem}_{hash(str(script_path))}"
         )

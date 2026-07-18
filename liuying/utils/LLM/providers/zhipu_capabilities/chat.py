@@ -65,7 +65,7 @@ class ZhipuChatCapability:
         provider_cfg = self._client.get_provider_config()
         await token_tracker.record(
             provider=provider_cfg.name if provider_cfg else "zhipu",
-            model=model,
+            model=actual_model,
             **ResponseParser.extract_usage(response),
         )
         return result

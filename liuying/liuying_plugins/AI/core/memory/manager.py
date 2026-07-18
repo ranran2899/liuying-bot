@@ -40,6 +40,7 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
         """
         self._db = db or knowledge_base
         self._embedding_dim = _EMBEDDING_DIM
+        self._bg_tasks: set[asyncio.Task] = set()
 
     async def add(
         self,
@@ -91,8 +92,9 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
                 e=e,
             )
         # 记忆进化：后台异步执行，不阻塞写入返回
+        # 持有Task强引用防止被GC回收导致任务静默取消
         if get_config("MEMORY_EVOLVE_ENABLED", True):
-            asyncio.create_task(
+            evolve_task = asyncio.create_task(
                 self._safe_evolve(
                     user_id=user_id,
                     new_memory_id=memory.id,
@@ -101,8 +103,10 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
                     persona_name=persona_name,
                 )
             )
+            self._bg_tasks.add(evolve_task)
+            evolve_task.add_done_callback(self._bg_tasks.discard)
             # 后台智能：防抖触发去重/晶体化
-            asyncio.create_task(
+            bg_task = asyncio.create_task(
                 background_intelligence.notify_memory_added(
                     user_id=user_id,
                     memory_id=memory.id,
@@ -111,6 +115,8 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
                     persona_name=persona_name,
                 )
             )
+            self._bg_tasks.add(bg_task)
+            bg_task.add_done_callback(self._bg_tasks.discard)
         return memory.id
 
     async def _safe_evolve(

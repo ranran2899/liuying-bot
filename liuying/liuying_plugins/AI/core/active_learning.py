@@ -102,6 +102,7 @@ class ActiveLearning:
         """初始化主动学习管理器"""
         self._daily_count: int = 0
         self._day_start: datetime = datetime.now()
+        self._bg_tasks: set[asyncio.Task] = set()
 
     async def analyze_reply(
         self,
@@ -222,7 +223,8 @@ class ActiveLearning:
             ai_reply: AI生成的回复
             persona_name: bot人格名
         """
-        asyncio.create_task(
+        # 持有Task强引用防止被GC回收导致任务静默取消
+        task = asyncio.create_task(
             self._safe_process_reply(
                 user_id=user_id,
                 user_question=user_question,
@@ -230,6 +232,8 @@ class ActiveLearning:
                 persona_name=persona_name,
             )
         )
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     async def _safe_process_reply(
         self,

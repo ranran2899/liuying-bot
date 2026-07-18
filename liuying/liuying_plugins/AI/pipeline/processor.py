@@ -479,21 +479,15 @@ class ReplyProcessor:
             humanized_text, ctx
         )
 
-        sticker_task = asyncio.create_task(
-            self._decide_sticker(humanized_text, ctx, agent_result)
-        )
-        tts_task = asyncio.create_task(
-            self._decide_tts(humanized_text, ctx)
-        )
-        persist_task = asyncio.create_task(
+        # 并行执行贴纸决策、TTS决策与持久化
+        # gather确保任一协程异常时取消其他任务，避免悬挂任务
+        sticker_path, tts_audio, _ = await asyncio.gather(
+            self._decide_sticker(humanized_text, ctx, agent_result),
+            self._decide_tts(humanized_text, ctx),
             ReplyPipeline.persist_conversation(
                 ctx, ctx.text, humanized_text, agent_result, elapsed
-            )
+            ),
         )
-
-        sticker_path = await sticker_task
-        tts_audio = await tts_task
-        await persist_task
 
         metadata: dict[str, Any] = {
             "elapsed": round(elapsed, 3),

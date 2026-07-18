@@ -141,6 +141,9 @@ class ReplyGenerator:
                     desc = await self._describe_image_for_text(ctx)
                     if desc:
                         ctx_text = ctx.text or ""
+                        # 临时注入图片描述构建消息，构建后恢复原始文本
+                        # 避免污染后续主动学习与持久化的用户原始消息
+                        original_text = ctx.text
                         ctx.text = (
                             f"{ctx_text}\n[用户附带图片描述: {desc}]"
                             if ctx_text
@@ -154,6 +157,7 @@ class ReplyGenerator:
                             ],
                             ctx,
                         )
+                        ctx.text = original_text
             except Exception as e:
                 logger.warning(
                     f"视觉处理失败，使用原消息: {e}",

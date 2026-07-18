@@ -227,26 +227,4 @@ class IntentRuleManager:
                 return rule
         return None
 
-    def add_rule(self, rule: IntentRule) -> None:
-        """添加规则
 
-        参数:
-            rule: 意图规则
-        """
-        self._rules.append(rule)
-
-    def remove_rule(self, name: str) -> None:
-        """移除规则
-
-        参数:
-            name: 规则名称
-        """
-        self._rules = [r for r in self._rules if r.name != name]
-
-    def list_rules(self) -> list[IntentRule]:
-        """列出所有规则
-
-        返回:
-            list[IntentRule]: 规则列表
-        """
-        return list(self._rules)

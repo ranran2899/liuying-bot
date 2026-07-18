@@ -19,7 +19,7 @@ from ..models.conversation_record import ConversationRecord
 from .humanize import HumanizeToolkit
 from .types import ReplyContext
 
-__all__ = ["ReplyPipeline", "reply_pipeline"]
+__all__ = ["ReplyPipeline"]
 
 
 class ReplyPipeline:
@@ -262,7 +262,3 @@ class ReplyPipeline:
             ),
             _safe(memory_task, "添加记忆"),
         )
-
-
-reply_pipeline = ReplyPipeline()
-"""回复处理辅助管线单例"""

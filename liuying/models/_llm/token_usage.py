@@ -2,7 +2,7 @@
 import time
 from typing import ClassVar
 
-from sqlalchemy import BigInteger, Integer, String
+from sqlalchemy import BigInteger, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
@@ -68,7 +68,10 @@ class TokenUsage(Model):
     ) -> None:
         """累加一次 Token 消耗到持久化统计
 
-        按 date + provider + model 聚合，存在则累加，不存在则创建。
+        使用 QueryWrapper.update 进行数据库原子累加
+        (col = col + val)，避免读-改-写竞态导致的数据丢失。
+        记录不存在时通过 get_or_create 创建，并发创建冲突
+        时重试原子累加。
 
         参数:
             provider: 供应商名称
@@ -82,7 +85,22 @@ class TokenUsage(Model):
 
         today = time.strftime("%Y-%m-%d")
         now = int(time.time())
-        instance, created = await cls.update_or_create(
+
+        # 原子累加已有记录（col = col + val，单条 SQL 无竞态）
+        rowcount = await cls.filter(
+            date=today, provider=provider, model=model
+        ).update(
+            prompt_tokens=cls.prompt_tokens + prompt_tokens,
+            completion_tokens=cls.completion_tokens + completion_tokens,
+            total_tokens=cls.total_tokens + total_tokens,
+            request_count=cls.request_count + 1,
+            updated_at=now,
+        )
+        if rowcount > 0:
+            return
+
+        # 记录不存在，创建初始记录
+        _, created = await cls.get_or_create(
             date=today,
             provider=provider,
             model=model,
@@ -95,19 +113,15 @@ class TokenUsage(Model):
             },
         )
         if not created:
-            instance.prompt_tokens += prompt_tokens
-            instance.completion_tokens += completion_tokens
-            instance.total_tokens += total_tokens
-            instance.request_count += 1
-            instance.updated_at = now
-            await instance.save(
-                update_fields=[
-                    "prompt_tokens",
-                    "completion_tokens",
-                    "total_tokens",
-                    "request_count",
-                    "updated_at",
-                ]
+            # 并发创建冲突，记录已被其他请求创建，原子累加
+            await cls.filter(
+                date=today, provider=provider, model=model
+            ).update(
+                prompt_tokens=cls.prompt_tokens + prompt_tokens,
+                completion_tokens=cls.completion_tokens + completion_tokens,
+                total_tokens=cls.total_tokens + total_tokens,
+                request_count=cls.request_count + 1,
+                updated_at=now,
             )
 
     @classmethod
@@ -123,15 +137,26 @@ class TokenUsage(Model):
             "供应商/模型" 到统计字典的映射
         """
         target = date or time.strftime("%Y-%m-%d")
-        records = await cls.filter(date=target).all()
+        rows = await (
+            cls.filter(date=target)
+            .only("provider", "model")
+            .annotate(
+                prompt_tokens=func.sum(cls.prompt_tokens),
+                completion_tokens=func.sum(cls.completion_tokens),
+                total_tokens=func.sum(cls.total_tokens),
+                request_count=func.sum(cls.request_count),
+            )
+            .group_by(cls.provider, cls.model)
+            .all()
+        )
         return {
             f"{r.provider}/{r.model}": {
-                "prompt_tokens": r.prompt_tokens,
-                "completion_tokens": r.completion_tokens,
-                "total_tokens": r.total_tokens,
-                "request_count": r.request_count,
+                "prompt_tokens": int(r.prompt_tokens or 0),
+                "completion_tokens": int(r.completion_tokens or 0),
+                "total_tokens": int(r.total_tokens or 0),
+                "request_count": int(r.request_count or 0),
             }
-            for r in records
+            for r in rows
         }
 
     @classmethod
@@ -147,22 +172,27 @@ class TokenUsage(Model):
             供应商名到统计字典的映射
         """
         target = date or time.strftime("%Y-%m-%d")
-        records = await cls.filter(date=target).all()
-        summary: dict[str, dict[str, int]] = {}
-        for r in records:
-            if r.provider not in summary:
-                summary[r.provider] = {
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                    "request_count": 0,
-                }
-            s = summary[r.provider]
-            s["prompt_tokens"] += r.prompt_tokens
-            s["completion_tokens"] += r.completion_tokens
-            s["total_tokens"] += r.total_tokens
-            s["request_count"] += r.request_count
-        return summary
+        rows = await (
+            cls.filter(date=target)
+            .only("provider")
+            .annotate(
+                prompt_tokens=func.sum(cls.prompt_tokens),
+                completion_tokens=func.sum(cls.completion_tokens),
+                total_tokens=func.sum(cls.total_tokens),
+                request_count=func.sum(cls.request_count),
+            )
+            .group_by(cls.provider)
+            .all()
+        )
+        return {
+            r.provider: {
+                "prompt_tokens": int(r.prompt_tokens or 0),
+                "completion_tokens": int(r.completion_tokens or 0),
+                "total_tokens": int(r.total_tokens or 0),
+                "request_count": int(r.request_count or 0),
+            }
+            for r in rows
+        }
 
     @classmethod
     async def get_daily_total(
@@ -177,19 +207,18 @@ class TokenUsage(Model):
             全局统计字典
         """
         target = date or time.strftime("%Y-%m-%d")
-        records = await cls.filter(date=target).all()
-        total = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-            "request_count": 0,
+        result = await cls.filter(date=target).aggregate(
+            prompt_tokens=func.sum(cls.prompt_tokens),
+            completion_tokens=func.sum(cls.completion_tokens),
+            total_tokens=func.sum(cls.total_tokens),
+            request_count=func.sum(cls.request_count),
+        )
+        return {
+            "prompt_tokens": int(result.get("prompt_tokens") or 0),
+            "completion_tokens": int(result.get("completion_tokens") or 0),
+            "total_tokens": int(result.get("total_tokens") or 0),
+            "request_count": int(result.get("request_count") or 0),
         }
-        for r in records:
-            total["prompt_tokens"] += r.prompt_tokens
-            total["completion_tokens"] += r.completion_tokens
-            total["total_tokens"] += r.total_tokens
-            total["request_count"] += r.request_count
-        return total
 
     @classmethod
     async def get_range_summary(
@@ -205,24 +234,27 @@ class TokenUsage(Model):
         """
         cutoff = int(time.time()) - days * 86400
         cutoff_date = time.strftime("%Y-%m-%d", time.localtime(cutoff))
-        records = await cls.filter(date__gte=cutoff_date).all()
-
-        summary: dict[str, dict[str, int]] = {}
-        for r in records:
-            key = f"{r.provider}/{r.model}"
-            if key not in summary:
-                summary[key] = {
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                    "request_count": 0,
-                }
-            s = summary[key]
-            s["prompt_tokens"] += r.prompt_tokens
-            s["completion_tokens"] += r.completion_tokens
-            s["total_tokens"] += r.total_tokens
-            s["request_count"] += r.request_count
-        return summary
+        rows = await (
+            cls.filter(date__gte=cutoff_date)
+            .only("provider", "model")
+            .annotate(
+                prompt_tokens=func.sum(cls.prompt_tokens),
+                completion_tokens=func.sum(cls.completion_tokens),
+                total_tokens=func.sum(cls.total_tokens),
+                request_count=func.sum(cls.request_count),
+            )
+            .group_by(cls.provider, cls.model)
+            .all()
+        )
+        return {
+            f"{r.provider}/{r.model}": {
+                "prompt_tokens": int(r.prompt_tokens or 0),
+                "completion_tokens": int(r.completion_tokens or 0),
+                "total_tokens": int(r.total_tokens or 0),
+                "request_count": int(r.request_count or 0),
+            }
+            for r in rows
+        }
 
     @classmethod
     async def get_total_summary(cls) -> dict[str, int]:
@@ -231,19 +263,18 @@ class TokenUsage(Model):
         返回:
             全局统计字典
         """
-        records = await cls.filter().all()
-        total = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-            "request_count": 0,
+        result = await cls.filter().aggregate(
+            prompt_tokens=func.sum(cls.prompt_tokens),
+            completion_tokens=func.sum(cls.completion_tokens),
+            total_tokens=func.sum(cls.total_tokens),
+            request_count=func.sum(cls.request_count),
+        )
+        return {
+            "prompt_tokens": int(result.get("prompt_tokens") or 0),
+            "completion_tokens": int(result.get("completion_tokens") or 0),
+            "total_tokens": int(result.get("total_tokens") or 0),
+            "request_count": int(result.get("request_count") or 0),
         }
-        for r in records:
-            total["prompt_tokens"] += r.prompt_tokens
-            total["completion_tokens"] += r.completion_tokens
-            total["total_tokens"] += r.total_tokens
-            total["request_count"] += r.request_count
-        return total
 
     @classmethod
     async def clear_today(cls) -> None:

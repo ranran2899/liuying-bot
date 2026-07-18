@@ -215,10 +215,10 @@ class MemoryItem(Model):
         )
         if group_id:
             query = query.filter(group_id=group_id)
-        memories = await query.all()
-        if not memories:
+        # 只查ID避免完整ORM对象实例化，减少内存压力
+        ids = await query.values_list("id", flat=True)
+        if not ids:
             return []
-        ids = [m.id for m in memories]
         await cls.filter(id__in=ids).delete()
         return ids
 
@@ -229,9 +229,8 @@ class MemoryItem(Model):
         返回:
             list[int]: 被删除的记忆ID列表（供调用方清理搜索索引）
         """
-        memories = await cls.filter().all()
-        if not memories:
+        ids = await cls.filter().values_list("id", flat=True)
+        if not ids:
             return []
-        ids = [m.id for m in memories]
         await cls.filter(id__in=ids).delete()
         return ids

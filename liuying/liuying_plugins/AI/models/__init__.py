@@ -5,7 +5,6 @@
 """
 
 from .conversation_record import ConversationRecord
-from .conversation_turn import ConversationTurn
 from .emotion_state import EmotionState
 from .group_context import GroupContextSnapshot
 from .knowledge_query_log import KnowledgeQueryLog
@@ -19,7 +18,6 @@ from .user_persona_selection import UserPersonaSelection
 
 __all__ = [
     "ConversationRecord",
-    "ConversationTurn",
     "EmotionState",
     "GroupContextSnapshot",
     "KnowledgeQueryLog",

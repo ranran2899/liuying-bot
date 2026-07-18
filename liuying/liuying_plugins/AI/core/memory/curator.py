@@ -227,11 +227,14 @@ class MemoryCurator:
                         to_delete[older_id] = keeper_id
                         dedup_count += 1
 
-            for mid, keeper_id in to_delete.items():
-                mem = await MemoryItem.filter(id=mid).first()
-                if mem:
+            # 批量删除被去重的记忆，避免逐条查询+删除的N+1问题
+            if to_delete:
+                await MemoryItem.filter(
+                    id__in=list(to_delete.keys())
+                ).delete()
+                # 巩固保留者记忆（按去重后的唯一keeper去重）
+                for keeper_id in set(to_delete.values()):
                     await memory_manager.reinforce(keeper_id)
-                    await mem.delete()
 
             return dedup_count
         except Exception as e:
@@ -262,14 +265,21 @@ class MemoryCurator:
                 return 0
 
             clusters: list[list[MemoryItem]] = []
-            for mem in memories:
+            # 预计算所有记忆的嵌入向量，避免双重循环中重复计算
+            mem_vectors: list[tuple[MemoryItem, list[float]]] = [
+                (
+                    mem,
+                    MemoryEmbeddingUtils.hash_bow_embedding(
+                        mem.summary or ""
+                    ),
+                )
+                for mem in memories
+            ]
+            rep_vectors: list[list[float]] = []
+            for mem, mem_vec in mem_vectors:
                 placed = False
-                mem_vec = MemoryEmbeddingUtils.hash_bow_embedding(mem.summary or "")
-                for cluster in clusters:
-                    rep = cluster[0]
-                    rep_vec = MemoryEmbeddingUtils.hash_bow_embedding(
-                        rep.summary or ""
-                    )
+                for idx, cluster in enumerate(clusters):
+                    rep_vec = rep_vectors[idx]
                     if (
                         CurationExtractor.cosine_similarity(
                             mem_vec, rep_vec
@@ -281,6 +291,7 @@ class MemoryCurator:
                         break
                 if not placed:
                     clusters.append([mem])
+                    rep_vectors.append(mem_vec)
 
             topic_count = 0
             for cluster in clusters:

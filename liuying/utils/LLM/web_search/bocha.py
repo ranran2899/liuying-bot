@@ -13,6 +13,7 @@ from .models import (
     WebPageResult,
 )
 from .registry import SearchClientMeta, register_search_client
+from .tracker import search_tracker
 
 _BOCHA_DEFAULT_BASE_URL = "https://api.bochaai.com/v1"
 
@@ -58,7 +59,9 @@ class BochaClient(BaseSearchClient):
         data = self._build_request_data(request)
 
         response_data = await self._request(url, headers, data)
-        return self._parse_response(request.query, response_data)
+        response = self._parse_response(request.query, response_data)
+        await search_tracker.record("bocha")
+        return response
 
     def _build_request_data(self, request: SearchRequest) -> dict[str, Any]:
         """构建请求数据

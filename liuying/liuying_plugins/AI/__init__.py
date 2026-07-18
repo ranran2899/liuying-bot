@@ -20,7 +20,6 @@ from .config import PluginConfig, get_config
 from .core.knowledge_db import knowledge_base
 from .models import (  # noqa: F401  导入触发模型注册
     ConversationRecord,
-    ConversationTurn,
     EmotionState,
     GroupContextSnapshot,
     KnowledgeQueryLog,

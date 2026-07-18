@@ -122,6 +122,7 @@ class RecallMixin:
         scored.sort(key=lambda x: x[0], reverse=True)
 
         results = []
+        accessed_ids: list[int] = []
         for final_score, memory in scored[:top_k]:
             results.append(
                 {
@@ -132,7 +133,14 @@ class RecallMixin:
                     "score": final_score,
                 }
             )
-            await self.access(memory.id)
+            accessed_ids.append(memory.id)
+        # 批量更新访问计数，避免N+1查询
+        if accessed_ids:
+            now = datetime.now()
+            await MemoryItem.filter(id__in=accessed_ids).update(
+                access_count=MemoryItem.access_count + 1,
+                last_access_time=now,
+            )
         return results
 
     @staticmethod
