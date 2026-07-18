@@ -1,7 +1,6 @@
 from nonebot import on_notice
 from nonebot.adapters.onebot.v11 import GroupAdminNoticeEvent
 from nonebot.plugin import PluginMetadata
-from sqlalchemy import false
 
 from liuying.configs.config import Config
 from liuying.configs.utils.models import PluginExtraData, RegisterConfig
@@ -15,7 +14,7 @@ __plugin_meta__ = PluginMetadata(
     description="当群内管理员变更时，自动设置/取消用户权限等级",
     usage="无需手动触发，自动运行",
     extra=PluginExtraData(
-        author="Liuying",
+        author="liuying",
         version="1.0",
         plugin_type=PluginType.HIDDEN,
         configs=[
@@ -33,8 +32,8 @@ __plugin_meta__ = PluginMetadata(
 admin_notice = on_notice(
     priority=5,
     rule=notice_rule(GroupAdminNoticeEvent),
-    block=False)
-
+    block=False,
+)
 
 base_config = Config.get("admin_watch")
 
@@ -58,7 +57,7 @@ async def _(event: GroupAdminNoticeEvent):
                 )
             else:
                 logger.warning(
-                    "配置项 MODULE: [<u><y>admin_bot_manage</y></u>] |"
+                    "配置项 MODULE: [<u><y>admin_watch</y></u>] |"
                     " KEY: [<u><y>ADMIN_DEFAULT_AUTH</y></u>] 为空"
                 )
         case "unset":

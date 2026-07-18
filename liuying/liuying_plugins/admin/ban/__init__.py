@@ -33,6 +33,8 @@ __plugin_meta__ = PluginMetadata(
         unban @用户        : 从小黑屋中拉出来
     """.strip(),
     extra=PluginExtraData(
+        author="liuying",
+        version="1.0",
         admin_level=5,
         plugin_type=PluginType.SUPER_AND_ADMIN,
         superuser_help="""
@@ -64,6 +66,18 @@ __plugin_meta__ = PluginMetadata(
         """,
     ).to_dict(),
 )
+
+
+def _resolve_target(user: Match[str | At]) -> str | None:
+    """从 Match 中解析用户ID"""
+    if not user.available:
+        return None
+    match user.result:
+        case At() as at:
+            return at.target
+        case str() as s:
+            return s
+    return None
 
 
 _ban_matcher = on_alconna(
@@ -111,16 +125,8 @@ async def _(
     group_id: Match[str],
     duration: Match[int],
 ):
-    match user.result if user.available else None:
-        case At() as at:
-            user_id = at.target
-        case str() as s:
-            user_id = s
-        case _:
-            user_id = None
-
     group_flag = group_id.available
-    target_id = group_id.result if group_flag else user_id
+    target_id = group_id.result if group_flag else _resolve_target(user)
     if not target_id:
         await MessageUtils.build_message("请输入要操作的用户或群组").finish(
             reply_to=True
@@ -139,30 +145,20 @@ async def _(
 
 @_unban_matcher.handle()
 async def _(
+    bot: Bot,
     session: Uninfo,
     arparma: Arparma,
     user: Match[str | At],
     group_id: Match[str],
     idx: Match[int],
 ):
-    match user.result if user.available else None:
-        case At() as at:
-            user_id = at.target
-        case str() as s:
-            user_id = s
-        case _:
-            user_id = None
+    user_id = _resolve_target(user)
+    target_group_id = group_id.result if group_id.available else None
 
-    group_flag = group_id.available
-    target_group_id = group_id.result if group_flag else None
-
-    if not group_flag and session.group and user_id:
+    if not target_group_id and session.group and user_id:
         target_group_id = session.group.id
 
-    is_superuser = False
-    if hasattr(session, "bot"):
-        if session.user.id in session.bot.config.superusers:
-            is_superuser = True
+    is_superuser = session.user.id in bot.config.superusers
 
     result = await BanManage.unban(
         user_id,

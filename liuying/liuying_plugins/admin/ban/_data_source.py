@@ -8,6 +8,11 @@ from liuying.utils.image import BuildRankMat
 from liuying.utils.log import logger
 
 
+def _is_ban_active(data: BanConsole) -> bool:
+    """判断封禁记录是否仍然有效"""
+    return data.duration < 0 or (data.ban_time + data.duration) > time.time()
+
+
 class BanManage:
     @classmethod
     async def build_ban_image(
@@ -29,13 +34,13 @@ class BanManage:
         query = BanConsole.filter()
 
         if user_id:
-            query = query.filter(BanConsole.user_id == user_id)
+            query = query.filter(user_id=user_id)
         elif group_id:
-            query = query.filter(BanConsole.group_id == group_id)
+            query = query.filter(group_id=group_id)
         elif filter_type == "user":
-            query = query.filter(BanConsole.group_id.is_(None))
+            query = query.where_null("group_id")
         elif filter_type == "group":
-            query = query.filter(BanConsole.user_id.is_(None))
+            query = query.where_null("user_id")
 
         data_list = await query.all()
 
@@ -72,17 +77,7 @@ class BanManage:
                 ]
             )
 
-        match (filter_type, user_id, group_id):
-            case ("user", _, _):
-                title = "【用户 Ban 列表】"
-            case ("group", _, _):
-                title = "【群组 Ban 列表】"
-            case (_, uid, _) if uid:
-                title = f"【用户 {user_id} Ban 记录】"
-            case (_, _, gid) if gid:
-                title = f"【群组 {group_id} Ban 记录】"
-            case _:
-                title = "【Ban / UnBan 列表】"
+        title = cls._build_title(filter_type, user_id, group_id)
 
         header_texts = [
             "#",
@@ -106,6 +101,25 @@ class BanManage:
 
         return rank_mat.pic2bytes()
 
+    @staticmethod
+    def _build_title(
+        filter_type: Literal["group", "user"] | None,
+        user_id: str | None,
+        group_id: str | None,
+    ) -> str:
+        """构建Ban列表标题"""
+        match (filter_type, user_id, group_id):
+            case ("user", _, _):
+                return "【用户 Ban 列表】"
+            case ("group", _, _):
+                return "【群组 Ban 列表】"
+            case (_, uid, _) if uid:
+                return f"【用户 {user_id} Ban 记录】"
+            case (_, _, gid) if gid:
+                return f"【群组 {group_id} Ban 记录】"
+            case _:
+                return "【Ban / UnBan 列表】"
+
     @classmethod
     async def is_ban(cls, user_id: str, group_id: str | None) -> bool:
         """判断用户是否被ban
@@ -117,27 +131,23 @@ class BanManage:
         返回:
             bool: 是否被ban
         """
-
-        def _check_expired(data: BanConsole) -> bool:
-            return data.duration < 0 or (data.ban_time + data.duration) > time.time()
-
         data = await BanConsole._get_data(user_id=user_id)
-        if data and _check_expired(data):
-            return True
         if data:
+            if _is_ban_active(data):
+                return True
             await BanConsole.unban(user_id, None)
 
         if group_id:
             data = await BanConsole._get_data(user_id=user_id, group_id=group_id)
-            if data and _check_expired(data):
-                return True
             if data:
+                if _is_ban_active(data):
+                    return True
                 await BanConsole.unban(user_id, group_id)
 
-            data = await BanConsole._get_data(group_id=group_id)
-            if data and _check_expired(data):
-                return True
+            data = await BanConsole._get_data(user_id=None, group_id=group_id)
             if data:
+                if _is_ban_active(data):
+                    return True
                 await BanConsole.unban(None, group_id)
 
         return False
@@ -163,19 +173,15 @@ class BanManage:
         返回:
             tuple[bool, str]: 是否成功，提示信息
         """
-        user_id = None if is_group else target_id
-        group_id = (
-            target_id
-            if is_group
-            else (session.group.id if session.group else None)
-            if session
-            else None
-        )
+        if is_group:
+            user_id, group_id = None, target_id
+        else:
+            user_id = target_id
+            group_id = session.group.id if session and session.group else None
+
         operator = session.user.id if session else "system"
 
-        existing = await BanConsole._get_data(user_id, group_id)
-
-        if existing:
+        if existing := await BanConsole._get_data(user_id, group_id):
             existing.ban_level = ban_level
             existing.ban_time = int(time.time())
             existing.duration = duration

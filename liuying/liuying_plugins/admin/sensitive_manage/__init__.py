@@ -1,3 +1,5 @@
+import re
+
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import (
@@ -37,6 +39,8 @@ __plugin_meta__ = PluginMetadata(
     动作: 1-替换 2-拦截 3-封禁
     """.strip(),
     extra=PluginExtraData(
+        author="liuying",
+        version="1.0",
         admin_level=5,
         plugin_type=PluginType.SUPER_AND_ADMIN,
         superuser_help="""
@@ -192,12 +196,11 @@ async def _(
     )
 
     if result:
-        action_map = _ACTION_MAP
         await MessageUtils.build_message(
             f"添加敏感词成功!\n"
             f"词语: {word}\n"
             f"等级: {_level}\n"
-            f"动作: {action_map.get(_action, '未知')}"
+            f"动作: {_ACTION_MAP.get(_action, '未知')}"
         ).finish(reply_to=True)
     await MessageUtils.build_message(f"敏感词 {word} 已存在").finish(reply_to=True)
 
@@ -212,8 +215,6 @@ async def _(
     description: Match[str],
 ):
     """添加正则敏感词"""
-    import re
-
     try:
         re.compile(word)
     except re.error as e:
@@ -234,12 +235,11 @@ async def _(
     )
 
     if result:
-        action_map = _ACTION_MAP
         await MessageUtils.build_message(
             f"添加正则敏感词成功!\n"
             f"正则: {word}\n"
             f"等级: {_level}\n"
-            f"动作: {action_map.get(_action, '未知')}"
+            f"动作: {_ACTION_MAP.get(_action, '未知')}"
         ).finish(reply_to=True)
     await MessageUtils.build_message(f"正则敏感词 {word} 已存在").finish(reply_to=True)
 
@@ -266,16 +266,14 @@ async def _(session: Uninfo, page: Match[int]):
     _page = max(1, min(_page, total_pages))
 
     start = (_page - 1) * PAGE_SIZE
-    end = start + PAGE_SIZE
-    page_words = words[start:end]
+    page_words = words[start : start + PAGE_SIZE]
 
-    action_map = _ACTION_MAP
-    lines = []
-    for w in page_words:
-        status = "启用" if w.status else "禁用"
-        wtype = "正则" if w.is_regex else "普通"
-        action_text = action_map.get(w.action, "未知")
-        lines.append(f"[{status}] {w.word} ({wtype}, 等级{w.level}, {action_text})")
+    lines = [
+        f"[{'启用' if w.status else '禁用'}] {w.word} "
+        f"({'正则' if w.is_regex else '普通'}, 等级{w.level}, "
+        f"{_ACTION_MAP.get(w.action, '未知')})"
+        for w in page_words
+    ]
 
     msg = f"敏感词列表 (第{_page}/{total_pages}页, 共{total}条)\n" + "\n".join(lines)
     await MessageUtils.build_message(msg).finish(reply_to=True)

@@ -34,6 +34,8 @@ __plugin_meta__ = PluginMetadata(
         踢 @用户                    : 踢出用户
     """.strip(),
     extra=PluginExtraData(
+        author="liuying",
+        version="1.0",
         admin_level=5,
         plugin_type=PluginType.SUPER_AND_ADMIN,
         superuser_help="""
@@ -50,6 +52,40 @@ __plugin_meta__ = PluginMetadata(
         """,
     ).to_dict(),
 )
+
+
+def _resolve_target(user: Match[At | str]) -> str:
+    """从 Match 中解析目标用户ID"""
+    match user.result:
+        case At() as at:
+            return at.target
+        case str() as s:
+            return s
+        case _:
+            return str(user.result)
+
+
+async def _check_permission(
+    bot: Bot, session: Uninfo, target_user_id: str
+) -> str | None:
+    """检查操作权限，返回错误信息或None"""
+    if not session.group:
+        return "此命令仅在群聊中有效"
+
+    bot_id = bot.self_id
+    operator_level = await UserLevel.get_level(
+        session.user.id, bot_id, session.group.id
+    )
+    target_level = await UserLevel.get_level(
+        target_user_id, bot_id, session.group.id
+    )
+
+    if operator_level < 5:
+        return "杂鱼, 你的权限不足"
+    if target_level >= 5:
+        return "不能操作5级权限的用户"
+    return None
+
 
 _mute_matcher = on_alconna(
     Alconna(
@@ -95,28 +131,9 @@ async def _(
     duration: Match[int],
 ):
     """处理禁言命令"""
-    if not session.group:
-        await MessageUtils.build_message("此命令仅在群聊中有效").finish(reply_to=True)
-
-    match user.result:
-        case At() as at:
-            target_user_id = at.target
-        case str() as s:
-            target_user_id = s
-        case _:
-            target_user_id = str(user.result)
-
-    bot_id = bot.self_id
-
-    operator_level = await UserLevel.get_level(
-        session.user.id, bot_id, session.group.id
-    )
-    target_level = await UserLevel.get_level(target_user_id, bot_id, session.group.id)
-
-    if operator_level < 5:
-        await MessageUtils.build_message("杂鱼, 你的权限不足").finish(reply_to=True)
-    if target_level >= 5:
-        await MessageUtils.build_message("不能禁5级权限的用户").finish(reply_to=True)
+    target_user_id = _resolve_target(user)
+    if error := await _check_permission(bot, session, target_user_id):
+        await MessageUtils.build_message(error).finish(reply_to=True)
 
     result = await QunGuanManage.mute_user(
         bot=bot,
@@ -125,7 +142,6 @@ async def _(
         duration=duration.result,
         operator_id=session.user.id,
     )
-
     await MessageUtils.build_message(result).finish(reply_to=True)
 
 
@@ -137,30 +153,9 @@ async def _(
     user: Match[At | str],
 ):
     """处理解禁命令"""
-    if not session.group:
-        await MessageUtils.build_message("此命令仅在群聊中有效").finish(reply_to=True)
-
-    match user.result:
-        case At() as at:
-            target_user_id = at.target
-        case str() as s:
-            target_user_id = s
-        case _:
-            target_user_id = str(user.result)
-
-    bot_id = bot.self_id
-
-    operator_level = await UserLevel.get_level(
-        session.user.id, bot_id, session.group.id
-    )
-    target_level = await UserLevel.get_level(target_user_id, bot_id, session.group.id)
-
-    if operator_level < 5:
-        await MessageUtils.build_message("杂鱼, 你的权限不足").finish(reply_to=True)
-    if target_level >= 5:
-        await MessageUtils.build_message("不能帮解禁5级权限的用户").finish(
-            reply_to=True
-        )
+    target_user_id = _resolve_target(user)
+    if error := await _check_permission(bot, session, target_user_id):
+        await MessageUtils.build_message(error).finish(reply_to=True)
 
     result = await QunGuanManage.unmute_user(
         bot=bot,
@@ -168,7 +163,6 @@ async def _(
         user_id=target_user_id,
         operator_id=session.user.id,
     )
-
     await MessageUtils.build_message(result).finish(reply_to=True)
 
 
@@ -180,30 +174,9 @@ async def _(
     user: Match[At | str],
 ):
     """处理踢人命令"""
-    if not session.group:
-        await MessageUtils.build_message("此命令仅在群聊中有效").finish(reply_to=True)
-
-    match user.result:
-        case At() as at:
-            target_user_id = at.target
-        case str() as s:
-            target_user_id = s
-        case _:
-            target_user_id = str(user.result)
-
-    bot_id = bot.self_id
-
-    operator_level = await UserLevel.get_level(
-        session.user.id, bot_id, session.group.id
-    )
-    target_level = await UserLevel.get_level(target_user_id, bot_id, session.group.id)
-
-    if operator_level < 5:
-        await MessageUtils.build_message("你的权限不足，需要5级权限才能踢人").finish(
-            reply_to=True
-        )
-    if target_level >= 5:
-        await MessageUtils.build_message("不能踢5级权限的用户").finish(reply_to=True)
+    target_user_id = _resolve_target(user)
+    if error := await _check_permission(bot, session, target_user_id):
+        await MessageUtils.build_message(error).finish(reply_to=True)
 
     result = await QunGuanManage.kick_user(
         bot=bot,
@@ -211,5 +184,4 @@ async def _(
         user_id=target_user_id,
         operator_id=session.user.id,
     )
-
     await MessageUtils.build_message(result).finish(reply_to=True)

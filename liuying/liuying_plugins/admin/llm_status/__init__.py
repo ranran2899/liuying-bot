@@ -1,6 +1,5 @@
 """LLM 状态管理插件 - 查看 LLM 配置与 Token 消耗"""
 
-from nonebot.adapters import Bot
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import Alconna, on_alconna
 from nonebot_plugin_uninfo import Uninfo
@@ -172,6 +171,7 @@ def _reload_llm_config() -> None:
     """在全局配置初始化完成后刷新 LLM 配置"""
     llm_manager.reload_config()
 
+
 @task_manager.cron_task("reset_user_token_quota", hour=0, minute=0, second=0)
 async def _reset_user_token_quota() -> None:
     """每天 0 点重置所有用户 token 额度"""
@@ -180,11 +180,10 @@ async def _reset_user_token_quota() -> None:
 
 
 @llm_status_cmd.handle()
-async def handle_llm_status(bot: Bot, session: Uninfo) -> None:
+async def handle_llm_status(session: Uninfo) -> None:
     """处理 LLM 状态命令
 
     参数:
-        bot: 机器人实例
         session: 会话信息
     """
     logger.info("查看LLM状态", command="LLM状态", session=session)
@@ -194,11 +193,10 @@ async def handle_llm_status(bot: Bot, session: Uninfo) -> None:
 
 
 @reset_token_quota_cmd.handle()
-async def handle_reset_token_quota(bot: Bot, session: Uninfo) -> None:
+async def handle_reset_token_quota(session: Uninfo) -> None:
     """处理立即重置 token 额度命令
 
     参数:
-        bot: 机器人实例
         session: 会话信息
     """
     logger.info("手动重置用户 token 额度", command="LLM状态", session=session)

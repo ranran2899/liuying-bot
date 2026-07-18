@@ -147,7 +147,7 @@ async def handle_set_gold(session: Uninfo, user_id: str, amount: int):
 
     new_gold = await UserGold.set_user_gold(user_id, amount)
     await MessageUtils.build_message(
-        f"成功为杂鱼 {user_id} 的金币设置为 {new_gold}"
+        f"成功为用户 {user_id} 的金币设置为 {new_gold}"
     ).finish(reply_to=True)
 
 

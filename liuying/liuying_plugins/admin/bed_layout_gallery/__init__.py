@@ -110,6 +110,17 @@ def _format_time(create_time: datetime | None) -> str:
     return create_time.strftime("%Y-%m-%d %H:%M")
 
 
+def _format_image_line(idx: int, img: BedLayoutImage) -> str:
+    """格式化单条图片信息行"""
+    original = img.original_filename or "无"
+    size_text = _format_size(img.file_size)
+    time_text = _format_time(img.create_time)
+    return (
+        f"{idx}. {img.filename}\n"
+        f"   原始名: {original} | 大小: {size_text} | {time_text}"
+    )
+
+
 @_stats_matcher.handle()
 async def _handle_stats(session: Uninfo):
     """处理图库统计请求
@@ -182,19 +193,12 @@ async def _handle_list(session: Uninfo, page: Match[int]):
             reply_to=True
         )
 
-    lines = []
-    for idx, img in enumerate(images, start=1):
-        original = img.original_filename or "无"
-        size_text = _format_size(img.file_size)
-        time_text = _format_time(img.create_time)
-        lines.append(
-            f"{idx}. {img.filename}\n"
-            f"   原始名: {original} | 大小: {size_text} | {time_text}"
-        )
-
-    msg = (
-        f"图库列表 (第{current_page}/{total_pages}页, 共{total}张)\n"
-        + "\n".join(lines)
+    lines = [
+        _format_image_line(idx, img)
+        for idx, img in enumerate(images, start=1)
+    ]
+    msg = f"图库列表 (第{current_page}/{total_pages}页, 共{total}张)\n" + "\n".join(
+        lines
     )
     await MessageUtils.build_message(msg).finish(reply_to=True)
 
@@ -220,16 +224,10 @@ async def _handle_search(session: Uninfo, keyword: str):
             f"未找到包含 '{keyword}' 的图片"
         ).finish(reply_to=True)
 
-    lines = []
-    for idx, img in enumerate(images, start=1):
-        original = img.original_filename or "无"
-        size_text = _format_size(img.file_size)
-        time_text = _format_time(img.create_time)
-        lines.append(
-            f"{idx}. {img.filename}\n"
-            f"   原始名: {original} | 大小: {size_text} | {time_text}"
-        )
-
+    lines = [
+        _format_image_line(idx, img)
+        for idx, img in enumerate(images, start=1)
+    ]
     msg = f"搜索 '{keyword}' 结果 (共{len(images)}条):\n" + "\n".join(lines)
     await MessageUtils.build_message(msg).finish(reply_to=True)
 

@@ -1,4 +1,3 @@
-from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import (
     Alconna,
@@ -33,6 +32,11 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
+def _resolve_uid(uid: str | At) -> str:
+    """解析用户ID，At对象取target"""
+    return uid.target if isinstance(uid, At) else uid
+
+
 _add_matcher = on_alconna(
     Alconna(
         "bot添加权限",
@@ -40,7 +44,6 @@ _add_matcher = on_alconna(
         Args["level", int],
         Args["uid", [str, At]],
     ),
-    # permission=SUPERUSER,
     rule=admin_check(10),
     priority=5,
     block=True,
@@ -53,7 +56,6 @@ _delete_matcher = on_alconna(
         Args["bot_id", str],
         Args["uid", [str, At]],
     ),
-    # permission=SUPERUSER,
     rule=admin_check(10),
     priority=5,
     block=True,
@@ -66,7 +68,6 @@ _query_matcher = on_alconna(
         Args["bot_id", str],
         Args["uid", [str, At]],
     ),
-    # permission=SUPERUSER,
     rule=admin_check(10),
     priority=5,
     block=True,
@@ -81,8 +82,7 @@ async def handle_add_permission(
     level: int,
     uid: str | At,
 ):
-    """
-    处理添加机器人用户权限指令
+    """处理添加机器人用户权限指令
 
     参数:
         session: 会话信息
@@ -91,9 +91,7 @@ async def handle_add_permission(
         level: 权限等级
         uid: 用户ID或@对象
     """
-    if isinstance(uid, At):
-        uid = uid.target
-
+    uid = _resolve_uid(uid)
     platform = session.adapter
     current_level = await UserLevel.get_bot_level(bot_id, uid, platform=platform)
 
@@ -118,8 +116,7 @@ async def handle_delete_permission(
     bot_id: str,
     uid: str | At,
 ):
-    """
-    处理删除机器人用户权限指令
+    """处理删除机器人用户权限指令
 
     参数:
         session: 会话信息
@@ -127,9 +124,7 @@ async def handle_delete_permission(
         bot_id: 机器人ID
         uid: 用户ID或@对象
     """
-    if isinstance(uid, At):
-        uid = uid.target
-
+    uid = _resolve_uid(uid)
     platform = session.adapter
     current_level = await UserLevel.get_bot_level(bot_id, uid, platform=platform)
 
@@ -159,8 +154,7 @@ async def handle_query_permission(
     bot_id: str,
     uid: str | At,
 ):
-    """
-    处理查询机器人用户权限指令
+    """处理查询机器人用户权限指令
 
     参数:
         session: 会话信息
@@ -168,9 +162,7 @@ async def handle_query_permission(
         bot_id: 机器人ID
         uid: 用户ID或@对象
     """
-    if isinstance(uid, At):
-        uid = uid.target
-
+    uid = _resolve_uid(uid)
     platform = session.adapter
     current_level = await UserLevel.get_bot_level(bot_id, uid, platform=platform)
 

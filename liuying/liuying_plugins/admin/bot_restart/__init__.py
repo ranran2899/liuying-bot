@@ -33,6 +33,8 @@ __plugin_meta__ = PluginMetadata(
         立即重启
     """.strip(),
     extra=PluginExtraData(
+        author="liuying",
+        version="1.0",
         admin_level=10,
         plugin_type=PluginType.SUPERUSER,
         superuser_help="""
@@ -54,14 +56,13 @@ _restart_matcher = on_alconna(
 _immediate_restart_matcher = on_alconna(
     Alconna("立即重启"),
     permission=SUPERUSER,
-    # rule=to_me(),
     priority=2,
     block=True,
 )
 
 driver = nonebot.get_driver()
 RESTART_MARK = Path() / "is_restart"
-RESTART_CONFIRM = {"true", "是", "好", "确定", "确定是"}
+RESTART_CONFIRM = {"true", "是", "好", "确定"}
 
 
 @_restart_matcher.got(

@@ -36,7 +36,7 @@ __plugin_meta__ = PluginMetadata(
 
     """.strip(),
     extra=PluginExtraData(
-        author="HibiKier",
+        author="liuying",
         version="0.1",
         plugin_type=PluginType.SUPER_AND_ADMIN,
         superuser_help="""
@@ -115,16 +115,16 @@ async def _(
     group: Match[str],
     task: Query[bool] = AlconnaQuery("task.value", False),
     default_status: Query[bool] = AlconnaQuery("default.value", False),
-    all: Query[bool] = AlconnaQuery("all.value", False),
+    all_flag: Query[bool] = AlconnaQuery("all.value", False),
 ):
-    if not all.result and not plugin_name.available:
+    if not all_flag.result and not plugin_name.available:
         await MessageUtils.build_message("请输入功能/被动名称").finish(reply_to=True)
     name = plugin_name.result
     if session.group:
         group_id = session.group.id
         """修改当前群组的数据"""
         if task.result:
-            if all.result:
+            if all_flag.result:
                 result = await PluginManager.unblock_group_all_task(group_id)
                 logger.info("开启所有群组被动", arparma.header_result, session=session)
             else:
@@ -140,7 +140,7 @@ async def _(
                 arparma.header_result,
                 session=session,
             )
-        elif all.result:
+        elif all_flag.result:
             """所有插件"""
             result = await PluginManager.set_all_plugin_status(
                 True, default_status.result, group_id
@@ -157,7 +157,7 @@ async def _(
     elif session.user.id in bot.config.superusers:
         """私聊"""
         group_id = group.result if group.available else None
-        if all.result:
+        if all_flag.result:
             if task.result:
                 """关闭全局或指定群全部被动"""
                 if group_id:
@@ -229,16 +229,16 @@ async def _(
     group: Match[str],
     task: Query[bool] = AlconnaQuery("task.value", False),
     default_status: Query[bool] = AlconnaQuery("default.value", False),
-    all: Query[bool] = AlconnaQuery("all.value", False),
+    all_flag: Query[bool] = AlconnaQuery("all.value", False),
 ):
-    if not all.result and not plugin_name.available:
+    if not all_flag.result and not plugin_name.available:
         await MessageUtils.build_message("请输入功能/被动名称").finish(reply_to=True)
     name = plugin_name.result
     if session.group:
         group_id = session.group.id
         """修改当前群组的数据"""
         if task.result:
-            if all.result:
+            if all_flag.result:
                 result = await PluginManager.block_group_all_task(group_id)
                 logger.info("关闭所有群组被动", arparma.header_result, session=session)
             else:
@@ -254,7 +254,7 @@ async def _(
                 arparma.header_result,
                 session=session,
             )
-        elif all.result:
+        elif all_flag.result:
             """所有插件"""
             result = await PluginManager.set_all_plugin_status(
                 False, default_status.result, group_id
@@ -266,7 +266,7 @@ async def _(
         await MessageUtils.build_message(result).finish(reply_to=True)
     elif session.user.id in bot.config.superusers:
         group_id = group.result if group.available else None
-        if all.result:
+        if all_flag.result:
             if task.result:
                 """关闭全局或指定群全部被动"""
                 if group_id:
@@ -342,20 +342,22 @@ async def _(
     arparma: Arparma,
     status: str,
 ):
-    if session.group:
-        group_id = session.group.id
-        match status:
-            case "sleep":
-                await PluginManager.sleep(group_id)
-                logger.info("进行休眠", arparma.header_result, session=session)
-                await MessageUtils.build_message("那我先睡觉了...").finish()
-            case _:
-                if await PluginManager.is_wake(group_id):
-                    await MessageUtils.build_message("我还醒着呢！").finish()
-                await PluginManager.wake(group_id)
-                logger.info("醒来", arparma.header_result, session=session)
-                await MessageUtils.build_message("呜..醒来了...").finish()
-    return MessageUtils.build_message("群组id为空...").send()
+    if not session.group:
+        await MessageUtils.build_message("群组id为空...").send()
+        return
+
+    group_id = session.group.id
+    match status:
+        case "sleep":
+            await PluginManager.sleep(group_id)
+            logger.info("进行休眠", arparma.header_result, session=session)
+            await MessageUtils.build_message("那我先睡觉了...").finish()
+        case _:
+            if await PluginManager.is_wake(group_id):
+                await MessageUtils.build_message("我还醒着呢！").finish()
+            await PluginManager.wake(group_id)
+            logger.info("醒来", arparma.header_result, session=session)
+            await MessageUtils.build_message("呜..醒来了...").finish()
 
 
 @_status_matcher.assign("task")

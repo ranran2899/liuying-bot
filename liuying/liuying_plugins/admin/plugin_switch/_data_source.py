@@ -43,7 +43,7 @@ async def build_plugin() -> BuildImage:
     ]
 
     plugin_list = await PluginInfo.filter(
-        PluginInfo.plugin_type != PluginType.HIDDEN
+        plugin_type__ne=PluginType.HIDDEN
     ).all()
 
     column_data = [
@@ -110,28 +110,22 @@ async def build_task(group_id: str | None) -> BuildImage:
         column_name.remove("群组状态")
 
     column_data = []
+    block_task = group.block_task if group and group.block_task else ""
     for task in task_list:
+        row = [
+            task.id,
+            task.module,
+            task.name,
+        ]
         if group:
-            column_data.append(
-                [
-                    task.id,
-                    task.module,
-                    task.name,
-                    "开启" if f"<{task.module}," not in group.block_task else "关闭",
-                    "开启" if task.status else "关闭",
-                    task.run_time or "-",
-                ]
-            )
-        else:
-            column_data.append(
-                [
-                    task.id,
-                    task.module,
-                    task.name,
-                    "开启" if task.status else "关闭",
-                    task.run_time or "-",
-                ]
-            )
+            row.append("开启" if f"<{task.module}," not in block_task else "关闭")
+        row.extend(
+            [
+                "开启" if task.status else "关闭",
+                task.run_time or "-",
+            ]
+        )
+        column_data.append(row)
     return await ImageTemplate.table_page(
         "Task",
         "被动技能状态",
@@ -155,11 +149,11 @@ class PluginManager:
             PluginInfo | None: 插件对象，不存在返回None
         """
         if plugin_name.isdigit():
-            return await PluginInfo.filter(PluginInfo.id == int(plugin_name)).first()
+            return await PluginInfo.filter(id=int(plugin_name)).first()
         return await PluginInfo.filter(
-            PluginInfo.name == plugin_name,
-            PluginInfo.load_status == True,  # noqa: E712
-            PluginInfo.plugin_type != PluginType.PARENT,
+            name=plugin_name,
+            load_status=True,
+            plugin_type__ne=PluginType.PARENT,
         ).first()
 
     # ==================== 插件全局状态 ====================
@@ -199,7 +193,7 @@ class PluginManager:
         """
         if is_default:
             plugins = await PluginInfo.filter(
-                PluginInfo.plugin_type == PluginType.NORMAL
+                plugin_type=PluginType.NORMAL
             ).all()
             for plugin in plugins:
                 plugin.default_status = status
@@ -210,7 +204,7 @@ class PluginManager:
             group = await GroupConsole.get_group(group_id, channel_id=None)
             if group:
                 module_list = await PluginInfo.filter(
-                    PluginInfo.plugin_type == PluginType.NORMAL
+                    plugin_type=PluginType.NORMAL
                 ).values_list("module", flat=True)
                 if status:
                     group.block_plugin = ""
@@ -221,7 +215,7 @@ class PluginManager:
             return "获取群组失败..."
 
         plugins = await PluginInfo.filter(
-            PluginInfo.plugin_type == PluginType.NORMAL
+            plugin_type=PluginType.NORMAL
         ).all()
         for plugin in plugins:
             plugin.status = status
@@ -326,7 +320,7 @@ class PluginManager:
         返回:
             str: 操作结果消息
         """
-        task = await TaskInfo.filter(TaskInfo.name == name).first()
+        task = await TaskInfo.filter(name=name).first()
         if task:
             if is_default:
                 task.default_status = status
@@ -480,8 +474,8 @@ class PluginManager:
             module_list = await TaskInfo.filter().values_list("module", flat=True)
             if module_list:
                 group = await GroupConsole.filter(
-                    GroupConsole.group_id == group_id, GroupConsole.channel_id is None
-                ).first()
+                    group_id=group_id
+                ).where_null("channel_id").first()
 
                 if not group:
                     group = GroupConsole(
@@ -499,7 +493,7 @@ class PluginManager:
                 await group.save()
                 return f"已成功{status_str}全部被动技能!"
         else:
-            task = await TaskInfo.filter(TaskInfo.name == task_name).first()
+            task = await TaskInfo.filter(name=task_name).first()
             if task:
                 if status:
                     await GroupConsole.set_block_task(group_id, task.module)
@@ -555,8 +549,8 @@ class PluginManager:
             status: 状态
         """
         group = await GroupConsole.filter(
-            GroupConsole.group_id == group_id, GroupConsole.channel_id is None
-        ).first()
+            group_id=group_id
+        ).where_null("channel_id").first()
 
         if not group:
             group = GroupConsole(
@@ -646,7 +640,7 @@ class PluginManager:
         返回:
             str: 返回信息
         """
-        task = await TaskInfo.filter(TaskInfo.name == task_name).first()
+        task = await TaskInfo.filter(name=task_name).first()
         if not task:
             return "没有找到这个功能喔..."
         if group_id:

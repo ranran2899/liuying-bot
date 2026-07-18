@@ -1,4 +1,3 @@
-from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import (
     Alconna,
@@ -37,6 +36,11 @@ __plugin_meta__ = PluginMetadata(
         admin_level=10,
     ).to_dict(),
 )
+
+
+def _resolve_uid(uid: str | At) -> str:
+    """解析用户ID，At对象取target"""
+    return uid.target if isinstance(uid, At) else uid
 
 
 _add_matcher = on_alconna(
@@ -132,9 +136,7 @@ async def handle_add_permission(
         uid: 用户ID或@对象
         gid: 群组ID（可选）
     """
-    if isinstance(uid, At):
-        uid = uid.target
-
+    uid = _resolve_uid(uid)
     platform = session.adapter
     group_id, permission_type = _resolve_group_and_type(session, gid)
     current_level = await _get_current_level(uid, group_id, platform)
@@ -177,9 +179,7 @@ async def handle_delete_permission(
         uid: 用户ID或@对象
         gid: 群组ID（可选）
     """
-    if isinstance(uid, At):
-        uid = uid.target
-
+    uid = _resolve_uid(uid)
     platform = session.adapter
     group_id, permission_type = _resolve_group_and_type(session, gid)
     current_level = await _get_current_level(uid, group_id, platform)
