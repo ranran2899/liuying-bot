@@ -20,6 +20,7 @@ __all__ = [
     "PluginExtraData",
     "PluginSetting",
     "RegisterConfig",
+    "SchedulerModel",
     "Task",
 ]
 
@@ -243,7 +244,6 @@ class PluginExtraData(BaseModel):
     """是否显示在菜单中"""
     smart_tools: list[AICallableTag] | None = None
     """智能模式函数工具集"""
-
 
     def to_dict(self, **kwargs):
         return model_dump(self, **kwargs)

@@ -17,9 +17,6 @@ from liuying.utils.pydantic_compat import (
     parse_as,
 )
 
-for _bt in (int, float, str, bool, list, dict, tuple, set, type(None)):
-    cattrs.register_structure_hook(_bt, lambda v, _: v)
-
 from .models import (
     AICallableParam,
     AICallableProperties,
@@ -36,15 +33,14 @@ from .models import (
     Task,
 )
 
+for _bt in (int, float, str, bool, list, dict, tuple, set, type(None)):
+    cattrs.register_structure_hook(_bt, lambda v, _: v)
+
 _yaml = YAML(pure=True)
 _yaml.indent = 2
 _yaml.allow_unicode = True
 
 T = TypeVar("T")
-
-
-class NoSuchConfig(Exception):
-    pass
 
 
 def _try_type_convert(
@@ -259,15 +255,21 @@ class ConfigsManager:
         if not module or not key:
             raise ValueError("add_plugin_config: module和key不能为空")
 
-        existing_value = None
-        if module in self._data and (config := self._data[module].configs.get(key)):
-            existing_value = config.value
+        self.add_module.append(f"{module}:{key}".lower())
+
+        if module not in self._data:
+            self._data[module] = ConfigGroup(module=module)
+
+        config_group = self._data[module]
+        existing_value = (
+            config_group.configs[key].value if key in config_group.configs else None
+        )
 
         processed_value = self._normalize_config_data(value, existing_value)
         processed_default_value = self._normalize_config_data(default_value)
-        self.add_module.append(f"{module}:{key}".lower())
 
-        if module in self._data and (config := self._data[module].configs.get(key)):
+        if key in config_group.configs:
+            config = config_group.configs[key]
             config.help = help
             config.arg_parser = arg_parser
             config.type = type
@@ -275,9 +277,7 @@ class ConfigsManager:
                 config.value = processed_value
                 config.default_value = processed_default_value
         else:
-            if module not in self._data:
-                self._data[module] = ConfigGroup(module=module)
-            self._data[module].configs[key] = ConfigModel(
+            config_group.configs[key] = ConfigModel(
                 value=processed_value,
                 help=help,
                 default_value=processed_default_value,
@@ -332,36 +332,10 @@ class ConfigsManager:
         返回:
             配置值，未找到时返回默认值
         """
-        key = key.upper()
         config_group = self._data.get(module)
         if not config_group:
             return default
-
-        config = config_group.configs.get(key)
-        if not config:
-            return default
-
-        value = config.value if config.value is not None else config.default_value
-        if value is None:
-            return default
-
-        if config.arg_parser:
-            try:
-                return config.arg_parser(value)
-            except Exception as e:
-                logger.debug(
-                    f"配置项类型转换 MODULE: [<u><y>{module}</y></u>]"
-                    f" | KEY: [<u><y>{key}</y></u>] 将使用原始值",
-                    e=e,
-                )
-
-        return _try_type_convert(
-            value,
-            config.type,
-            module=module,
-            key=key,
-            build_model=build_model,
-        )
+        return config_group.get(key, default, build_model=build_model)
 
     def get(self, key: str) -> ConfigGroup:
         """获取插件配置数据
@@ -470,7 +444,6 @@ __all__ = [
     "ConfigModel",
     "ConfigsManager",
     "Example",
-    "NoSuchConfig",
     "PluginCdBlock",
     "PluginCountBlock",
     "PluginExtraData",

@@ -54,9 +54,7 @@ class BotSetting(BaseModel):
         返回:
             超级用户id列表
         """
-        if self.platform_superusers:
-            return self.platform_superusers.get(platform, [])
-        return []
+        return self.platform_superusers.get(platform, [])
 
     def get_sql_type(self, db_name: str = "default") -> str:
         """获取数据库类型

@@ -35,6 +35,7 @@ for p in (
     DB_PATH,
     TEMP_PATH,
     UI_CACHE_PATH,
+    THEMES_PATH,
     TEMPLATE_PATH,
     PLUGIN_PATH,
 ):
