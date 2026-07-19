@@ -5,7 +5,7 @@
 与免配置客户端发现。
 
 使用方式:
-    from liuying.utils.LLM.web_search.registry import (
+    from liuying.services.LLM.web_search.registry import (
         SearchClientMeta,
         register_search_client,
     )

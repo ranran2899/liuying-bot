@@ -2,7 +2,7 @@
 
 提供消息提取与网页抓取工具。
 
-联网搜索能力统一通过 liuying.utils.LLM 的 WebSearchCapability 提供，
+联网搜索能力统一通过 liuying.services.LLM 的 WebSearchCapability 提供，
 免配置客户端由 liuying/plugins/web_search 插件注册。
 """
 

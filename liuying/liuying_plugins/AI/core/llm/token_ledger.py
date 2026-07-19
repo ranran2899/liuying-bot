@@ -1,6 +1,6 @@
 """Token消耗账本
 
-对接 liuying.utils.LLM.token_tracker，按 group/user/purpose 维度
+对接 liuying.services.LLM.token_tracker，按 group/user/purpose 维度
 记录每次 LLM 调用的 prompt/completion tokens，提供统计查询接口。
 数据持久化到数据库，重启后保留。
 
@@ -12,7 +12,7 @@
 from contextvars import ContextVar
 from typing import Any, ClassVar
 
-from liuying.utils.LLM import token_tracker
+from liuying.services.LLM import token_tracker
 from liuying.utils.log import logger
 
 from ...models.token_ledger_record import TokenLedgerRecord

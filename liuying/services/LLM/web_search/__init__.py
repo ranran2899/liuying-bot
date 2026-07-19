@@ -4,7 +4,7 @@
 注册到 LLM 模块。通过 register_search_client 装饰器自动注册。
 
 使用方式:
-    from liuying.utils.LLM.web_search import (
+    from liuying.services.LLM.web_search import (
         BaseSearchClient,
         SearchClientMeta,
         register_search_client,

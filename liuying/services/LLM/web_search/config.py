@@ -6,7 +6,7 @@
 """
 from dataclasses import dataclass, field
 
-from liuying.utils.LLM.configs import get_all_providers
+from liuying.services.LLM.configs import get_all_providers
 from liuying.utils.log import logger
 
 from .registry import detect_client_type, get_search_client_meta

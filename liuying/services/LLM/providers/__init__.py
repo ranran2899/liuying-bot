@@ -2,7 +2,7 @@
 
 自动导入并注册所有 Provider 实现。
 """
-from liuying.utils.LLM.provider import (
+from liuying.services.LLM.provider import (
     BaseProvider,
     get_provider_class,
     get_registered_api_types,

@@ -1,55 +1,62 @@
-"""智谱 AI 图像生成能力实现"""
+"""OpenAI 兼容 API 图像生成能力实现"""
 from typing import Any
 
-from liuying.utils.LLM.utils import ResponseParser
-from liuying.utils.LLM.zhi_pu.client import ZhipuClient
+from liuying.services.LLM.open_ai.client import OpenAIClient
+from liuying.services.LLM.utils import APIError, ResponseParser
 
 
-class ZhipuImageCapability:
-    """智谱 AI 图像生成能力（CogView 模型）"""
+class OpenAIImageCapability:
+    """OpenAI 兼容 API 图像生成能力"""
 
-    def __init__(self, client: ZhipuClient | None = None):
+    def __init__(self, client: OpenAIClient | None = None):
         """初始化图像能力
 
         Args:
-            client: 智谱客户端实例
+            client: OpenAI 客户端实例
         """
-        self._client = client or ZhipuClient()
+        self._client = client or OpenAIClient()
 
     async def generate(
         self,
         prompt: str,
-        model: str = "CogView-3-Flash",
+        model: str = "dall-e-3",
         size: str = "1024x1024",
         n: int = 1,
         options: dict[str, Any] | None = None,
     ) -> list[str]:
-        """生成图像
+        """生成图片
 
         Args:
-            prompt: 图像描述文本
+            prompt: 图片描述
             model: 模型名称
-            size: 图像尺寸
+            size: 图片尺寸
             n: 生成数量
             options: 额外选项
 
         Returns:
-            生成的图像 URL 列表
+            图片 URL 列表
         """
+        provider = self._client.get_random_provider()
+
         request_data: dict[str, Any] = {
             "model": model,
             "prompt": prompt,
             "size": size,
             "n": n,
+            "response_format": "url",
         }
         if options:
             request_data.update(options)
-        else:
-            request_data["quality"] = "standard"
 
         response = await self._client.post(
-            "images/generations", request_data, timeout=120, model=model
+            provider, "images/generations", request_data, timeout=120
         )
+
+        if not isinstance(response, dict):
+            raise APIError(
+                f"响应格式错误: {response}", "INVALID_RESPONSE", "openai"
+            )
+
         return ResponseParser.parse_image_response(response)
 
     async def edit(
@@ -57,31 +64,34 @@ class ZhipuImageCapability:
         image: str,
         prompt: str,
         mask: str | None = None,
-        model: str = "CogView-3-Flash",
+        model: str = "dall-e-2",
         size: str = "1024x1024",
         n: int = 1,
         options: dict[str, Any] | None = None,
     ) -> list[str]:
-        """编辑图像
+        """编辑图片
 
         Args:
-            image: 原始图像 URL 或 Base64
+            image: 原始图片路径或 URL
             prompt: 编辑描述
-            mask: 蒙版图像（智谱暂不支持，保留接口统一）
+            mask: 蒙版图片路径或 URL
             model: 模型名称
-            size: 图像尺寸
+            size: 图片尺寸
             n: 生成数量
             options: 额外选项
 
         Returns:
-            编辑后的图像 URL 列表
+            图片 URL 列表
         """
+        provider = self._client.get_random_provider()
+
         request_data: dict[str, Any] = {
             "model": model,
-            "prompt": prompt,
             "image": image,
-            "n": n,
+            "prompt": prompt,
             "size": size,
+            "n": n,
+            "response_format": "url",
         }
         if mask:
             request_data["mask"] = mask
@@ -89,43 +99,58 @@ class ZhipuImageCapability:
             request_data.update(options)
 
         response = await self._client.post(
-            "images/edits", request_data, timeout=120, model=model
+            provider, "images/edits", request_data, timeout=120
         )
+
+        if not isinstance(response, dict):
+            raise APIError(
+                f"响应格式错误: {response}", "INVALID_RESPONSE", "openai"
+            )
+
         return ResponseParser.parse_image_response(response)
 
     async def create_variation(
         self,
         image: str,
-        model: str = "CogView-3-Flash",
+        model: str = "dall-e-2",
         size: str = "1024x1024",
         n: int = 1,
         options: dict[str, Any] | None = None,
     ) -> list[str]:
-        """创建图像变体
+        """创建图片变体
 
         Args:
-            image: 原始图像 URL 或 Base64
+            image: 原始图片路径或 URL
             model: 模型名称
-            size: 图像尺寸
+            size: 图片尺寸
             n: 生成数量
             options: 额外选项
 
         Returns:
-            变体图像 URL 列表
+            图片 URL 列表
         """
+        provider = self._client.get_random_provider()
+
         request_data: dict[str, Any] = {
             "model": model,
             "image": image,
-            "n": n,
             "size": size,
+            "n": n,
+            "response_format": "url",
         }
         if options:
             request_data.update(options)
 
         response = await self._client.post(
-            "images/variations", request_data, timeout=120, model=model
+            provider, "images/variations", request_data, timeout=120
         )
+
+        if not isinstance(response, dict):
+            raise APIError(
+                f"响应格式错误: {response}", "INVALID_RESPONSE", "openai"
+            )
+
         return ResponseParser.parse_image_response(response)
 
 
-__all__ = ["ZhipuImageCapability"]
+__all__ = ["OpenAIImageCapability"]

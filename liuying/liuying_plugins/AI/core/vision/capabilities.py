@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 
 from liuying.services.cache import CacheDict
-from liuying.utils.LLM import Capability, llm_manager
+from liuying.services.LLM import Capability, llm_manager
 from liuying.utils.log import logger
 
 from ...config import get_config

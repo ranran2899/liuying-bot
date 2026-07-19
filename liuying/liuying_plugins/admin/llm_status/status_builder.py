@@ -1,8 +1,8 @@
 """LLM 状态文本构建模块"""
 from liuying.models._llm import TokenUsage
-from liuying.utils.LLM import llm_manager
-from liuying.utils.LLM.tracker import token_tracker
-from liuying.utils.LLM.web_search.tracker import search_tracker
+from liuying.services.LLM import llm_manager
+from liuying.services.LLM.tracker import token_tracker
+from liuying.services.LLM.web_search.tracker import search_tracker
 
 
 def capability_names(provider_name: str) -> str:

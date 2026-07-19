@@ -7,18 +7,18 @@ import re
 
 from httpx import HTTPStatusError
 
-from liuying.utils.http.http_utils import AsyncHttpx
-from liuying.utils.LLM.web_search.base_client import BaseSearchClient
-from liuying.utils.LLM.web_search.exceptions import (
+from liuying.services.LLM.web_search.base_client import BaseSearchClient
+from liuying.services.LLM.web_search.exceptions import (
     NetworkError,
     RequestError,
     SearchError,
 )
-from liuying.utils.LLM.web_search.models import (
+from liuying.services.LLM.web_search.models import (
     SearchRequest,
     SearchResponse,
     WebPageResult,
 )
+from liuying.utils.http.http_utils import AsyncHttpx
 from liuying.utils.log import logger
 
 _REQUEST_TIMEOUT = 15.0

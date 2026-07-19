@@ -7,9 +7,9 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.configs.config import Config
 from liuying.configs.utils import Command, PluginExtraData, RegisterConfig
 from liuying.models._llm.token_quota import UserToken
+from liuying.services.LLM import llm_manager
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.enum import PluginType
-from liuying.utils.LLM import llm_manager
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.message import MessageUtils

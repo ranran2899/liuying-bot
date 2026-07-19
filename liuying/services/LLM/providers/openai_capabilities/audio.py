@@ -2,8 +2,8 @@
 from pathlib import Path
 from typing import Any
 
-from liuying.utils.LLM.open_ai.client import OpenAIClient
-from liuying.utils.LLM.utils import APIError, ResponseParser
+from liuying.services.LLM.open_ai.client import OpenAIClient
+from liuying.services.LLM.utils import APIError, ResponseParser
 
 
 class OpenAIAudioCapability:

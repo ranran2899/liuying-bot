@@ -1,13 +1,13 @@
 """LLM调用封装
 
-对接 liuying.utils.LLM.llm_manager，提供统一的对话/嵌入/TTS/图片调用接口。
+对接 liuying.services.LLM.llm_manager，提供统一的对话/嵌入/TTS/图片调用接口。
 通过 provider_router 实现多 provider 自动容错切换。
 """
 
 from collections.abc import AsyncIterator
 from typing import Any
 
-from liuying.utils.LLM import Capability, llm_manager
+from liuying.services.LLM import Capability, llm_manager
 from liuying.utils.log import logger
 
 from ...config import get_config

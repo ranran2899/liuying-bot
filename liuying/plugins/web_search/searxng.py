@@ -5,8 +5,8 @@
 import json
 from urllib.parse import quote_plus
 
-from liuying.utils.LLM.web_search.models import WebPageResult
-from liuying.utils.LLM.web_search.registry import (
+from liuying.services.LLM.web_search.models import WebPageResult
+from liuying.services.LLM.web_search.registry import (
     SearchClientMeta,
     register_search_client,
 )

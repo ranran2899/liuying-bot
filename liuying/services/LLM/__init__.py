@@ -1,7 +1,7 @@
 """LLM工具包 - 统一的大语言模型调用接口
 
 使用方式:
-    from liuying.utils.LLM import llm_manager, Capability
+    from liuying.services.LLM import llm_manager, Capability
 
     # 对话
     provider = llm_manager.get_provider("zhipu")

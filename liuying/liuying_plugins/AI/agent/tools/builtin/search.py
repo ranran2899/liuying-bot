@@ -3,7 +3,7 @@
 联网搜索 + 网页抓取。
 
 联网搜索统一通过 llm_helper.web_search 调用，
-由 liuying.utils.LLM 的 WebSearchCapability 提供正式 provider，
+由 liuying.services.LLM 的 WebSearchCapability 提供正式 provider，
 liuying/plugins/web_search 插件提供免配置降级兜底。
 """
 

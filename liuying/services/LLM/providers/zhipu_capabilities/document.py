@@ -2,7 +2,7 @@
 import os
 from typing import Any
 
-from liuying.utils.LLM.zhi_pu.client import ZhipuClient
+from liuying.services.LLM.zhi_pu.client import ZhipuClient
 
 
 class ZhipuDocumentCapability:

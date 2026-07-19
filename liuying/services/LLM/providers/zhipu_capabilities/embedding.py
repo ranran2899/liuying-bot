@@ -1,7 +1,7 @@
 """智谱 AI 文本嵌入能力实现"""
 from typing import Any
 
-from liuying.utils.LLM.zhi_pu.client import ZhipuClient
+from liuying.services.LLM.zhi_pu.client import ZhipuClient
 
 
 class ZhipuEmbeddingCapability:

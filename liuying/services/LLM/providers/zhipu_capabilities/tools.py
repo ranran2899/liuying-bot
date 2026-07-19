@@ -1,7 +1,7 @@
 """智谱 AI 工具能力实现"""
 from typing import Any
 
-from liuying.utils.LLM.zhi_pu.tools import ToolsAPI
+from liuying.services.LLM.zhi_pu.tools import ToolsAPI
 
 
 class ZhipuToolsCapability:

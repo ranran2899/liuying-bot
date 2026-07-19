@@ -1,9 +1,9 @@
 """智谱 AI 语音能力实现"""
 from typing import Any
 
+from liuying.services.LLM.utils import APIError, ResponseParser
+from liuying.services.LLM.zhi_pu.client import ZhipuClient
 from liuying.utils.http.http_utils import AsyncHttpx
-from liuying.utils.LLM.utils import APIError, ResponseParser
-from liuying.utils.LLM.zhi_pu.client import ZhipuClient
 
 
 class ZhipuAudioCapability:

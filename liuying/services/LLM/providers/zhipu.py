@@ -1,10 +1,10 @@
 """智谱 AI Provider，组合智谱特有的全部能力"""
 from typing import Any
 
-from liuying.utils.LLM.capabilities import Capability
-from liuying.utils.LLM.configs import APIType, ProviderConfig
-from liuying.utils.LLM.provider import BaseProvider, register_provider
-from liuying.utils.LLM.zhi_pu.client import ZhipuClient
+from liuying.services.LLM.capabilities import Capability
+from liuying.services.LLM.configs import APIType, ProviderConfig
+from liuying.services.LLM.provider import BaseProvider, register_provider
+from liuying.services.LLM.zhi_pu.client import ZhipuClient
 
 from .zhipu_capabilities.audio import ZhipuAudioCapability
 from .zhipu_capabilities.chat import ZhipuChatCapability

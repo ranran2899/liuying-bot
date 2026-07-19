@@ -16,8 +16,7 @@ from liuying.utils.message import MessageUtils
 from ...config import get_config
 from ...core.group import group_social
 from ...core.peer_awareness import peer_awareness
-from ...core.runtime import ProtocolHelper
-from ...core.runtime import runtime_switch
+from ...core.runtime import ProtocolHelper, runtime_switch
 from ...core.safety import AclChecker
 from ...core.target_inference import MessageTarget, target_inference
 from ...core.tools import MessageExtractor

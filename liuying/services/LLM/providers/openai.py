@@ -1,10 +1,10 @@
 """OpenAI 兼容 API Provider"""
 from typing import Any
 
-from liuying.utils.LLM.capabilities import Capability
-from liuying.utils.LLM.configs import APIType, ProviderConfig
-from liuying.utils.LLM.open_ai.client import OpenAIClient
-from liuying.utils.LLM.provider import BaseProvider, register_provider
+from liuying.services.LLM.capabilities import Capability
+from liuying.services.LLM.configs import APIType, ProviderConfig
+from liuying.services.LLM.open_ai.client import OpenAIClient
+from liuying.services.LLM.provider import BaseProvider, register_provider
 
 from .openai_capabilities.audio import OpenAIAudioCapability
 from .openai_capabilities.chat import OpenAIChatCapability

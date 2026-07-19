@@ -5,24 +5,24 @@
 """
 from typing import Any
 
-from liuying.utils.LLM.capabilities import Capability, WebSearchCapability
-from liuying.utils.LLM.configs import APIType, ProviderConfig
-from liuying.utils.LLM.provider import BaseProvider, register_provider
-from liuying.utils.LLM.web_search.base_client import BaseSearchClient
-from liuying.utils.LLM.web_search.config import get_search_config
-from liuying.utils.LLM.web_search.exceptions import SearchError
-from liuying.utils.LLM.web_search.models import (
+from liuying.services.LLM.capabilities import Capability, WebSearchCapability
+from liuying.services.LLM.configs import APIType, ProviderConfig
+from liuying.services.LLM.provider import BaseProvider, register_provider
+from liuying.services.LLM.web_search.base_client import BaseSearchClient
+from liuying.services.LLM.web_search.config import get_search_config
+from liuying.services.LLM.web_search.exceptions import SearchError
+from liuying.services.LLM.web_search.models import (
     BaiduSearchMode,
     FreshnessType,
     SearchFilter,
     SearchRequest,
     SearchResponse,
 )
-from liuying.utils.LLM.web_search.registry import (
+from liuying.services.LLM.web_search.registry import (
     get_free_search_clients,
     get_search_client_class,
 )
-from liuying.utils.LLM.web_search.tracker import search_tracker
+from liuying.services.LLM.web_search.tracker import search_tracker
 from liuying.utils.log import logger
 
 
