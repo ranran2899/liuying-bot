@@ -128,7 +128,7 @@ class DebugLogConfig:
 class LLMConfig:
     """LLM全局配置"""
 
-    default_model_name: str = "GLM/glm-4-flash-250414"
+    default_model_name: str = "GLM/glm-4.5-flash"
     gemini_safety_threshold: str = "BLOCK_NONE"
     providers: list[ProviderConfig] = field(default_factory=list)
     client_settings: ClientSettings = field(default_factory=ClientSettings)

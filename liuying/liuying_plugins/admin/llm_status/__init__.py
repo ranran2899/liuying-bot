@@ -73,12 +73,12 @@ __plugin_meta__ = PluginMetadata(
                     {
                         "name": "GLM",
                         "api_key": "",
-                        "api_base": "https://open.bigmodel.cn",
+                        "api_base": "https://open.bigmodel.cn/api/paas/v4",
                         "api_type": "zhipu",
                         "extra_headers": None,
                         "capabilities": None,
                         "models": [
-                            {"model_name": "glm-4-flash-250414", "extra_headers": None},
+                            {"model_name": "glm-4.5-flash", "extra_headers": None},
                         ],
                     },
                     {
@@ -165,13 +165,13 @@ reset_token_quota_cmd = on_alconna(
     block=True,
 )
 
-
+# 初始化时刷新 LLM 配置
 @PriorityLifecycle.on_startup(priority=2)
 def _reload_llm_config() -> None:
     """在全局配置初始化完成后刷新 LLM 配置"""
     llm_manager.reload_config()
 
-
+### 定时任务 - 每天 0 点重置所有用户 token 额度
 @task_manager.cron_task("reset_user_token_quota", hour=0, minute=0, second=0)
 async def _reset_user_token_quota() -> None:
     """每天 0 点重置所有用户 token 额度"""
