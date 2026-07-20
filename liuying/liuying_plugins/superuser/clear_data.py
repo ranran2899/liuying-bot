@@ -82,7 +82,7 @@ def _clear_data() -> float:
     return float(size)
 
 
-@task_manager.cron_task("auto_clear_temp_data", hour=1, minute=1)
+@task_manager.cron("auto_clear_temp_data", hour=1, minute=1)
 async def _auto_clear_temp_data():
     """自动清理临时数据"""
     size = await _clear_data()

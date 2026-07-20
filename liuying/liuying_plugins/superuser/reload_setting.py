@@ -58,7 +58,7 @@ async def _(session: Uninfo, arparma: Arparma):
     await MessageUtils.build_message("重载完成!").send(reply_to=True)
 
 
-@task_manager.interval_task(
+@task_manager.interval(
     "auto_reload_config",
     seconds=Config.get_config("reload_setting", "AUTO_RELOAD_TIME", 180),
 )

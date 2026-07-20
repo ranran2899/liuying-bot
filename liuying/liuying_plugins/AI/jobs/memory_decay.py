@@ -195,7 +195,7 @@ async def setup_memory_jobs() -> None:
         return
 
     if get_config("MEMORY_DECAY_ENABLED", True):
-        await task_manager.add_interval_task(
+        await task_manager.add_interval(
             task_id=_DECAY_TASK_ID,
             func=MemoryDecayHelper._memory_decay_task,
             hours=6,
@@ -207,7 +207,7 @@ async def setup_memory_jobs() -> None:
         logger.info("记忆衰减任务已注册（每6小时）", command="AI")
 
     if get_config("MEMORY_CONSOLIDATION_ENABLED", True):
-        await task_manager.add_cron_task(
+        await task_manager.add_cron(
             task_id=_CONSOLIDATION_TASK_ID,
             func=MemoryDecayHelper._memory_consolidation_task,
             hour=3,
@@ -219,7 +219,7 @@ async def setup_memory_jobs() -> None:
         )
         logger.info("记忆巩固任务已注册（每天3:00）", command="AI")
 
-    await task_manager.add_interval_task(
+    await task_manager.add_interval(
         task_id=_PERSONA_UPDATE_TASK_ID,
         func=MemoryDecayHelper._user_persona_update_task,
         hours=2,

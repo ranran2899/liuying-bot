@@ -14,25 +14,26 @@ import time
 from typing import Any
 
 from liuying.models.scheduler_job import SchedulerJob
-from liuying.utils.apscheduler.alert import alert_manager
-from liuying.utils.apscheduler.constants import (
+from liuying.utils.enum import TaskStatus, TriggerType
+from liuying.utils.log import logger
+
+from .alert import alert_manager
+from .constants import (
     COMPLETED_TASK_TTL,
     DEFAULT_MISFIRE_GRACE_TIME,
     SCHEDULER_DEPENDENCY_RETRY_DELAY,
     SCHEDULER_RUN_NOW_PRIORITY,
     SCHEDULER_SHUTDOWN_WAIT,
 )
-from liuying.utils.apscheduler.events import (
+from .events import (
     TaskEvent,
     TaskEventType,
     event_bus,
 )
-from liuying.utils.apscheduler.executor import ExecutionResult, TaskExecutor
-from liuying.utils.apscheduler.metrics import metrics_collector
-from liuying.utils.apscheduler.models import TaskInfo
-from liuying.utils.apscheduler.triggers import BaseTrigger, DateTrigger
-from liuying.utils.enum import TaskStatus, TriggerType
-from liuying.utils.log import logger
+from .executor import ExecutionResult, TaskExecutor
+from .metrics import metrics_collector
+from .models import TaskInfo
+from .triggers import BaseTrigger, DateTrigger
 
 _LOG_COMMAND = "Scheduler"
 

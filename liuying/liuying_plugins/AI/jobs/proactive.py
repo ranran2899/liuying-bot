@@ -297,7 +297,7 @@ async def setup_proactive_jobs() -> None:
         return
 
     interval_minutes = get_config("PROACTIVE_INTERVAL_MINUTES", 30)
-    await task_manager.add_interval_task(
+    await task_manager.add_interval(
         task_id=_PROACTIVE_TASK_ID,
         func=ProactiveHelper._check_group_idle_and_send,
         minutes=interval_minutes,
@@ -312,7 +312,7 @@ async def setup_proactive_jobs() -> None:
     )
 
     # 注册私聊问候任务（每天8点和22点执行）
-    await task_manager.add_cron_task(
+    await task_manager.add_cron(
         task_id=_PROACTIVE_PRIVATE_TASK_ID,
         func=ProactiveHelper._proactive_private_greeting,
         hour="8,22",

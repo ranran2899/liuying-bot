@@ -11,8 +11,11 @@
 采用单例模式设计，确保全局唯一的任务管理器实例。
 """
 
-from liuying.utils.apscheduler.alert import alert_manager
-from liuying.utils.apscheduler.mixins import (
+from liuying.utils.log import logger
+from liuying.utils.manager.priority_manager import PriorityLifecycle
+
+from .alert import alert_manager
+from .mixins import (
     TaskDecoratorMixin,
     TaskGroupMixin,
     TaskLifecycleMixin,
@@ -20,13 +23,11 @@ from liuying.utils.apscheduler.mixins import (
     TaskQueryMixin,
     TaskRegistrationMixin,
 )
-from liuying.utils.apscheduler.mixins.decorator import _pending_tasks
-from liuying.utils.apscheduler.models import TaskInfo
-from liuying.utils.apscheduler.scheduler import Scheduler
-from liuying.utils.log import logger
-from liuying.utils.manager.priority_manager import PriorityLifecycle
+from .mixins.decorator import _pending_tasks
+from .models import TaskInfo
+from .scheduler import Scheduler
 
-_LOG_COMMAND = "TaskManager"
+_LOG_COMMAND = "SchedulerManager"
 
 
 class TaskManager(

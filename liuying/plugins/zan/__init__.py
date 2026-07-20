@@ -1,19 +1,18 @@
-import re
 import asyncio
+import re
 
 import nonebot
 from nonebot import on_regex
 from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GROUP, GroupMessageEvent, Event
+from nonebot.adapters.onebot.v11 import GROUP, Event, GroupMessageEvent
 from nonebot.plugin import PluginMetadata
 
-from liuying.utils.apscheduler import task_manager
-
+from liuying.configs.utils.models import Command, PluginExtraData
 from liuying.models._bot import BotConsole
+from liuying.utils.apscheduler import task_manager
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
-from liuying.configs.utils.models import PluginExtraData, Command
 
 from .models import ZanSubscribe
 
@@ -139,7 +138,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         await MessageUtils.build_message("你还没有订阅过呢~").finish(reply_to=True)
 
 
-@task_manager.cron_task("job_subscribed_likes", hour=0, minute=1)
+@task_manager.cron("job_subscribed_likes", hour=0, minute=1)
 async def run_subscribed_likes():
     """处理每日点赞逻辑，遍历所有在线机器人独立执行订阅点赞"""
     online_bots = nonebot.get_bots()

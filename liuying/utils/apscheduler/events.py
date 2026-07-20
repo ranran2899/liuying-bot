@@ -13,8 +13,9 @@ from enum import StrEnum
 from typing import Any
 import uuid
 
-from liuying.utils.apscheduler.constants import SCHEDULER_EVENT_HISTORY_MAX
 from liuying.utils.log import logger
+
+from .constants import SCHEDULER_EVENT_HISTORY_MAX
 
 _LOG_COMMAND = "SchedulerEvents"
 

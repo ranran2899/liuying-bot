@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .base import TaskManagerBaseMixin
 
 if TYPE_CHECKING:
-    from liuying.utils.apscheduler.models import TaskInfo
+    from ..models import TaskInfo
 
 
 class TaskQueryMixin(TaskManagerBaseMixin):

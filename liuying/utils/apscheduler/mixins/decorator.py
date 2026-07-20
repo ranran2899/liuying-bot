@@ -7,10 +7,10 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from liuying.utils.apscheduler.constants import DEFAULT_MISFIRE_GRACE_TIME
-from liuying.utils.apscheduler.models import TaskConfig
 from liuying.utils.enum import TriggerType
 
+from ..constants import DEFAULT_MISFIRE_GRACE_TIME
+from ..models import TaskConfig
 from .base import TaskManagerBaseMixin
 from .registration import TaskRegistrationMixin
 
@@ -22,15 +22,15 @@ class TaskDecoratorMixin(TaskManagerBaseMixin):
     任务装饰器 Mixin
 
     提供:
-    - @cron_task 装饰器
-    - @interval_task 装饰器
-    - @date_task 装饰器
+    - @cron 装饰器
+    - @interval 装饰器
+    - @date 装饰器
 
     装饰器构造 TaskConfig 后存入 _pending_tasks,
     由 register_pending_tasks 在启动时统一注册。
     """
 
-    def cron_task(
+    def cron(
         self,
         task_id: str,
         year: int | str | None = None,
@@ -111,7 +111,7 @@ class TaskDecoratorMixin(TaskManagerBaseMixin):
 
         return decorator
 
-    def interval_task(
+    def interval(
         self,
         task_id: str,
         weeks: int = 0,
@@ -187,7 +187,7 @@ class TaskDecoratorMixin(TaskManagerBaseMixin):
 
         return decorator
 
-    def date_task(
+    def date(
         self,
         task_id: str,
         run_date: datetime | str,

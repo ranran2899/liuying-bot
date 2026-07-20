@@ -44,7 +44,7 @@ async def setup_knowledge_jobs() -> None:
 
     仅包含查询日志清理任务（每天凌晨4点）。
     """
-    await task_manager.add_cron_task(
+    await task_manager.add_cron(
         task_id=_CLEANUP_TASK_ID,
         func=KnowledgeRefreshHelper._knowledge_cleanup_task,
         hour=4,

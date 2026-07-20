@@ -41,14 +41,14 @@ async def init_signin_items() -> None:
     await register_items(SIGNIN_ITEMS)
 
 
-@task_manager.cron_task("reset_daily_sign", hour=0, minute=0, second=0)
+@task_manager.cron("reset_daily_sign", hour=0, minute=0, second=0)
 async def reset_daily_sign() -> None:
     """每天凌晨0点重置所有用户的签到状态"""
     reset_count = await UserSign.reset_all_signed_in_users()
     logger.info(f"每日签到状态重置完成，共重置 {reset_count} 个用户")
 
 
-@task_manager.cron_task("clear_sign_in_images", hour=23, minute=59, second=0)
+@task_manager.cron("clear_sign_in_images", hour=23, minute=59, second=0)
 async def clear_sign_in_images() -> None:
     """每天23:59清空签到图片"""
     deleted_count = 0

@@ -221,7 +221,7 @@ class FortuneHandler:
         ).finish()
 
 
-@task_manager.cron_task("fortune_daily_reset", hour=0, minute=0)
+@task_manager.cron("fortune_daily_reset", hour=0, minute=0)
 async def daily_reset_fortune():
     """每日零点重置运势"""
     count = await UserFortuneRecord.clear_all_fortunes()

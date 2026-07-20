@@ -11,15 +11,15 @@ from importlib import import_module
 from typing import Any
 
 from liuying.models.scheduler_job import SchedulerJob
-from liuying.utils.apscheduler.models import TaskConfig
-from liuying.utils.apscheduler.triggers import trigger_factory
-from liuying.utils.apscheduler.triggers.base import BaseTrigger
 from liuying.utils.enum import TaskStatus, TriggerType
 from liuying.utils.log import logger
 
+from ..models import TaskConfig
+from ..triggers import trigger_factory
+from ..triggers.base import BaseTrigger
 from .base import TaskManagerBaseMixin
 
-_LOG_COMMAND = "TaskPersistence"
+_LOG_COMMAND = "SchedulerPersistence"
 
 
 class TaskPersistenceMixin(TaskManagerBaseMixin):

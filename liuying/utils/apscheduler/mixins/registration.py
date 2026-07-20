@@ -7,18 +7,18 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from liuying.utils.apscheduler.constants import DEFAULT_MISFIRE_GRACE_TIME
-from liuying.utils.apscheduler.models import TaskConfig, TaskInfo
-from liuying.utils.apscheduler.triggers import (
-    BaseTrigger,
-    trigger_factory,
-)
 from liuying.utils.enum import TaskStatus, TriggerType
 from liuying.utils.log import logger
 
+from ..constants import DEFAULT_MISFIRE_GRACE_TIME
+from ..models import TaskConfig, TaskInfo
+from ..triggers import (
+    BaseTrigger,
+    trigger_factory,
+)
 from .base import TaskManagerBaseMixin
 
-_LOG_COMMAND = "TaskRegistration"
+_LOG_COMMAND = "SchedulerRegistration"
 
 
 class TaskRegistrationMixin(TaskManagerBaseMixin):
@@ -168,7 +168,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
         )
         return task_info
 
-    async def add_cron_task(
+    async def add_cron(
         self,
         task_id: str,
         func: Callable,
@@ -244,7 +244,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
         )
         return await self._add_task(config)
 
-    async def add_interval_task(
+    async def add_interval(
         self,
         task_id: str,
         func: Callable,
@@ -315,7 +315,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
         )
         return await self._add_task(config)
 
-    async def add_date_task(
+    async def add_date(
         self,
         task_id: str,
         func: Callable,

@@ -9,11 +9,11 @@
     # 装饰器方式(推荐)
     from liuying.utils.apscheduler import task_manager
 
-    @task_manager.cron_task("daily_task", hour=0, minute=0)
+    @task_manager.cron("daily_task", hour=0, minute=0)
     async def daily_cleanup():
         print("每日清理")
 
-    @task_manager.interval_task("heartbeat", seconds=10)
+    @task_manager.interval("heartbeat", seconds=10)
     async def heartbeat():
         print("心跳检测")
 
@@ -21,9 +21,9 @@
     async def my_task():
         print("定时任务")
 
-    await task_manager.add_interval_task("task_id", my_task, seconds=30)
-    await task_manager.add_cron_task("cron_id", my_task, hour=8, minute=0)
-    await task_manager.add_date_task("once_id", my_task, run_date="2026-01-01 00:00:00")
+    await task_manager.add_interval("task_id", my_task, seconds=30)
+    await task_manager.add_cron("cron_id", my_task, hour=8, minute=0)
+    await task_manager.add_date("once_id", my_task, run_date="2026-01-01 00:00:00")
 
     # 任务管理
     await task_manager.pause_task("task_id")      # 暂停
@@ -38,18 +38,18 @@
 
     # 持久化任务(保存到数据库)
     # 注意: cron 和 interval 任务默认不持久化,一次性任务默认持久化
-    await task_manager.add_interval_task(
+    await task_manager.add_interval(
         "persistent_task", my_task, seconds=30, save_to_db=True
     )
-    await task_manager.add_cron_task(
+    await task_manager.add_cron(
         "persistent_cron", my_task, hour=8, save_to_db=True
     )
 """
 
-from liuying.utils.apscheduler.events import TaskEvent, TaskEventType, event_bus
-from liuying.utils.apscheduler.manager import task_manager
-from liuying.utils.apscheduler.metrics import metrics_collector
-from liuying.utils.apscheduler.models import TaskConfig, TaskInfo
+from .events import TaskEvent, TaskEventType, event_bus
+from .manager import task_manager
+from .metrics import metrics_collector
+from .models import TaskConfig, TaskInfo
 
 __all__ = [
     "TaskConfig",

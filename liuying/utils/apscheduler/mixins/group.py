@@ -11,9 +11,9 @@ from liuying.utils.log import logger
 from .base import TaskManagerBaseMixin
 
 if TYPE_CHECKING:
-    from liuying.utils.apscheduler.models import TaskInfo
+    from ..models import TaskInfo
 
-_LOG_COMMAND = "TaskGroup"
+_LOG_COMMAND = "SchedulerGroup"
 
 
 class TaskGroupMixin(TaskManagerBaseMixin):

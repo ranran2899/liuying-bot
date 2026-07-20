@@ -392,7 +392,7 @@ async def _(
     await BankHandler.history(session, arparma, page)
 
 
-@task_manager.cron_task("bank_settlement", hour=0, minute=0)
+@task_manager.cron("bank_settlement", hour=0, minute=0)
 async def _bank_settlement():
     """每日0点结算利息"""
     await SettlementService.settle_daily_interest()

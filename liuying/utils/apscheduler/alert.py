@@ -14,7 +14,9 @@ from enum import StrEnum
 from typing import Any
 import uuid
 
-from liuying.utils.apscheduler.constants import (
+from liuying.utils.log import logger
+
+from .constants import (
     DEFAULT_ALERT_CHECK_INTERVAL,
     DEFAULT_ALERT_CONSECUTIVE_FAILURES,
     DEFAULT_ALERT_COOLDOWN,
@@ -25,9 +27,8 @@ from liuying.utils.apscheduler.constants import (
     DEFAULT_ALERT_QUEUE_THRESHOLD,
     DEFAULT_ALERT_TIMEOUT_THRESHOLD,
 )
-from liuying.utils.apscheduler.events import TaskEvent, TaskEventType, event_bus
-from liuying.utils.apscheduler.metrics import MetricsCollector, metrics_collector
-from liuying.utils.log import logger
+from .events import TaskEvent, TaskEventType, event_bus
+from .metrics import MetricsCollector, metrics_collector
 
 _LOG_COMMAND = "SchedulerAlert"
 

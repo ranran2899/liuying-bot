@@ -7,14 +7,14 @@
 from typing import Any
 
 from liuying.models.scheduler_job import SchedulerJob
-from liuying.utils.apscheduler.models import TaskInfo
-from liuying.utils.apscheduler.triggers import trigger_factory
 from liuying.utils.enum import TaskStatus, TriggerType
 from liuying.utils.log import logger
 
+from ..models import TaskInfo
+from ..triggers import trigger_factory
 from .base import TaskManagerBaseMixin
 
-_LOG_COMMAND = "TaskLifecycle"
+_LOG_COMMAND = "SchedulerLifecycle"
 
 
 class TaskLifecycleMixin(TaskManagerBaseMixin):

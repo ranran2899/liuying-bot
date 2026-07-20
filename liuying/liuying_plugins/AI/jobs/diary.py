@@ -111,7 +111,7 @@ async def setup_diary_job() -> None:
         )
         return
 
-    await task_manager.add_cron_task(
+    await task_manager.add_cron(
         task_id="ai_diary",
         func=DiaryHelper._diary_job,
         hour=23,

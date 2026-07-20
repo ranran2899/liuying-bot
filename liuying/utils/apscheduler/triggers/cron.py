@@ -13,7 +13,7 @@ import calendar
 from datetime import datetime, timedelta
 from typing import Any, Self
 
-from liuying.utils.apscheduler.constants import (
+from ..constants import (
     CRON_DAY_MAX,
     CRON_DAY_MIN,
     CRON_DAY_OF_WEEK_MAX,
@@ -31,7 +31,6 @@ from liuying.utils.apscheduler.constants import (
     SCHEDULER_MAX_CRON_ITERATIONS,
     SCHEDULER_MAX_DAYS_CHECK,
 )
-
 from .base import (
     BaseTrigger,
     TriggerResult,

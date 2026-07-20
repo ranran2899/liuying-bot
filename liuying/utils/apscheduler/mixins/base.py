@@ -8,8 +8,8 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from liuying.utils.apscheduler.models import TaskInfo
-    from liuying.utils.apscheduler.scheduler import Scheduler
+    from ..models import TaskInfo
+    from ..scheduler import Scheduler
 
 
 class TaskManagerBaseMixin:

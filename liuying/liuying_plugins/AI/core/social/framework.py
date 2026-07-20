@@ -109,8 +109,8 @@ class SocialTriggerRegistry:
         """将所有触发器注册到APScheduler调度
 
         遍历注册表，跳过event类型与disabled的触发器，
-        按schedule_kind调用task_manager.add_cron_task /
-        add_interval_task。event类型由消息钩子手动触发，
+        按schedule_kind调用task_manager.add_cron /
+        add_interval。event类型由消息钩子手动触发，
         不在此注册。
 
         返回:
@@ -126,13 +126,13 @@ class SocialTriggerRegistry:
             task_id = f"ai_social_{trigger.name}"
             try:
                 if trigger.schedule_kind == "cron":
-                    await task_manager.add_cron_task(
+                    await task_manager.add_cron(
                         task_id=task_id,
                         func=wrapped,
                         **trigger.schedule_args,
                     )
                 elif trigger.schedule_kind == "interval":
-                    await task_manager.add_interval_task(
+                    await task_manager.add_interval(
                         task_id=task_id,
                         func=wrapped,
                         **trigger.schedule_args,

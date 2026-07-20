@@ -82,7 +82,7 @@ class BedLayoutUtils:
         task_id = f"{_TASK_ID_PREFIX}{filename}"
 
         try:
-            await task_manager.add_date_task(
+            await task_manager.add_date(
                 task_id=task_id,
                 func=BedLayoutUtils.delete_image_task,
                 run_date=delete_at.isoformat(),

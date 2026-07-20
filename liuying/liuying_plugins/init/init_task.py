@@ -185,16 +185,16 @@ async def create_schedule(task: Task) -> None:
         match trigger:
             case "cron":
                 trigger_config = _build_trigger_config(scheduler_model)
-                await task_manager.add_cron_task(**base_kwargs, **trigger_config)
+                await task_manager.add_cron(**base_kwargs, **trigger_config)
             case "interval":
                 trigger_config = _build_trigger_config(scheduler_model)
                 interval_config = {
                     k.replace("minute", "minutes").replace("hour", "hours"): v
                     for k, v in trigger_config.items()
                 }
-                await task_manager.add_interval_task(**base_kwargs, **interval_config)
+                await task_manager.add_interval(**base_kwargs, **interval_config)
             case "date" if scheduler_model.run_date:
-                await task_manager.add_date_task(
+                await task_manager.add_date(
                     **base_kwargs,
                     run_date=scheduler_model.run_date,
                 )

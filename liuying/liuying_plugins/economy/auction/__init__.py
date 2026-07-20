@@ -343,7 +343,7 @@ async def _(session: Uninfo, item_keyword: str):
     await MessageUtils.build_message(image).finish()
 
 
-@task_manager.cron_task(
+@task_manager.cron(
     "auction_expire_check",
     hour=0,
     minute=5,

@@ -172,7 +172,7 @@ def _reload_llm_config() -> None:
     llm_manager.reload_config()
 
 ### 定时任务 - 每天 0 点重置所有用户 token 额度
-@task_manager.cron_task("reset_user_token_quota", hour=0, minute=0, second=0)
+@task_manager.cron("reset_user_token_quota", hour=0, minute=0, second=0)
 async def _reset_user_token_quota() -> None:
     """每天 0 点重置所有用户 token 额度"""
     await UserToken.reset_all(user_token_quota)

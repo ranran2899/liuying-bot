@@ -117,7 +117,7 @@ async def _(session: Uninfo):
     await MessageUtils.build_message(result).finish()
 
 
-@task_manager.cron_task(
+@task_manager.cron(
     "blackmarket_refresh",
     hour="6,18",
     minute=0,

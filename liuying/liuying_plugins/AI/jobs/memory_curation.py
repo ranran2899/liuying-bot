@@ -46,7 +46,7 @@ async def setup_memory_curation_job() -> None:
 
     每12小时执行一次。
     """
-    await task_manager.add_interval_task(
+    await task_manager.add_interval(
         task_id=_CURATION_TASK_ID,
         func=MemoryCurationHelper._memory_curation_task,
         hours=_CURATION_INTERVAL_HOURS,

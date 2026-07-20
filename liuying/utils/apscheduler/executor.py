@@ -10,10 +10,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from liuying.utils.apscheduler.constants import (
+from liuying.utils.log import logger
+
+from .constants import (
     SCHEDULER_EXECUTOR_SHUTDOWN_WAIT,
 )
-from liuying.utils.log import logger
 
 _LOG_COMMAND = "SchedulerExecutor"
 

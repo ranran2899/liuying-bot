@@ -66,7 +66,7 @@ async def _(bot: Bot, event: GroupIncreaseNoticeEvent):
         )
 
 
-@task_manager.interval_task("update_group_member", minutes=5)
+@task_manager.interval("update_group_member", minutes=5)
 async def _update_group_member():
     """每5分钟更新一次群组成员信息"""
     for bot in list(nonebot.get_bots().values()):

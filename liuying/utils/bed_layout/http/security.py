@@ -344,7 +344,7 @@ class SecurityGuard:
         cls._ban_manager.cleanup_expired()
 
 
-@task_manager.interval_task(
+@task_manager.interval(
     "bed_layout_security_cleanup",
     minutes=5,
     group="bed_layout",

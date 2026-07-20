@@ -9,12 +9,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, TypeAlias
 
-from liuying.utils.apscheduler.constants import (
+from liuying.utils.enum import TaskStatus, TriggerType
+
+from .constants import (
     DEFAULT_MAX_INSTANCES,
     DEFAULT_MISFIRE_GRACE_TIME,
     DEFAULT_PRIORITY,
 )
-from liuying.utils.enum import TaskStatus, TriggerType
 
 # 类型别名
 TriggerConfig: TypeAlias = dict[str, Any]
@@ -102,7 +103,7 @@ class TaskConfig:
     任务配置（统一配置对象）
 
     封装任务注册所需的全部参数，作为 _add_task 的统一入口。
-    add_cron_task/add_interval_task/add_date_task 与对应装饰器
+    add_cron/add_interval/add_date 与对应装饰器
     构造此对象后委托 _add_task，消除参数列表重复。
     """
 
