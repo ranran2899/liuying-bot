@@ -214,6 +214,7 @@ class Scheduler:
 
         self._tasks[task_id] = entry
         self._schedule_task(entry)
+        self._wakeup_event.set()
 
         self._update_metrics()
         return entry
@@ -326,6 +327,7 @@ class Scheduler:
         entry = self._tasks[task_id]
         entry.status = TaskStatus.RUNNING
         self._schedule_task(entry)
+        self._wakeup_event.set()
 
         self._update_metrics()
         return True
@@ -377,6 +379,7 @@ class Scheduler:
 
         if entry.status == TaskStatus.RUNNING:
             self._schedule_task(entry)
+            self._wakeup_event.set()
 
         return True
 
