@@ -4,10 +4,13 @@ from fastapi.responses import JSONResponse
 
 from liuying.utils.log import logger
 
-from ....base_model import Result
+from ....base_model import BaseResultModel, Result
 from ....utils import authentication
 from .data_source import BottleReviewDataSource
 from .model import (
+    BottleBatchDeletePayload,
+    BottleBatchDeleteResult,
+    BottleImagesResult,
     BottleOperationResult,
     BottleReviewItem,
     BottleReviewStats,
@@ -177,6 +180,107 @@ async def _(comment_id: int) -> Result[BottleOperationResult]:
     except Exception as e:
         logger.error(
             f"{router.prefix}/comments/refuse 调用错误",
+            command="WebUi",
+            e=e,
+        )
+        return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
+
+
+@router.get(
+    "/bottles/list",
+    dependencies=[authentication()],
+    response_model=Result[BaseResultModel],
+    response_class=JSONResponse,
+    description="分页获取漂流瓶列表",
+)
+async def _(
+    index: int = 1,
+    size: int = 20,
+    status: int | None = None,
+) -> Result[BaseResultModel]:
+    """分页获取漂流瓶列表，支持按状态筛选"""
+    try:
+        if index < 1:
+            return Result.fail("页码必须大于0")
+        if size < 1 or size > 100:
+            return Result.fail("每页数量必须在1-100之间")
+        total, items = await BottleReviewDataSource.get_bottle_list(
+            index, size, status
+        )
+        return Result.ok(BaseResultModel(total=total, data=items))
+    except Exception as e:
+        logger.error(
+            f"{router.prefix}/bottles/list 调用错误", command="WebUi", e=e
+        )
+        return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
+
+
+@router.get(
+    "/bottles/{bottle_id}/images",
+    dependencies=[authentication()],
+    response_model=Result[BottleImagesResult],
+    response_class=JSONResponse,
+    description="获取漂流瓶图片列表",
+)
+async def _(bottle_id: int) -> Result[BottleImagesResult]:
+    """获取指定漂流瓶的所有图片（base64 编码）"""
+    try:
+        result = await BottleReviewDataSource.get_bottle_images(bottle_id)
+        if not result:
+            return Result.fail("漂流瓶不存在")
+        return Result.ok(result, "拿到信息啦!")
+    except Exception as e:
+        logger.error(
+            f"{router.prefix}/bottles/images 调用错误",
+            command="WebUi",
+            e=e,
+        )
+        return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
+
+
+@router.delete(
+    "/bottles/{bottle_id}",
+    dependencies=[authentication()],
+    response_model=Result[BottleOperationResult],
+    response_class=JSONResponse,
+    description="删除漂流瓶",
+)
+async def _(bottle_id: int) -> Result[BottleOperationResult]:
+    """删除漂流瓶及其关联数据（图片、评论、点赞）"""
+    try:
+        success = await BottleReviewDataSource.delete_bottle(bottle_id)
+        if not success:
+            return Result.fail("漂流瓶不存在")
+        return Result.ok(
+            BottleOperationResult(id=bottle_id, status="deleted"),
+            "删除成功!",
+        )
+    except Exception as e:
+        logger.error(
+            f"{router.prefix}/bottles/delete 调用错误",
+            command="WebUi",
+            e=e,
+        )
+        return Result.fail(f"发生了一点错误捏 {type(e)}: {e}")
+
+
+@router.post(
+    "/bottles/batch_delete",
+    dependencies=[authentication()],
+    response_model=Result[BottleBatchDeleteResult],
+    response_class=JSONResponse,
+    description="批量删除漂流瓶",
+)
+async def _(payload: BottleBatchDeletePayload) -> Result[BottleBatchDeleteResult]:
+    """批量删除漂流瓶"""
+    try:
+        if not payload.ids:
+            return Result.fail("ID列表不能为空")
+        result = await BottleReviewDataSource.batch_delete_bottles(payload.ids)
+        return Result.ok(result, f"成功删除 {len(result.success)} 条")
+    except Exception as e:
+        logger.error(
+            f"{router.prefix}/bottles/batch_delete 调用错误",
             command="WebUi",
             e=e,
         )

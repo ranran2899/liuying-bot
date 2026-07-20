@@ -66,3 +66,51 @@ class BottleOperationResult(BaseModel):
     """操作对象ID"""
     status: str
     """操作结果状态"""
+
+
+class BottleListItem(BaseModel):
+    """漂流瓶列表项（精简版，不含图片数据）"""
+
+    id: int
+    """漂流瓶ID"""
+    content: str
+    """文本内容"""
+    user_id: str
+    """发送者用户ID"""
+    platform: str
+    """发送平台"""
+    status: int
+    """状态: 0待审核, 100已拒绝, 200已通过"""
+    like_count: int
+    """点赞数"""
+    create_time: datetime
+    """创建时间"""
+    image_count: int
+    """图片数量"""
+
+
+class BottleBatchDeletePayload(BaseModel):
+    """批量删除漂流瓶请求体"""
+
+    ids: list[int]
+    """待删除的漂流瓶ID列表"""
+
+
+class BottleBatchDeleteResult(BaseModel):
+    """批量删除结果"""
+
+    success: list[int]
+    """成功删除的ID列表"""
+    failed: list[int]
+    """删除失败的ID列表"""
+    total: int
+    """传入总数"""
+
+
+class BottleImagesResult(BaseModel):
+    """漂流瓶图片查询结果"""
+
+    bottle_id: int
+    """漂流瓶ID"""
+    images: list[str]
+    """base64 编码图片列表"""

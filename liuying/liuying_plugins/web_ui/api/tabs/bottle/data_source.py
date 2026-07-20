@@ -2,12 +2,24 @@
 import base64
 
 from liuying.models._user.user_info import UserInfo
-from liuying.models.bottle import BottleComment, BottleImage, BottleRecord
+from liuying.models.bottle import (
+    BottleComment,
+    BottleImage,
+    BottleLike,
+    BottleRecord,
+)
 from liuying.utils.bed_layout import BedLayout
 from liuying.utils.enum import StorageType
 from liuying.utils.log import logger
 
-from .model import BottleReviewItem, BottleReviewStats, CommentReviewItem
+from .model import (
+    BottleBatchDeleteResult,
+    BottleImagesResult,
+    BottleListItem,
+    BottleReviewItem,
+    BottleReviewStats,
+    CommentReviewItem,
+)
 
 
 class BottleReviewDataSource:
@@ -69,6 +81,24 @@ class BottleReviewDataSource:
             if data:
                 result.append(base64.b64encode(data).decode("utf-8"))
         return result
+
+    @classmethod
+    async def get_bottle_images(
+        cls, bottle_id: int
+    ) -> BottleImagesResult | None:
+        """获取漂流瓶图片列表
+
+        参数:
+            bottle_id: 漂流瓶ID
+
+        返回:
+            BottleImagesResult | None: 图片结果，瓶子不存在返回None
+        """
+        record = await BottleRecord.get_by_id(bottle_id)
+        if not record:
+            return None
+        images = await cls._load_images_base64(bottle_id)
+        return BottleImagesResult(bottle_id=bottle_id, images=images)
 
     @classmethod
     async def get_random_pending_bottle(cls) -> BottleReviewItem | None:
@@ -165,3 +195,107 @@ class BottleReviewDataSource:
             bool: 操作是否成功
         """
         return await BottleComment.refuse_comment(comment_id)
+
+    @staticmethod
+    async def get_bottle_list(
+        index: int, size: int, status: int | None = None
+    ) -> tuple[int, list[BottleListItem]]:
+        """分页获取漂流瓶列表
+
+        参数:
+            index: 页码（从1开始）
+            size: 每页数量
+            status: 状态筛选，None表示全部
+
+        返回:
+            tuple[int, list[BottleListItem]]: (总数, 列表项)
+        """
+        query = BottleRecord.filter()
+        if status is not None:
+            query = query.filter(status=status)
+        total = await query.count()
+        records = (
+            await query.order_by("-id")
+            .offset((index - 1) * size)
+            .limit(size)
+            .all()
+        )
+        items: list[BottleListItem] = []
+        for record in records:
+            image_count = await BottleImage.filter(
+                bottle_id=record.id, is_deleted=False
+            ).count()
+            items.append(
+                BottleListItem(
+                    id=record.id,
+                    content=record.content or "",
+                    user_id=record.user_id,
+                    platform=record.platform,
+                    status=record.status,
+                    like_count=record.like_count,
+                    create_time=record.create_time,
+                    image_count=image_count,
+                )
+            )
+        return total, items
+
+    @staticmethod
+    async def _cleanup_bottle_relations(bottle_id: int) -> None:
+        """清理漂流瓶关联数据（图片软删除、评论与点赞硬删除）
+
+        参数:
+            bottle_id: 漂流瓶ID
+        """
+        await BottleImage.soft_delete_by_bottle_id(bottle_id)
+        await BottleComment.filter(bottle_id=bottle_id).delete()
+        await BottleLike.filter(bottle_id=bottle_id).delete()
+
+    @classmethod
+    async def delete_bottle(cls, bottle_id: int) -> bool:
+        """删除漂流瓶及其关联数据
+
+        参数:
+            bottle_id: 漂流瓶ID
+
+        返回:
+            bool: 操作是否成功
+        """
+        record = await BottleRecord.get_by_id(bottle_id)
+        if not record:
+            return False
+        await cls._cleanup_bottle_relations(bottle_id)
+        await record.delete()
+        return True
+
+    @classmethod
+    async def batch_delete_bottles(
+        cls, ids: list[int]
+    ) -> BottleBatchDeleteResult:
+        """批量删除漂流瓶
+
+        参数:
+            ids: 漂流瓶ID列表
+
+        返回:
+            BottleBatchDeleteResult: 删除结果
+        """
+        success: list[int] = []
+        failed: list[int] = []
+        for bottle_id in ids:
+            try:
+                ok = await cls.delete_bottle(bottle_id)
+                if ok:
+                    success.append(bottle_id)
+                else:
+                    failed.append(bottle_id)
+            except Exception as e:
+                logger.warning(
+                    f"批量删除漂流瓶失败 id={bottle_id}: {e}",
+                    "BottleWeb",
+                )
+                failed.append(bottle_id)
+        return BottleBatchDeleteResult(
+            success=success,
+            failed=failed,
+            total=len(ids),
+        )
