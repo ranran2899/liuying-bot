@@ -23,6 +23,12 @@ default_menus = [
     MenuItem(name="插件商店", module="store", router="/store", icon="store"),
     MenuItem(name="好友/群组", module="manage", router="/manage", icon="user"),
     MenuItem(
+        name="漂流瓶管理",
+        module="bottle",
+        router="/bottle",
+        icon="bottle",
+    ),
+    MenuItem(
         name="数据库管理",
         module="database",
         router="/database",

@@ -17,6 +17,7 @@ from .api.logs import router as ws_log_routes
 from .api.logs.log_manager import LOG_STORAGE
 from .api.menu import router as menu_router
 from .api.tabs.ai import router as ai_router
+from .api.tabs.bottle import router as bottle_router
 from .api.tabs.dashboard import router as dashboard_router
 from .api.tabs.database import router as database_router
 from .api.tabs.main import router as main_router
@@ -86,6 +87,7 @@ BaseApiRouter.include_router(system_router)
 BaseApiRouter.include_router(menu_router)
 BaseApiRouter.include_router(configure_router)
 BaseApiRouter.include_router(ai_router)
+BaseApiRouter.include_router(bottle_router)
 
 WsApiRouter = APIRouter(prefix="/liuying/socket")
 

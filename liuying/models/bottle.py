@@ -29,9 +29,6 @@ class BottleRecord(Model):
     user_id: Mapped[str] = mapped_column(
         String(255), index=True, comment="发送者用户ID"
     )
-    group_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="发送群组ID"
-    )
     platform: Mapped[str] = mapped_column(
         String(50), default="unknown", comment="发送平台"
     )
@@ -53,16 +50,13 @@ class BottleRecord(Model):
         cls,
         content: str | None,
         user_id: str,
-        group_id: str | None = None,
         platform: str = "unknown",
     ) -> "BottleRecord":
-        """
-        创建漂流瓶记录
+        """创建漂流瓶记录
 
         参数:
             content: 文本内容
             user_id: 发送者用户ID
-            group_id: 发送群组ID
             platform: 发送平台
 
         返回:
@@ -71,7 +65,6 @@ class BottleRecord(Model):
         return await cls.create(
             content=content,
             user_id=user_id,
-            group_id=group_id,
             platform=platform,
             status=0,
         )
@@ -80,8 +73,7 @@ class BottleRecord(Model):
     async def get_approved_by_id(
         cls, bottle_id: int
     ) -> "BottleRecord | None":
-        """
-        根据ID获取已通过审核的漂流瓶
+        """根据ID获取已通过审核的漂流瓶
 
         参数:
             bottle_id: 漂流瓶ID
@@ -93,8 +85,7 @@ class BottleRecord(Model):
 
     @classmethod
     async def get_by_id(cls, bottle_id: int) -> "BottleRecord | None":
-        """
-        根据ID获取漂流瓶（任意状态）
+        """根据ID获取漂流瓶（任意状态）
 
         参数:
             bottle_id: 漂流瓶ID
@@ -106,23 +97,16 @@ class BottleRecord(Model):
 
     @classmethod
     async def get_random_approved(cls) -> "BottleRecord | None":
-        """
-        随机获取一个已通过审核的漂流瓶
+        """随机获取一个已通过审核的漂流瓶
 
         返回:
             BottleRecord | None: 随机漂流瓶记录，不存在返回None
         """
-        import random
-
-        records = await cls.filter(status=200).all()
-        if not records:
-            return None
-        return random.choice(records)
+        return await cls.filter(status=200).in_random_order().first()
 
     @classmethod
     async def approve_bottle(cls, bottle_id: int) -> bool:
-        """
-        审核通过漂流瓶
+        """审核通过漂流瓶
 
         参数:
             bottle_id: 漂流瓶ID
@@ -139,8 +123,7 @@ class BottleRecord(Model):
 
     @classmethod
     async def refuse_bottle(cls, bottle_id: int) -> bool:
-        """
-        拒绝漂流瓶
+        """拒绝漂流瓶
 
         参数:
             bottle_id: 漂流瓶ID
@@ -157,8 +140,7 @@ class BottleRecord(Model):
 
     @classmethod
     async def get_pending_count(cls) -> int:
-        """
-        获取待审核漂流瓶数量
+        """获取待审核漂流瓶数量
 
         返回:
             int: 待审核数量
@@ -167,23 +149,16 @@ class BottleRecord(Model):
 
     @classmethod
     async def get_random_pending(cls) -> "BottleRecord | None":
-        """
-        随机获取一个待审核的漂流瓶
+        """随机获取一个待审核的漂流瓶
 
         返回:
             BottleRecord | None: 随机待审核记录，不存在返回None
         """
-        import random
-
-        records = await cls.filter(status=0).all()
-        if not records:
-            return None
-        return random.choice(records)
+        return await cls.filter(status=0).in_random_order().first()
 
     @classmethod
     async def add_like(cls, bottle_id: int) -> int | None:
-        """
-        为漂流瓶点赞
+        """为漂流瓶点赞
 
         参数:
             bottle_id: 漂流瓶ID
@@ -197,6 +172,13 @@ class BottleRecord(Model):
         record.like_count += 1
         await record.save(update_fields=["like_count", "update_time"])
         return record.like_count
+
+    @classmethod
+    def _run_script(cls):
+        """移除 group_id 字段（漂流瓶与群组解耦）"""
+        return [
+            "ALTER TABLE bottle_record DROP COLUMN IF EXISTS group_id;",
+        ]
 
 
 class BottleImage(Model):
@@ -234,8 +216,7 @@ class BottleImage(Model):
 
     @classmethod
     async def get_next_index(cls, bottle_id: int) -> int:
-        """
-        获取指定漂流瓶的下一个图片序号
+        """获取指定漂流瓶的下一个图片序号
 
         参数:
             bottle_id: 漂流瓶ID
@@ -257,8 +238,7 @@ class BottleImage(Model):
         width: int = 0,
         height: int = 0,
     ) -> "BottleImage":
-        """
-        创建图片记录
+        """创建图片记录
 
         参数:
             bottle_id: 漂流瓶ID
@@ -282,8 +262,7 @@ class BottleImage(Model):
     async def get_images_by_bottle_id(
         cls, bottle_id: int
     ) -> list["BottleImage"]:
-        """
-        获取漂流瓶的所有图片记录
+        """获取漂流瓶的所有图片记录
 
         参数:
             bottle_id: 漂流瓶ID
@@ -297,8 +276,7 @@ class BottleImage(Model):
 
     @classmethod
     async def soft_delete_by_bottle_id(cls, bottle_id: int) -> int:
-        """
-        软删除指定漂流瓶的所有图片记录
+        """软删除指定漂流瓶的所有图片记录
 
         参数:
             bottle_id: 漂流瓶ID
@@ -346,8 +324,7 @@ class BottleComment(Model):
     async def add_comment(
         cls, bottle_id: int, content: str, user_id: str
     ) -> "BottleComment":
-        """
-        添加评论
+        """添加评论
 
         参数:
             bottle_id: 漂流瓶ID
@@ -368,8 +345,7 @@ class BottleComment(Model):
     async def get_approved_comments(
         cls, bottle_id: int
     ) -> list["BottleComment"]:
-        """
-        获取漂流瓶的已通过评论
+        """获取漂流瓶的已通过评论
 
         参数:
             bottle_id: 漂流瓶ID
@@ -383,8 +359,7 @@ class BottleComment(Model):
 
     @classmethod
     async def approve_comment(cls, comment_id: int) -> bool:
-        """
-        审核通过评论
+        """审核通过评论
 
         参数:
             comment_id: 评论ID
@@ -401,8 +376,7 @@ class BottleComment(Model):
 
     @classmethod
     async def refuse_comment(cls, comment_id: int) -> bool:
-        """
-        拒绝评论
+        """拒绝评论
 
         参数:
             comment_id: 评论ID
@@ -419,18 +393,12 @@ class BottleComment(Model):
 
     @classmethod
     async def get_random_pending(cls) -> "BottleComment | None":
-        """
-        随机获取一个待审核评论
+        """随机获取一个待审核评论
 
         返回:
             BottleComment | None: 随机待审核评论，不存在返回None
         """
-        import random
-
-        comments = await cls.filter(status=0).all()
-        if not comments:
-            return None
-        return random.choice(comments)
+        return await cls.filter(status=0).in_random_order().first()
 
 
 class BottleLike(Model):
@@ -453,8 +421,7 @@ class BottleLike(Model):
 
     @classmethod
     async def has_liked(cls, bottle_id: int, user_id: str) -> bool:
-        """
-        检查用户是否已点赞
+        """检查用户是否已点赞
 
         参数:
             bottle_id: 漂流瓶ID
@@ -469,8 +436,7 @@ class BottleLike(Model):
 
     @classmethod
     async def add_like(cls, bottle_id: int, user_id: str) -> "BottleLike":
-        """
-        添加点赞记录
+        """添加点赞记录
 
         参数:
             bottle_id: 漂流瓶ID

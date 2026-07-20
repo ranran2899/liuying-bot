@@ -3,23 +3,26 @@
 
 支持多适配器的漂流瓶功能，包含丢瓶子、捡瓶子、评论、点赞等
 """
-import re
-
-import nonebot
-from nonebot import on_command
 from nonebot.plugin import PluginMetadata
-from nonebot_plugin_alconna import Alconna, Args, UniMsg, on_alconna
+from nonebot_plugin_alconna import (
+    Alconna,
+    Args,
+    CommandMeta,
+    Match,
+    UniMsg,
+    on_alconna,
+)
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.models.bottle import BottleComment, BottleLike, BottleRecord
+from liuying.configs.utils import (
+    Command,
+    PluginExtraData,
+    RegisterConfig,
+)
+from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
-from liuying.utils.platform import PlatformUtils
 
-from . import web_bottle as web_bottle  # noqa: F401,RUF100
-from .config import Config
-from .to_msg import build_bottle_message, save_message_images
-
-config = nonebot.get_plugin_config(Config)
+from .handler import BottleHandler
 
 __plugin_meta__ = PluginMetadata(
     name="漂流瓶",
@@ -30,16 +33,85 @@ __plugin_meta__ = PluginMetadata(
     评论漂流瓶 [编号] [文本]
     点赞漂流瓶 [编号]
     查看漂流瓶 [编号]
-    """,
+    """.strip(),
     type="application",
     homepage="https://github.com/luosheng520qaq/nonebot-plugin-web-bottle",
-    config=Config,
+    extra=PluginExtraData(
+        author="liuying",
+        version="0.3",
+        plugin_type=PluginType.NORMAL,
+        menu_type="娱乐",
+        is_show=True,
+        commands=[
+            Command(command="扔瓶子", description="扔出一个漂流瓶"),
+            Command(command="捡瓶子", description="随机捡一个漂流瓶"),
+            Command(command="查看漂流瓶", description="查看指定漂流瓶"),
+            Command(command="评论漂流瓶", description="评论指定漂流瓶"),
+            Command(command="点赞漂流瓶", description="为指定漂流瓶点赞"),
+        ],
+        configs=[
+            RegisterConfig(
+                key="MAX_BOTTLE_PIC",
+                value=2,
+                help="最大漂流瓶图片数量",
+                default_value=2,
+                type=int,
+            ),
+            RegisterConfig(
+                key="MAX_BOTTLE_LINES",
+                value=9,
+                help="最大漂流瓶文本行数",
+                default_value=9,
+                type=int,
+            ),
+            RegisterConfig(
+                key="MAX_BOTTLE_WORD",
+                value=1200,
+                help="最大漂流瓶文本字符数",
+                default_value=1200,
+                type=int,
+            ),
+            RegisterConfig(
+                key="EMBEDDED_HELP",
+                value=True,
+                help="是否嵌入帮助信息",
+                default_value=True,
+                type=bool,
+            ),
+            RegisterConfig(
+                key="DEFAULT_NICKNAME",
+                value="未知用户",
+                help="UID获取失败时的默认昵称",
+                default_value="未知用户",
+                type=str,
+            ),
+            RegisterConfig(
+                key="BOTTLE_MSG_SPLIT",
+                value=True,
+                help="是否将漂流瓶消息与评论拆分发送",
+                default_value=True,
+                type=bool,
+            ),
+            RegisterConfig(
+                key="MAX_BOTTLE_COMMENTS",
+                value=3,
+                help="单条漂流瓶展示的最大评论数量",
+                default_value=3,
+                type=int,
+            ),
+            RegisterConfig(
+                key="BOTTLE_MSG_UID",
+                value=True,
+                help="是否在消息中展示发送者UID",
+                default_value=True,
+                type=bool,
+            ),
+        ],
+    ).to_dict(),
 )
 
-bottle_help_text = __plugin_meta__.usage
-
-throw_cmd = on_command(
-    "扔瓶子",
+throw_cmd = on_alconna(
+    Alconna("扔瓶子", Args["content?", str], CommandMeta(strict=False)),
     aliases={"丢瓶子"},
     priority=50,
     block=True,
@@ -70,140 +142,53 @@ view_bottle_cmd = on_alconna(
     block=True,
 )
 
-help_cmd = on_alconna(
-    Alconna("漂流瓶"),
-    aliases={"漂流瓶菜单"},
-    priority=50,
-    block=True,
-)
-
-
-@help_cmd.handle()
-async def _():
-    """漂流瓶帮助"""
-    await help_cmd.finish(f"\n漂流瓶使用帮助{bottle_help_text}")
-
-
 @view_bottle_cmd.handle()
 async def _(session: Uninfo, bottle_id: int):
     """查看指定漂流瓶"""
-    bottle = await BottleRecord.get_approved_by_id(bottle_id)
-    if bottle is None:
-        record = await BottleRecord.get_by_id(bottle_id)
-        if record is None:
-            await view_bottle_cmd.finish("漂流瓶不存在")
-        match record.status:
-            case 100:
-                await view_bottle_cmd.finish("漂流瓶已拒绝，无法查看!")
-            case 0:
-                await view_bottle_cmd.finish("漂流瓶未审核")
-            case _:
-                await view_bottle_cmd.finish("发生未知错误!")
-
-    messages = await build_bottle_message(session, bottle)
-    for message in messages:
-        await view_bottle_cmd.send(message)
-    await view_bottle_cmd.finish()
+    logger.info(
+        f"查看漂流瓶 id={bottle_id}",
+        command="查看漂流瓶",
+        session=session,
+    )
+    await BottleHandler.view_bottle(session, bottle_id)
 
 
 @comment_cmd.handle()
 async def _(session: Uninfo, bottle_id: int, content: str):
     """评论漂流瓶"""
-    if not content:
-        await comment_cmd.finish("请输入评论内容")
-
-    bottle = await BottleRecord.get_approved_by_id(bottle_id)
-    if not bottle:
-        await comment_cmd.finish("评论失败，漂流瓶不存在或未通过审核")
-
-    await BottleComment.add_comment(
-        bottle_id=bottle_id,
-        content=content,
-        user_id=session.user.id,
+    logger.info(
+        f"评论漂流瓶 id={bottle_id}",
+        command="评论漂流瓶",
+        session=session,
     )
-    await comment_cmd.finish("评论成功! 等待审核后即可展示~")
+    await BottleHandler.comment_bottle(session, bottle_id, content)
 
 
 @like_bottle_cmd.handle()
 async def _(session: Uninfo, bottle_id: int):
     """点赞漂流瓶"""
-    if await BottleLike.has_liked(bottle_id, session.user.id):
-        await like_bottle_cmd.finish("你已经点赞过了~")
-
-    bottle = await BottleRecord.get_by_id(bottle_id)
-    if not bottle or bottle.status != 200:
-        await like_bottle_cmd.finish("点赞失败，漂流瓶不存在")
-
-    await BottleLike.add_like(bottle_id, session.user.id)
-    new_count = await BottleRecord.add_like(bottle_id)
-
-    if new_count is None:
-        await like_bottle_cmd.finish("点赞失败，请稍后重试")
-
-    await like_bottle_cmd.finish(f"点赞成功! 当前有{new_count}个赞~")
+    logger.info(
+        f"点赞漂流瓶 id={bottle_id}",
+        command="点赞漂流瓶",
+        session=session,
+    )
+    await BottleHandler.like_bottle(session, bottle_id)
 
 
 @get_bottle_cmd.handle()
 async def _(session: Uninfo):
     """捡漂流瓶"""
-    bottle = await BottleRecord.get_random_approved()
-    if not bottle:
-        await get_bottle_cmd.finish("捞瓶子失败，没有漂流瓶~")
-
-    messages = await build_bottle_message(session, bottle)
-    for message in messages:
-        await get_bottle_cmd.send(message)
-    await get_bottle_cmd.finish()
+    logger.info("捡漂流瓶", command="捡瓶子", session=session)
+    await BottleHandler.pick_bottle(session)
 
 
 @throw_cmd.handle()
-async def _(session: Uninfo, message: UniMsg):
+async def _(
+    session: Uninfo,
+    message: UniMsg,
+    content: Match[str],
+):
     """丢瓶子"""
-    text_content = "".join(
-        str(seg) for seg in message if seg.type == "text"
-    ).strip()
-
-    if not text_content and not any(seg.type == "image" for seg in message):
-        if config.embedded_help:
-            await throw_cmd.finish(
-                f"您还没有写好瓶子的内容哦~\n"
-                f"漂流瓶食用方法: {bottle_help_text}"
-            )
-        await throw_cmd.finish("您还没有写好瓶子的内容哦~")
-
-    if text_content and len(text_content) > config.max_bottle_word:
-        await throw_cmd.finish(
-            f"丢瓶子失败啦，请不要超过{config.max_bottle_word}字符哦~"
-        )
-
-    newline_pattern = r"[\r\n]+"
-    newline_count = len(re.findall(newline_pattern, text_content))
-    if text_content and newline_count > config.max_bottle_lines:
-        await throw_cmd.finish(
-            f"丢瓶子失败啦，请不要超过{config.max_bottle_lines}行内容哦~"
-        )
-
-    image_count = sum(1 for seg in message if seg.type == "image")
-    if image_count > config.max_bottle_pic:
-        await throw_cmd.finish(
-            f"丢瓶子失败啦，请不要超过{config.max_bottle_pic}张图片哦~"
-        )
-
-    platform = PlatformUtils.get_platform(session)
-    record = await BottleRecord.create_bottle(
-        content=text_content or None,
-        user_id=session.user.id,
-        group_id=session.scene.id if session.scene.is_group else None,
-        platform=platform,
-    )
-    bottle_id = record.id
-
-    if image_count > 0:
-        try:
-            await save_message_images(bottle_id, message)
-        except Exception as e:
-            logger.error(f"保存漂流瓶图片失败: {e}", "Bottle")
-
-    await throw_cmd.finish(
-        f"丢瓶子成功! 瓶子ID是: {bottle_id}，将在审核通过后出现在大海中~"
-    )
+    logger.info("丢漂流瓶", command="扔瓶子", session=session)
+    text_content = content.result.strip() if content.available else ""
+    await BottleHandler.throw_bottle(session, message, text_content)
