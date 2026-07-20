@@ -19,7 +19,9 @@ from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.message import MessageUtils
 from liuying.utils.rules import ensure_private
 
-from ._data_source import QQBotConfigManager, ReconnectMonitor
+from ._adapter import QQAdapterManager
+from ._data_source import QQBotConfigManager
+from ._monitor import ReconnectMonitor
 
 __plugin_meta__ = PluginMetadata(
     name="QQ机器人配置管理",
@@ -91,24 +93,154 @@ __plugin_meta__ = PluginMetadata(
                 default_value=3,
                 type=int,
             ),
+            RegisterConfig(
+                key="CREDENTIAL_MIN_LEN",
+                value=10,
+                help="凭据(Token/Secret)最小长度",
+                default_value=10,
+                type=int,
+            ),
+            RegisterConfig(
+                key="BOT_ID_MIN_LEN",
+                value=5,
+                help="机器人ID最小长度",
+                default_value=5,
+                type=int,
+            ),
+            RegisterConfig(
+                key="BOT_ID_MAX_LEN",
+                value=20,
+                help="机器人ID最大长度",
+                default_value=20,
+                type=int,
+            ),
+            RegisterConfig(
+                key="CHECK_INTERVAL",
+                value=10.0,
+                help="重连监控检查间隔(秒)",
+                default_value=10.0,
+                type=float,
+            ),
         ],
     ).to_dict(),
 )
 
 
+class _ConfigFormatter:
+    """QQ机器人配置信息格式化器"""
+
+
+    @staticmethod
+    def format_single(config: dict, online: bool) -> str:
+        """格式化单个配置信息
+
+        参数:
+            config: 配置字典
+            online: 是否在线
+
+        返回:
+            str: 格式化后的配置信息字符串
+        """
+        lines = [
+            f"机器人ID: {config['bot_id']}",
+            f"名称: {config.get('bot_name') or '未设置'}",
+            f"连接状态: {'在线' if online else '离线'}",
+            f"Token: {config['token'][:10]}...",
+            f"Secret: {config['secret'][:10]}...",
+            f"WebSocket: {'启用' if config['use_websocket'] else '禁用'}",
+            f"沙箱环境: {'是' if config['is_sandbox'] else '否'}",
+            f"配置状态: {'启用' if config['status'] else '禁用'}",
+        ]
+        if config.get("remark"):
+            lines.append(f"备注: {config['remark']}")
+        lines.append(f"创建时间: {config['create_time']}")
+        if config.get("update_time"):
+            lines.append(f"更新时间: {config['update_time']}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_list(configs: list[dict], online_ids: set[str]) -> str:
+        """格式化配置列表信息
+
+        参数:
+            configs: 配置字典列表
+            online_ids: 在线机器人ID集合
+
+        返回:
+            str: 格式化后的配置列表字符串
+        """
+        parts = [f"共有 {len(configs)} 个QQ机器人配置:\n"]
+        for i, c in enumerate(configs, 1):
+            online_icon = "O" if c["bot_id"] in online_ids else "X"
+            env = "沙箱" if c["is_sandbox"] else "正式"
+            name = c.get("bot_name") or "未命名"
+            parts.append(f"{i}. [{online_icon}] {c['bot_id']} ({name}) [{env}]")
+        return "\n".join(parts)
+
+    @staticmethod
+    def format_intent(
+        intent: dict[str, bool], descriptions: dict[str, str]
+    ) -> str:
+        """格式化意图配置列表
+
+        参数:
+            intent: 意图配置字典
+            descriptions: 字段描述映射
+
+        返回:
+            str: 格式化后的意图配置字符串
+        """
+        lines = ["意图配置:"]
+        for field, value in intent.items():
+            desc = descriptions.get(field, "")
+            status = "启用" if value else "禁用"
+            lines.append(f"  {field} ({desc}): {status}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_status(status: dict) -> str:
+        """格式化适配器状态信息
+
+        参数:
+            status: 适配器状态字典
+
+        返回:
+            str: 格式化后的状态字符串
+        """
+        parts = ["QQ适配器状态:\n"]
+
+        connected = status["connected_bots"]
+        if connected:
+            parts.append(f"已连接机器人 ({len(connected)}个):")
+            parts.extend(
+                f"  - {bot['id']} ({bot['adapter']})" for bot in connected
+            )
+        else:
+            parts.append("已连接机器人: 无")
+
+        configured = status["configured_bots"]
+        if configured:
+            parts.append(f"\n已配置机器人 ({len(configured)}个):")
+            parts.extend(
+                f"  - {bot['id']} [{'WS' if bot['use_websocket'] else 'Webhook'}]"
+                for bot in configured
+            )
+        else:
+            parts.append("\n已配置机器人: 无")
+
+        return "\n".join(parts)
+
+
 @PriorityLifecycle.on_startup(priority=10)
 async def _() -> None:
     """启动时从数据库加载配置到适配器并启动重连监控"""
-    try:
-        success, fail = await QQBotConfigManager.load_configs_to_adapter()
-        if success > 0 or fail > 0:
-            logger.info(
-                f"QQ适配器配置加载: 成功 {success}, 失败 {fail}",
-                "QQBotConfig",
-            )
-        ReconnectMonitor.start()
-    except Exception as e:
-        logger.error(f"加载QQ适配器配置失败: {e}", "QQBotConfig", e=e)
+    success, fail = await QQBotConfigManager.load_configs_to_adapter()
+    if success > 0 or fail > 0:
+        logger.info(
+            f"QQ适配器配置加载: 成功 {success}, 失败 {fail}",
+            "QQBotConfig",
+        )
+    ReconnectMonitor.start()
 
 
 _add_matcher = on_alconna(
@@ -187,74 +319,6 @@ _status_matcher = on_alconna(
 )
 
 
-def _format_single_config(config: dict, online: bool) -> str:
-    """格式化单个配置信息
-
-    参数:
-        config: 配置字典
-        online: 是否在线
-
-    返回:
-        str: 格式化后的配置信息字符串
-    """
-    online_text = "在线" if online else "离线"
-    lines = [
-        f"机器人ID: {config['bot_id']}",
-        f"名称: {config.get('bot_name') or '未设置'}",
-        f"连接状态: {online_text}",
-        f"Token: {config['token'][:10]}...",
-        f"Secret: {config['secret'][:10]}...",
-        f"WebSocket: {'启用' if config['use_websocket'] else '禁用'}",
-        f"沙箱环境: {'是' if config['is_sandbox'] else '否'}",
-        f"配置状态: {'启用' if config['status'] else '禁用'}",
-    ]
-    if config.get("remark"):
-        lines.append(f"备注: {config['remark']}")
-    lines.append(f"创建时间: {config['create_time']}")
-    if config.get("update_time"):
-        lines.append(f"更新时间: {config['update_time']}")
-    return "\n".join(lines)
-
-
-def _format_config_list(configs: list[dict], online_ids: set[str]) -> str:
-    """格式化配置列表信息
-
-    参数:
-        configs: 配置字典列表
-        online_ids: 在线机器人ID集合
-
-    返回:
-        str: 格式化后的配置列表字符串
-    """
-    parts = [f"共有 {len(configs)} 个QQ机器人配置:\n"]
-    for i, c in enumerate(configs, 1):
-        online_icon = "O" if c["bot_id"] in online_ids else "X"
-        env = "沙箱" if c["is_sandbox"] else "正式"
-        name = c.get("bot_name") or "未命名"
-        parts.append(f"{i}. [{online_icon}] {c['bot_id']} ({name}) [{env}]")
-    return "\n".join(parts)
-
-
-def _format_intent_list(
-    intent: dict[str, bool], descriptions: dict[str, str]
-) -> str:
-    """格式化意图配置列表
-
-    参数:
-        intent: 意图配置字典
-        descriptions: 字段描述映射
-
-    返回:
-        str: 格式化后的意图配置字符串
-    """
-    lines = ["意图配置:"]
-    for field, value in intent.items():
-        desc = descriptions.get(field, "")
-        status = "启用" if value else "禁用"
-        lines.append(f"  {field} ({desc}): {status}")
-    return "\n".join(lines)
-
-
 @_add_matcher.handle()
 async def _(
     session: Uninfo,
@@ -284,7 +348,7 @@ async def _(
 async def _(session: Uninfo, bot_id: Match[str]) -> None:
     """查询QQ机器人配置"""
     user_id = session.user.id
-    online_ids = QQBotConfigManager.get_online_bot_ids()
+    online_ids = QQAdapterManager.get_online_bot_ids()
 
     if bot_id.available:
         config = await QQBotConfigManager.get_config(user_id, bot_id.result)
@@ -293,7 +357,9 @@ async def _(session: Uninfo, bot_id: Match[str]) -> None:
                 f"未找到机器人配置: {bot_id.result}"
             ).finish(reply_to=True)
         await MessageUtils.build_message(
-            _format_single_config(config, bot_id.result in online_ids)
+            _ConfigFormatter.format_single(
+                config, bot_id.result in online_ids
+            )
         ).finish(reply_to=True)
     else:
         configs = await QQBotConfigManager.get_user_configs(user_id)
@@ -302,7 +368,7 @@ async def _(session: Uninfo, bot_id: Match[str]) -> None:
                 "暂无QQ机器人配置\n使用 'qq配置添加' 命令添加配置"
             ).finish(reply_to=True)
         await MessageUtils.build_message(
-            _format_config_list(configs, online_ids)
+            _ConfigFormatter.format_list(configs, online_ids)
         ).finish(reply_to=True)
 
 
@@ -391,8 +457,7 @@ async def _(
     if arparma.find("list_fields"):
         descriptions = QQBotConfigManager.get_intent_fields()
         lines = ["可用意图字段:"]
-        for f, desc in descriptions.items():
-            lines.append(f"  {f}: {desc}")
+        lines.extend(f"  {f}: {desc}" for f, desc in descriptions.items())
         await MessageUtils.build_message(
             "\n".join(lines)
         ).finish(reply_to=True)
@@ -415,34 +480,14 @@ async def _(
 
     descriptions = QQBotConfigManager.get_intent_fields()
     await MessageUtils.build_message(
-        f"机器人 {bot_id} {_format_intent_list(intent, descriptions)}"
+        f"机器人 {bot_id} {_ConfigFormatter.format_intent(intent, descriptions)}"
     ).finish(reply_to=True)
 
 
 @_status_matcher.handle()
 async def _() -> None:
     """查询QQ适配器状态"""
-    status = QQBotConfigManager.get_adapter_status()
-
-    msg_parts = ["QQ适配器状态:\n"]
-
-    connected = status["connected_bots"]
-    if connected:
-        msg_parts.append(f"已连接机器人 ({len(connected)}个):")
-        for bot in connected:
-            msg_parts.append(f"  - {bot['id']} ({bot['adapter']})")
-    else:
-        msg_parts.append("已连接机器人: 无")
-
-    configured = status["configured_bots"]
-    if configured:
-        msg_parts.append(f"\n已配置机器人 ({len(configured)}个):")
-        for bot in configured:
-            mode = "WS" if bot["use_websocket"] else "Webhook"
-            msg_parts.append(f"  - {bot['id']} [{mode}]")
-    else:
-        msg_parts.append("\n已配置机器人: 无")
-
+    status = QQAdapterManager.get_adapter_status()
     await MessageUtils.build_message(
-        "\n".join(msg_parts)
+        _ConfigFormatter.format_status(status)
     ).finish(reply_to=True)

@@ -4,52 +4,59 @@ from enum import StrEnum
 
 
 class IntentField(StrEnum):
-    """QQ机器人意图字段枚举"""
+    """QQ机器人意图字段枚举
 
-    GUILDS = "guilds"
+    每个成员的 description 属性存储中文描述,
+    避免 INTENT_DESCRIPTIONS 单独维护造成重复
+    """
+
+    GUILDS = "guilds", "频道事件"
     """频道事件"""
-    GUILD_MEMBERS = "guild_members"
+    GUILD_MEMBERS = "guild_members", "频道成员事件"
     """频道成员事件"""
-    GUILD_MESSAGES = "guild_messages"
+    GUILD_MESSAGES = "guild_messages", "频道消息事件"
     """频道消息事件"""
-    GUILD_MESSAGE_REACTIONS = "guild_message_reactions"
+    GUILD_MESSAGE_REACTIONS = "guild_message_reactions", "频道消息表态事件"
     """频道消息表态事件"""
-    DIRECT_MESSAGE = "direct_message"
+    DIRECT_MESSAGE = "direct_message", "私信事件"
     """私信事件"""
-    OPEN_FORUM_EVENT = "open_forum_event"
+    OPEN_FORUM_EVENT = "open_forum_event", "论坛事件(公开版)"
     """论坛事件(公开版)"""
-    AUDIO_LIVE_MEMBER = "audio_live_member"
+    AUDIO_LIVE_MEMBER = "audio_live_member", "语音直播成员事件"
     """语音直播成员事件"""
-    C2C_GROUP_AT_MESSAGES = "c2c_group_at_messages"
+    C2C_GROUP_AT_MESSAGES = "c2c_group_at_messages", "C2C和群@消息事件"
     """C2C和群@消息事件"""
-    INTERACTION = "interaction"
+    INTERACTION = "interaction", "互动事件"
     """互动事件"""
-    MESSAGE_AUDIT = "message_audit"
+    MESSAGE_AUDIT = "message_audit", "消息审核事件"
     """消息审核事件"""
-    FORUM_EVENT = "forum_event"
+    FORUM_EVENT = "forum_event", "论坛事件"
     """论坛事件"""
-    AUDIO_ACTION = "audio_action"
+    AUDIO_ACTION = "audio_action", "音频操作事件"
     """音频操作事件"""
-    AT_MESSAGES = "at_messages"
+    AT_MESSAGES = "at_messages", "@消息事件"
     """@消息事件"""
+
+    description: str
+    """字段中文描述"""
+
+    def __new__(cls, value: str, description: str) -> "IntentField":
+        """构造枚举成员
+
+        参数:
+            value: 枚举值字符串
+            description: 字段中文描述
+        """
+        member = str.__new__(cls, value)
+        member._value_ = value
+        member.description = description
+        return member
 
 
 INTENT_DESCRIPTIONS: dict[str, str] = {
-    IntentField.GUILDS: "频道事件",
-    IntentField.GUILD_MEMBERS: "频道成员事件",
-    IntentField.GUILD_MESSAGES: "频道消息事件",
-    IntentField.GUILD_MESSAGE_REACTIONS: "频道消息表态事件",
-    IntentField.DIRECT_MESSAGE: "私信事件",
-    IntentField.OPEN_FORUM_EVENT: "论坛事件(公开版)",
-    IntentField.AUDIO_LIVE_MEMBER: "语音直播成员事件",
-    IntentField.C2C_GROUP_AT_MESSAGES: "C2C和群@消息事件",
-    IntentField.INTERACTION: "互动事件",
-    IntentField.MESSAGE_AUDIT: "消息审核事件",
-    IntentField.FORUM_EVENT: "论坛事件",
-    IntentField.AUDIO_ACTION: "音频操作事件",
-    IntentField.AT_MESSAGES: "@消息事件",
+    field.value: field.description for field in IntentField
 }
-"""意图字段描述映射"""
+"""意图字段描述映射(由枚举自动生成)"""
 
 DEFAULT_INTENT: dict[str, bool] = {
     IntentField.GUILDS: True,
