@@ -1,6 +1,7 @@
 """
 定时任务事件系统
-提供任务生命周期的事件回调机制
+
+提供任务生命周期的事件回调机制，采用发布订阅模式解耦调度器与监听器。
 """
 
 import asyncio
@@ -12,7 +13,10 @@ from enum import StrEnum
 from typing import Any
 import uuid
 
+from liuying.utils.apscheduler.constants import SCHEDULER_EVENT_HISTORY_MAX
 from liuying.utils.log import logger
+
+_LOG_COMMAND = "SchedulerEvents"
 
 
 class TaskEventType(StrEnum):
@@ -84,13 +88,16 @@ class TaskEvent:
 
 
 class TaskEventBus:
-    """任务事件总线"""
+    """任务事件总线（单线程 asyncio 模型，无需加锁）"""
 
-    def __init__(self, max_history: int = 1000) -> None:
-        self._subscribers: dict[TaskEventType, list[Callable[[TaskEvent], Any]]] = {}
+    def __init__(
+        self, max_history: int = SCHEDULER_EVENT_HISTORY_MAX
+    ) -> None:
+        self._subscribers: dict[
+            TaskEventType, list[Callable[[TaskEvent], Any]]
+        ] = {}
         self._all_subscribers: list[Callable[[TaskEvent], Any]] = []
         self._event_history: deque[TaskEvent] = deque(maxlen=max_history)
-        self._max_history = max_history
 
     def subscribe(
         self,
@@ -104,17 +111,14 @@ class TaskEventBus:
             event_type: 事件类型，None表示订阅所有事件
             callback: 事件回调函数
         """
-        if event_type is None:
-            self._all_subscribers.append(callback)
-        elif isinstance(event_type, list):
-            for et in event_type:
-                if et not in self._subscribers:
-                    self._subscribers[et] = []
-                self._subscribers[et].append(callback)
-        else:
-            if event_type not in self._subscribers:
-                self._subscribers[event_type] = []
-            self._subscribers[event_type].append(callback)
+        match event_type:
+            case None:
+                self._all_subscribers.append(callback)
+            case list() as types:
+                for et in types:
+                    self._subscribers.setdefault(et, []).append(callback)
+            case TaskEventType() as et:
+                self._subscribers.setdefault(et, []).append(callback)
 
     def unsubscribe(
         self,
@@ -128,17 +132,19 @@ class TaskEventBus:
             event_type: 事件类型，None表示取消所有事件的订阅
             callback: 事件回调函数
         """
-        if event_type is None:
-            if callback in self._all_subscribers:
-                self._all_subscribers.remove(callback)
-        elif isinstance(event_type, list):
-            for et in event_type:
-                if et in self._subscribers and callback in self._subscribers[et]:
-                    self._subscribers[et].remove(callback)
-        else:
-            if event_type in self._subscribers:
-                if callback in self._subscribers[event_type]:
-                    self._subscribers[event_type].remove(callback)
+        match event_type:
+            case None:
+                if callback in self._all_subscribers:
+                    self._all_subscribers.remove(callback)
+            case list() as types:
+                for et in types:
+                    subs = self._subscribers.get(et)
+                    if subs and callback in subs:
+                        subs.remove(callback)
+            case TaskEventType() as et:
+                subs = self._subscribers.get(et)
+                if subs and callback in subs:
+                    subs.remove(callback)
 
     async def emit(self, event: TaskEvent) -> None:
         """
@@ -147,13 +153,12 @@ class TaskEventBus:
         参数:
             event: 任务事件
         """
-        # 保存到历史记录（deque 自动淘汰旧记录，append 原子无需加锁）
+        # deque(maxlen=N) 自动淘汰旧记录，append 原子无需加锁
         self._event_history.append(event)
 
         # 收集所有需要通知的回调
         callbacks = list(self._all_subscribers)
-        if event.event_type in self._subscribers:
-            callbacks.extend(self._subscribers[event.event_type])
+        callbacks.extend(self._subscribers.get(event.event_type, ()))
 
         if not callbacks:
             return
@@ -168,7 +173,9 @@ class TaskEventBus:
                     callback(event)
             except Exception as e:
                 logger.error(
-                    f"事件回调执行失败: {callback.__name__}", e=e
+                    f"事件回调执行失败: {callback.__name__}",
+                    _LOG_COMMAND,
+                    e=e,
                 )
 
         # 等待所有异步任务完成

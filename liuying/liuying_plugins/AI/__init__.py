@@ -39,8 +39,6 @@ __all__ = [
 ]
 # AI插件公开API（供第三方插件注册自定义Agent工具）
 
-_AI_PLUGIN_PRIORITY = 2
-"""AI插件生命周期优先级（数字越小越先执行）"""
 
 __plugin_meta__ = PluginMetadata(
     name="流萤AI",
@@ -120,7 +118,7 @@ __plugin_meta__ = PluginMetadata(
     ).to_dict(),
 )
 
-@PriorityLifecycle.on_startup(priority=_AI_PLUGIN_PRIORITY)
+@PriorityLifecycle.on_startup(priority=1)
 async def _init_ai_plugin() -> None:
     """AI插件初始化
 
@@ -182,12 +180,9 @@ async def _init_ai_plugin() -> None:
     logger.debug("AI技能包已加载", command="AI")
 
 
-@PriorityLifecycle.on_shutdown(priority=_AI_PLUGIN_PRIORITY)
+@PriorityLifecycle.on_shutdown(priority=5)
 async def _shutdown_ai_plugin() -> None:
     """AI插件关闭清理
-
-    通过 PriorityLifecycle 注册，优先级=2，
-    按数字升序执行，先于业务插件关闭。
     """
     # 延迟导入以避免循环依赖：core.llm 模块可能在初始化时
     # 间接引用 AI 插件配置，而 __init__ 在关闭阶段调用 prune_old

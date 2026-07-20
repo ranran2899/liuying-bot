@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Any
 
 from liuying.utils.apscheduler.constants import DEFAULT_MISFIRE_GRACE_TIME
-from liuying.utils.apscheduler.mixins.base import TaskManagerBaseMixin
 from liuying.utils.apscheduler.models import TaskConfig, TaskInfo
 from liuying.utils.apscheduler.triggers import (
     BaseTrigger,
@@ -16,6 +15,10 @@ from liuying.utils.apscheduler.triggers import (
 )
 from liuying.utils.enum import TaskStatus, TriggerType
 from liuying.utils.log import logger
+
+from .base import TaskManagerBaseMixin
+
+_LOG_COMMAND = "TaskRegistration"
 
 
 class TaskRegistrationMixin(TaskManagerBaseMixin):
@@ -104,7 +107,8 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
 
         logger.debug(
             f"注册定时任务: {config.name}({config.task_id}) "
-            f"[分组: {config.group}]"
+            f"[分组: {config.group}]",
+            _LOG_COMMAND,
         )
         return task_info
 
@@ -159,7 +163,8 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
 
         logger.debug(
             f"添加 {config.trigger_type.value} 定时任务: "
-            f"{config.name}({config.task_id})"
+            f"{config.name}({config.task_id})",
+            _LOG_COMMAND,
         )
         return task_info
 

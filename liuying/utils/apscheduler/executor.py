@@ -1,6 +1,7 @@
 """
 任务执行器
-负责任务的实际执行，支持异步、并发控制、失败重试
+
+负责任务的实际执行，支持同步/异步函数、并发实例控制、失败重试。
 """
 
 import asyncio
@@ -9,7 +10,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from liuying.utils.apscheduler.constants import (
+    SCHEDULER_EXECUTOR_SHUTDOWN_WAIT,
+)
 from liuying.utils.log import logger
+
+_LOG_COMMAND = "SchedulerExecutor"
 
 
 @dataclass(slots=True)
@@ -52,10 +58,8 @@ class RetryPolicy:
         """判断是否应该重试"""
         if attempt >= self.max_retries:
             return False
-
         if self.retry_exceptions is None:
             return True
-
         return isinstance(exception, self.retry_exceptions)
 
     def get_delay(self, attempt: int) -> float:
@@ -80,7 +84,6 @@ class TaskExecutor:
         self._retry_policy = retry_policy or RetryPolicy(max_retries=0)
         self._semaphores: dict[str, asyncio.Semaphore] = {}
         self._running_counts: dict[str, int] = {}
-        self._lock = asyncio.Lock()
         self._shutting_down = False
 
     def _get_semaphore(self, task_id: str, max_instances: int) -> asyncio.Semaphore:
@@ -145,12 +148,17 @@ class TaskExecutor:
                     try:
                         on_complete(result)
                     except Exception as e:
-                        logger.error(f"任务完成回调执行失败: {task_id}", e=e)
+                        logger.error(
+                            f"任务完成回调执行失败: {task_id}",
+                            _LOG_COMMAND,
+                            e=e,
+                        )
 
                 return result
             finally:
-                count = self._running_counts.get(task_id, 1)
-                self._running_counts[task_id] = count - 1
+                self._running_counts[task_id] = (
+                    self._running_counts.get(task_id, 1) - 1
+                )
 
     async def _execute_with_retry(
         self,
@@ -162,32 +170,30 @@ class TaskExecutor:
     ) -> ExecutionResult:
         """带重试的任务执行"""
         attempt = 0
-        last_error: Exception | None = None
-        result = ExecutionResult(success=False, start_time=datetime.now())
+        start_time = datetime.now()
 
         while True:
             result = await self._execute_once(task_id, func, args, kwargs, timeout)
-
             if result.success:
                 return result
 
             last_error = result.error
-
-            if last_error and self._retry_policy.should_retry(last_error, attempt):
-                attempt += 1
-                delay = self._retry_policy.get_delay(attempt - 1)
-                logger.warning(
-                    f"任务执行失败，{delay:.1f}秒后重试 (第{attempt}次): {task_id}",
-                    e=last_error,
-                )
-                await asyncio.sleep(delay)
-            else:
+            if not self._retry_policy.should_retry(last_error, attempt):
                 break
+
+            attempt += 1
+            delay = self._retry_policy.get_delay(attempt - 1)
+            logger.warning(
+                f"任务执行失败，{delay:.1f}秒后重试 (第{attempt}次): {task_id}",
+                _LOG_COMMAND,
+                e=last_error,
+            )
+            await asyncio.sleep(delay)
 
         return ExecutionResult(
             success=False,
             error=last_error,
-            start_time=result.start_time,
+            start_time=start_time,
             end_time=datetime.now(),
         )
 
@@ -224,7 +230,10 @@ class TaskExecutor:
             )
 
         except TimeoutError:
-            logger.warning(f"任务执行超时 ({timeout}秒): {task_id}")
+            logger.warning(
+                f"任务执行超时 ({timeout}秒): {task_id}",
+                _LOG_COMMAND,
+            )
             return ExecutionResult(
                 success=False,
                 error=TimeoutError(f"任务执行超时: {timeout}秒"),
@@ -232,7 +241,11 @@ class TaskExecutor:
                 end_time=datetime.now(),
             )
         except Exception as e:
-            logger.error(f"任务执行失败: {task_id}", e=e)
+            logger.error(
+                f"任务执行失败: {task_id}",
+                _LOG_COMMAND,
+                e=e,
+            )
             return ExecutionResult(
                 success=False,
                 error=e,
@@ -240,7 +253,10 @@ class TaskExecutor:
                 end_time=datetime.now(),
             )
 
-    async def shutdown(self, timeout: float = 30.0) -> None:
+    async def shutdown(
+        self,
+        timeout: float = SCHEDULER_EXECUTOR_SHUTDOWN_WAIT,
+    ) -> None:
         """关闭执行器，等待所有运行中的任务完成"""
         # 设置关闭标志，阻止新任务执行
         self._shutting_down = True
@@ -250,7 +266,6 @@ class TaskExecutor:
         ]
 
         if running_task_ids:
-            logger.debug(f"等待 {len(running_task_ids)} 个运行中的任务完成...")
             deadline = asyncio.get_running_loop().time() + timeout
 
             for task_id in running_task_ids:
@@ -268,4 +283,4 @@ class TaskExecutor:
                     except TimeoutError:
                         pass
 
-        logger.debug("任务执行器已关闭")
+        logger.debug("任务执行器已关闭", _LOG_COMMAND)

@@ -1,12 +1,13 @@
 """
 定时任务监控和指标系统
-提供任务执行的统计和监控功能
+
+提供任务执行的统计和监控功能，单线程 asyncio 模型无需加锁。
 """
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 
 @dataclass(slots=True)
@@ -41,11 +42,14 @@ class TaskMetrics:
     """最后失败时间"""
     consecutive_failures: int = 0
     """连续失败次数"""
-    _executions_by_minute: OrderedDict = field(default_factory=OrderedDict)
+    _executions_by_minute: OrderedDict[str, int] = field(
+        default_factory=OrderedDict
+    )
     """每分钟执行次数（使用 OrderedDict 维护时间顺序）"""
     retry_count: int = 0
     """总重试次数"""
-    _max_minute_records: int = 60
+
+    _MAX_MINUTE_RECORDS: ClassVar[int] = 60
     """最大保留分钟记录数"""
 
     @property
@@ -84,14 +88,12 @@ class TaskMetrics:
         返回:
             时间字符串到执行次数的映射
         """
-        result = {}
+        result: dict[str, int] = {}
         for key, count in self._executions_by_minute.items():
-            try:
-                key_time = datetime.strptime(key, "%Y-%m-%d %H:%M")
-                if start <= key_time <= end:
-                    result[key] = count
-            except ValueError:
-                continue
+            # key 由 record_execution 通过 strftime 生成，格式必然合法
+            key_time = datetime.strptime(key, "%Y-%m-%d %H:%M")
+            if start <= key_time <= end:
+                result[key] = count
         return result
 
     @property
@@ -139,7 +141,7 @@ class TaskMetrics:
         self._executions_by_minute[minute_key] = (
             self._executions_by_minute.get(minute_key, 0) + 1
         )
-        while len(self._executions_by_minute) > self._max_minute_records:
+        while len(self._executions_by_minute) > self._MAX_MINUTE_RECORDS:
             self._executions_by_minute.popitem(last=False)
 
         if success:
@@ -296,15 +298,15 @@ class MetricsCollector:
         metrics = self.get_or_create_task_metrics(task_id, task_name, group)
         metrics.record_execution(success, duration, timeout, retry)
 
-        if group not in self._group_metrics:
-            self._group_metrics[group] = TaskMetrics(
+        group_metrics = self._group_metrics.get(group)
+        if group_metrics is None:
+            group_metrics = TaskMetrics(
                 task_id=f"group_{group}",
                 task_name=f"分组 {group}",
                 group=group,
             )
-        self._group_metrics[group].record_execution(
-            success, duration, timeout, retry
-        )
+            self._group_metrics[group] = group_metrics
+        group_metrics.record_execution(success, duration, timeout, retry)
 
     def update_scheduler_metrics(
         self,
@@ -394,8 +396,7 @@ class MetricsCollector:
         参数:
             task_id: 任务ID
         """
-        if task_id in self._task_metrics:
-            del self._task_metrics[task_id]
+        self._task_metrics.pop(task_id, None)
 
     def clear_all(self) -> None:
         """清空所有指标"""

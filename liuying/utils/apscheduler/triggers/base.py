@@ -34,11 +34,11 @@ class BaseTrigger(ABC):
         end_date: datetime | str | None = None,
         timezone: str | None = None,
     ) -> None:
-        self._start_date = self._parse_datetime(start_date) if start_date else None
-        self._end_date = self._parse_datetime(end_date) if end_date else None
+        self._start_date = self.parse_datetime(start_date) if start_date else None
+        self._end_date = self.parse_datetime(end_date) if end_date else None
 
     @staticmethod
-    def _parse_datetime(dt: datetime | str) -> datetime:
+    def parse_datetime(dt: datetime | str) -> datetime:
         """
         解析日期时间，返回 naive datetime
 

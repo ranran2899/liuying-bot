@@ -1,6 +1,7 @@
 """
 定时任务数据模型
-定义任务信息和相关数据结构
+
+定义任务信息、任务配置等数据结构，作为各模块间传递任务的统一载体。
 """
 
 from collections.abc import Callable
@@ -51,7 +52,7 @@ class TaskInfo:
     """触发器配置"""
     max_instances: int = DEFAULT_MAX_INSTANCES
     """最大并发实例数"""
-    args: tuple = field(default_factory=tuple)
+    args: tuple[Any, ...] = field(default_factory=tuple)
     """位置参数"""
     kwargs: dict[str, Any] = field(default_factory=dict)
     """关键字参数"""
@@ -121,7 +122,7 @@ class TaskConfig:
     """任务描述"""
     max_instances: int = DEFAULT_MAX_INSTANCES
     """最大并发实例数"""
-    args: tuple = field(default_factory=tuple)
+    args: tuple[Any, ...] = field(default_factory=tuple)
     """位置参数"""
     kwargs: dict[str, Any] = field(default_factory=dict)
     """关键字参数"""
@@ -135,85 +136,3 @@ class TaskConfig:
     """是否替换已存在的任务"""
     save_to_db: bool = False
     """是否持久化到数据库"""
-
-
-@dataclass(slots=True)
-class TaskExecutionLog:
-    """
-    任务执行日志
-
-    记录任务的执行历史，包括执行时间、结果、错误信息等。
-    """
-
-    task_id: str
-    """任务ID"""
-    task_name: str
-    """任务名称"""
-    start_time: datetime
-    """开始时间"""
-    end_time: datetime | None = None
-    """结束时间"""
-    success: bool = False
-    """是否成功"""
-    error_message: str | None = None
-    """错误信息"""
-    result: Any = None
-    """执行结果"""
-
-    @property
-    def duration(self) -> float | None:
-        """执行耗时（秒）"""
-        if self.end_time:
-            return (self.end_time - self.start_time).total_seconds()
-        return None
-
-    def to_dict(self) -> dict[str, Any]:
-        """转换为字典格式"""
-        return {
-            "task_id": self.task_id,
-            "task_name": self.task_name,
-            "start_time": self.start_time.isoformat(),
-            "end_time": self.end_time.isoformat() if self.end_time else None,
-            "success": self.success,
-            "error_message": self.error_message,
-            "duration": self.duration,
-        }
-
-
-@dataclass(slots=True)
-class TaskGroup:
-    """
-    任务分组
-
-    用于组织和管理一组相关任务。
-    """
-
-    name: str
-    """分组名称"""
-    description: str = ""
-    """分组描述"""
-    task_ids: list[str] = field(default_factory=list)
-    """任务ID列表"""
-    created_at: datetime = field(default_factory=datetime.now)
-    """创建时间"""
-
-    def add_task(self, task_id: str) -> None:
-        """添加任务到分组"""
-        if task_id not in self.task_ids:
-            self.task_ids.append(task_id)
-
-    def remove_task(self, task_id: str) -> bool:
-        """从分组移除任务"""
-        if task_id in self.task_ids:
-            self.task_ids.remove(task_id)
-            return True
-        return False
-
-    def to_dict(self) -> dict[str, Any]:
-        """转换为字典格式"""
-        return {
-            "name": self.name,
-            "description": self.description,
-            "task_ids": self.task_ids,
-            "created_at": self.created_at.isoformat(),
-        }

@@ -1,6 +1,8 @@
 """
 任务管理器 Mixin 基类
-定义 Mixin 的公共接口和类型约定
+
+定义 Mixin 的公共接口和类型约定，所有 Mixin 应继承此类。
+运行时通过 TaskManager 实例访问 _scheduler、_tasks、_groups 等属性。
 """
 
 from typing import TYPE_CHECKING

@@ -1,16 +1,20 @@
 """
 任务生命周期管理 Mixin
-负责任务的移除、暂停、恢复、修改和立即执行
+
+负责任务的移除、暂停、恢复、修改和立即执行。
 """
 
 from typing import Any
 
 from liuying.models.scheduler_job import SchedulerJob
-from liuying.utils.apscheduler.mixins.base import TaskManagerBaseMixin
 from liuying.utils.apscheduler.models import TaskInfo
 from liuying.utils.apscheduler.triggers import trigger_factory
 from liuying.utils.enum import TaskStatus, TriggerType
 from liuying.utils.log import logger
+
+from .base import TaskManagerBaseMixin
+
+_LOG_COMMAND = "TaskLifecycle"
 
 
 class TaskLifecycleMixin(TaskManagerBaseMixin):
@@ -35,7 +39,7 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
         """
         task = self._tasks.get(task_id)
         if task is None:
-            logger.warning(f"任务 '{task_id}' 不存在")
+            logger.warning(f"任务 '{task_id}' 不存在", _LOG_COMMAND)
         return task
 
     async def remove_task(
@@ -56,23 +60,22 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
 
         group = task_info.group
 
-        try:
-            self._scheduler.remove_task(task_id)
-            del self._tasks[task_id]
+        self._scheduler.remove_task(task_id)
+        del self._tasks[task_id]
 
-            if group in self._groups and task_id in self._groups[group]:
-                self._groups[group].remove(task_id)
-                if not self._groups[group]:
-                    del self._groups[group]
+        if group in self._groups and task_id in self._groups[group]:
+            self._groups[group].remove(task_id)
+            if not self._groups[group]:
+                del self._groups[group]
 
-            if delete_from_db:
-                await SchedulerJob.delete_job(task_id)
+        if delete_from_db:
+            await SchedulerJob.delete_job(task_id)
 
-            logger.info(f"移除定时任务: {task_info.name}({task_id})")
-            return True
-        except Exception as e:
-            logger.error(f"移除任务 '{task_id}' 失败", e=e)
-            return False
+        logger.info(
+            f"移除定时任务: {task_info.name}({task_id})",
+            _LOG_COMMAND,
+        )
+        return True
 
     async def pause_task(
         self, task_id: str, update_db: bool = True
@@ -90,18 +93,17 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
         if task_info is None:
             return False
 
-        try:
-            self._scheduler.pause_task(task_id)
-            task_info.status = TaskStatus.PAUSED
+        self._scheduler.pause_task(task_id)
+        task_info.status = TaskStatus.PAUSED
 
-            if update_db:
-                await SchedulerJob.update_job_status(task_id, paused=True)
+        if update_db:
+            await SchedulerJob.update_job_status(task_id, paused=True)
 
-            logger.info(f"暂停定时任务: {task_info.name}({task_id})")
-            return True
-        except Exception as e:
-            logger.error(f"暂停任务 '{task_id}' 失败", e=e)
-            return False
+        logger.info(
+            f"暂停定时任务: {task_info.name}({task_id})",
+            _LOG_COMMAND,
+        )
+        return True
 
     async def resume_task(
         self, task_id: str, update_db: bool = True
@@ -119,18 +121,17 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
         if task_info is None:
             return False
 
-        try:
-            self._scheduler.resume_task(task_id)
-            task_info.status = TaskStatus.RUNNING
+        self._scheduler.resume_task(task_id)
+        task_info.status = TaskStatus.RUNNING
 
-            if update_db:
-                await SchedulerJob.update_job_status(task_id, paused=False)
+        if update_db:
+            await SchedulerJob.update_job_status(task_id, paused=False)
 
-            logger.info(f"恢复定时任务: {task_info.name}({task_id})")
-            return True
-        except Exception as e:
-            logger.error(f"恢复任务 '{task_id}' 失败", e=e)
-            return False
+        logger.info(
+            f"恢复定时任务: {task_info.name}({task_id})",
+            _LOG_COMMAND,
+        )
+        return True
 
     def modify_task(
         self,
@@ -165,52 +166,49 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
         if task_info is None:
             return False
 
-        try:
-            new_trigger = None
-            new_trigger_type_enum: TriggerType | None = None
+        new_trigger = None
+        new_trigger_type_enum: TriggerType | None = None
 
-            if trigger_type and trigger_config:
-                new_trigger_type_enum = TriggerType(trigger_type)
-                new_trigger = trigger_factory.create(
-                    trigger_type, trigger_config
-                )
+        if trigger_type and trigger_config:
+            new_trigger_type_enum = TriggerType(trigger_type)
+            new_trigger = trigger_factory.create(trigger_type, trigger_config)
 
-            self._scheduler.modify_task(
-                task_id,
-                trigger=new_trigger,
-                trigger_type=new_trigger_type_enum,
-                trigger_config=trigger_config,
-                name=name,
-                group=group,
-                priority=priority,
-                max_instances=max_instances,
-                description=description,
-                misfire_grace_time=misfire_grace_time,
-            )
+        self._scheduler.modify_task(
+            task_id,
+            trigger=new_trigger,
+            trigger_type=new_trigger_type_enum,
+            trigger_config=trigger_config,
+            name=name,
+            group=group,
+            priority=priority,
+            max_instances=max_instances,
+            description=description,
+            misfire_grace_time=misfire_grace_time,
+        )
 
-            if new_trigger_type_enum:
-                task_info.trigger_type = new_trigger_type_enum
-            if trigger_config:
-                task_info.trigger_config.update(trigger_config)
+        if new_trigger_type_enum:
+            task_info.trigger_type = new_trigger_type_enum
+        if trigger_config:
+            task_info.trigger_config.update(trigger_config)
 
-            for field_name, value in [
-                ("name", name),
-                ("group", group),
-                ("priority", priority),
-                ("max_instances", max_instances),
-                ("description", description),
-            ]:
-                if value is not None:
-                    setattr(task_info, field_name, value)
+        for field_name, value in [
+            ("name", name),
+            ("group", group),
+            ("priority", priority),
+            ("max_instances", max_instances),
+            ("description", description),
+        ]:
+            if value is not None:
+                setattr(task_info, field_name, value)
 
-            if misfire_grace_time is not None and misfire_grace_time is not False:
-                task_info.misfire_grace_time = misfire_grace_time
+        if misfire_grace_time is not None and misfire_grace_time is not False:
+            task_info.misfire_grace_time = misfire_grace_time
 
-            logger.info(f"修改定时任务: {task_info.name}({task_id})")
-            return True
-        except Exception as e:
-            logger.error(f"修改任务 '{task_id}' 失败", e=e)
-            return False
+        logger.info(
+            f"修改定时任务: {task_info.name}({task_id})",
+            _LOG_COMMAND,
+        )
+        return True
 
     def run_task_now(self, task_id: str) -> bool:
         """立即执行指定任务(不等待触发器)
@@ -225,10 +223,9 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
         if task_info is None:
             return False
 
-        try:
-            self._scheduler.run_task_now(task_id)
-            logger.info(f"立即执行定时任务: {task_info.name}({task_id})")
-            return True
-        except Exception as e:
-            logger.error(f"立即执行任务 '{task_id}' 失败", e=e)
-            return False
+        self._scheduler.run_task_now(task_id)
+        logger.info(
+            f"立即执行定时任务: {task_info.name}({task_id})",
+            _LOG_COMMAND,
+        )
+        return True

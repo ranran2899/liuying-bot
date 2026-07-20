@@ -1,6 +1,7 @@
 """
 核心调度器
-负责任务调度、优先级管理、依赖关系处理
+
+负责任务调度、优先级管理、依赖关系处理，采用懒删除的优先级队列优化性能。
 """
 
 import asyncio
@@ -14,22 +15,26 @@ from typing import Any
 
 from liuying.models.scheduler_job import SchedulerJob
 from liuying.utils.apscheduler.alert import alert_manager
-from liuying.utils.apscheduler.constants import DEFAULT_MISFIRE_GRACE_TIME
+from liuying.utils.apscheduler.constants import (
+    COMPLETED_TASK_TTL,
+    DEFAULT_MISFIRE_GRACE_TIME,
+    SCHEDULER_DEPENDENCY_RETRY_DELAY,
+    SCHEDULER_RUN_NOW_PRIORITY,
+    SCHEDULER_SHUTDOWN_WAIT,
+)
 from liuying.utils.apscheduler.events import (
     TaskEvent,
     TaskEventType,
     event_bus,
 )
 from liuying.utils.apscheduler.executor import ExecutionResult, TaskExecutor
-from liuying.utils.apscheduler.metrics import (
-    metrics_collector,
-)
+from liuying.utils.apscheduler.metrics import metrics_collector
 from liuying.utils.apscheduler.models import TaskInfo
 from liuying.utils.apscheduler.triggers import BaseTrigger, DateTrigger
 from liuying.utils.enum import TaskStatus, TriggerType
 from liuying.utils.log import logger
 
-_COMPLETED_TASK_TTL = 86400
+_LOG_COMMAND = "Scheduler"
 
 
 def _to_naive_datetime(dt: datetime) -> datetime:
@@ -74,7 +79,7 @@ class TaskEntry(TaskInfo):
     在 TaskInfo 基础上添加调度器所需的触发器实例和运行时属性。
     """
 
-    trigger: BaseTrigger = field(default=None, repr=False)
+    trigger: BaseTrigger | None = field(default=None, repr=False)
     """触发器实例"""
     _version: int = field(default=0, repr=False)
     """版本计数器，用于懒删除"""
@@ -100,6 +105,9 @@ class TaskEntry(TaskInfo):
         """刷新下次运行时间缓存"""
         if isinstance(self.trigger, DateTrigger):
             self._cached_next_run_time = self.trigger.run_date
+            return
+        if self.trigger is None:
+            self._cached_next_run_time = None
             return
         result = self.trigger.get_next_run_time(self.last_run_time)
         self._cached_next_run_time = result.next_run_time
@@ -139,7 +147,7 @@ class Scheduler:
 
         self._running = True
         self._scheduler_task = asyncio.create_task(self._run_loop())
-        logger.info("定时任务调度器已启动")
+        logger.info("定时任务调度器已启动", _LOG_COMMAND)
 
     async def stop(self, wait: bool = True) -> None:
         """停止调度器"""
@@ -149,7 +157,9 @@ class Scheduler:
         if self._scheduler_task:
             if wait:
                 try:
-                    await asyncio.wait_for(self._scheduler_task, timeout=5.0)
+                    await asyncio.wait_for(
+                        self._scheduler_task, timeout=SCHEDULER_SHUTDOWN_WAIT
+                    )
                 except TimeoutError:
                     self._scheduler_task.cancel()
                     try:
@@ -160,7 +170,7 @@ class Scheduler:
                 self._scheduler_task.cancel()
 
         await self._executor.shutdown()
-        logger.info("定时任务调度器已停止")
+        logger.info("定时任务调度器已停止", _LOG_COMMAND)
 
     def add_task(
         self,
@@ -189,9 +199,7 @@ class Scheduler:
         if deps:
             cycle = self._detect_cycle(task_id, deps)
             if cycle:
-                raise ValueError(
-                    f"检测到循环依赖: {' -> '.join(cycle)}"
-                )
+                raise ValueError(f"检测到循环依赖: {' -> '.join(cycle)}")
 
         entry = TaskEntry(
             id=task_id, name=name, trigger=trigger, func=func,
@@ -205,9 +213,8 @@ class Scheduler:
 
         self._tasks[task_id] = entry
         self._schedule_task(entry)
-        self._wakeup_event.set()
 
-        logger.debug(f"添加定时任务: {name}({task_id})")
+        self._update_metrics()
         return entry
 
     def _detect_cycle(
@@ -259,7 +266,6 @@ class Scheduler:
         next_time = entry.next_run_time
 
         if next_time is None:
-            logger.debug(f"任务 {entry.id} 没有下次运行时间")
             return
 
         scheduled = ScheduledTask(
@@ -270,14 +276,13 @@ class Scheduler:
         )
 
         heapq.heappush(self._priority_queue, scheduled)
-        logger.debug(
-            f"任务 {entry.id} 已加入队列, "
-            f"下次运行时间: {scheduled.next_run_time}, "
-            f"版本: {scheduled.version}"
-        )
         self._wakeup_event.set()
 
-    def _reschedule_after_delay(self, entry: TaskEntry, seconds: float = 1.0) -> None:
+    def _reschedule_after_delay(
+        self,
+        entry: TaskEntry,
+        seconds: float = SCHEDULER_DEPENDENCY_RETRY_DELAY,
+    ) -> None:
         """延迟指定秒数后重新调度任务（用于依赖未满足等场景，避免忙等）"""
         next_time = _get_now() + timedelta(seconds=seconds)
         scheduled = ScheduledTask(
@@ -287,10 +292,6 @@ class Scheduler:
             version=entry.version,
         )
         heapq.heappush(self._priority_queue, scheduled)
-        logger.debug(
-            f"任务 {entry.id} 将在 {seconds} 秒后重新检查依赖, "
-            f"版本: {scheduled.version}"
-        )
         self._wakeup_event.set()
 
     def remove_task(self, task_id: str) -> bool:
@@ -302,7 +303,7 @@ class Scheduler:
         self._tasks[task_id].bump_version()
         del self._tasks[task_id]
 
-        logger.debug(f"移除定时任务: {task_id}")
+        self._update_metrics()
         return True
 
     def pause_task(self, task_id: str) -> bool:
@@ -313,6 +314,7 @@ class Scheduler:
         self._tasks[task_id].status = TaskStatus.PAUSED
         self._tasks[task_id].bump_version()
 
+        self._update_metrics()
         return True
 
     def resume_task(self, task_id: str) -> bool:
@@ -323,8 +325,8 @@ class Scheduler:
         entry = self._tasks[task_id]
         entry.status = TaskStatus.RUNNING
         self._schedule_task(entry)
-        self._wakeup_event.set()
 
+        self._update_metrics()
         return True
 
     def modify_task(
@@ -374,7 +376,6 @@ class Scheduler:
 
         if entry.status == TaskStatus.RUNNING:
             self._schedule_task(entry)
-            self._wakeup_event.set()
 
         return True
 
@@ -388,7 +389,7 @@ class Scheduler:
         scheduled = ScheduledTask(
             next_run_time=_get_now(),
             task_id=entry.id,
-            priority=-1000,
+            priority=SCHEDULER_RUN_NOW_PRIORITY,
             version=entry.version,
         )
 
@@ -407,10 +408,9 @@ class Scheduler:
 
     async def _run_loop(self) -> None:
         """调度循环"""
-        logger.debug("调度循环开始运行")
         while self._running:
             try:
-                await self._process_tasks()
+                self._process_tasks()
 
                 wait_time = self._get_next_wait_time()
                 match wait_time:
@@ -430,10 +430,10 @@ class Scheduler:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error("调度循环异常", e=e)
+                logger.error("调度循环异常", _LOG_COMMAND, e=e)
                 await asyncio.sleep(1)
 
-    async def _process_tasks(self) -> None:
+    def _process_tasks(self) -> None:
         """处理到期任务（支持批量弹出同一秒内的多个任务）"""
         while self._priority_queue:
             now = _get_now()
@@ -454,29 +454,16 @@ class Scheduler:
                 continue
 
             if entry.status != TaskStatus.RUNNING:
-                logger.debug(
-                    f"任务 {scheduled.task_id} 状态不是 RUNNING: {entry.status}"
-                )
                 continue
 
             if self._check_misfire(entry, scheduled, now):
-                logger.warning(f"任务错过执行: {entry.name}({entry.id})")
-                if isinstance(entry.trigger, DateTrigger):
-                    entry.status = TaskStatus.FAILED
-                    logger.error(
-                        f"一次性任务错过执行时间，标记为失败: "
-                        f"{entry.name}({entry.id})"
-                    )
-                else:
-                    self._schedule_task(entry)
+                self._handle_misfire(entry)
                 continue
 
             if not self._check_dependencies(entry):
-                logger.debug(f"任务依赖未满足: {entry.name}({entry.id})")
-                self._reschedule_after_delay(entry, seconds=1)
+                self._reschedule_after_delay(entry)
                 continue
 
-            logger.debug(f"开始执行任务: {entry.name}({entry.id})")
             asyncio.create_task(self._execute_task(entry))
 
     def _check_misfire(
@@ -489,6 +476,43 @@ class Scheduler:
         elapsed = (now - scheduled.next_run_time).total_seconds()
         return elapsed > entry.misfire_grace_time
 
+    def _handle_misfire(self, entry: TaskEntry) -> None:
+        """处理错过执行：发布事件、告警、重调度或标记失败"""
+        logger.warning(
+            f"任务错过执行: {entry.name}({entry.id})",
+            _LOG_COMMAND,
+        )
+
+        # 发布错过执行事件并触发告警
+        asyncio.create_task(
+            self._event_bus.emit(
+                TaskEvent(
+                    event_type=TaskEventType.TASK_MISSED,
+                    task_id=entry.id,
+                    task_name=entry.name,
+                    group=entry.group,
+                    trigger_type=entry.trigger_type.value,
+                )
+            )
+        )
+        asyncio.create_task(
+            self._alert_manager.check_missed(
+                task_id=entry.id,
+                task_name=entry.name,
+                group=entry.group,
+            )
+        )
+
+        if isinstance(entry.trigger, DateTrigger):
+            entry.status = TaskStatus.FAILED
+            logger.error(
+                f"一次性任务错过执行时间，标记为失败: "
+                f"{entry.name}({entry.id})",
+                _LOG_COMMAND,
+            )
+        else:
+            self._schedule_task(entry)
+
     def _check_dependencies(self, entry: TaskEntry) -> bool:
         """检查依赖是否满足（增量维护已完成集合，O(deps) 子集判断）"""
         self._cleanup_completed_tasks()
@@ -499,14 +523,13 @@ class Scheduler:
     async def _execute_task(self, entry: TaskEntry) -> None:
         """执行任务（独立计时器，合并异步回调）"""
         if not self._executor.can_run(entry.id, entry.max_instances):
-            logger.debug(f"任务达到最大并发数: {entry.name}({entry.id})")
             self._schedule_task(entry)
             return
 
         # 独立计时器，避免并发冲突
         start_perf = time.perf_counter()
 
-        await self._event_bus.emit(
+        await self._emit_event(
             TaskEvent(
                 event_type=TaskEventType.TASK_STARTED,
                 task_id=entry.id,
@@ -524,8 +547,6 @@ class Scheduler:
             success = result.success
 
             if success:
-                logger.debug(f"任务执行成功: {entry.name}({entry.id})")
-
                 if isinstance(entry.trigger, DateTrigger):
                     entry.trigger.mark_executed()
                     entry.status = TaskStatus.COMPLETED
@@ -538,7 +559,10 @@ class Scheduler:
                     "duration": duration, "result": str(result.result),
                 }
             else:
-                logger.error(f"任务执行失败: {entry.name}({entry.id})")
+                logger.error(
+                    f"任务执行失败: {entry.name}({entry.id})",
+                    _LOG_COMMAND,
+                )
                 entry.status = TaskStatus.FAILED
                 self._schedule_task(entry)
 
@@ -568,6 +592,11 @@ class Scheduler:
         self._completed_times.append(now_ts)
         self._completed_ids.add(task_id)
 
+    async def _emit_event(self, event: TaskEvent) -> None:
+        """发布事件并更新事件计数"""
+        await self._event_bus.emit(event)
+        self._metrics.increment_event_count()
+
     async def _post_execute(
         self,
         entry: TaskEntry,
@@ -578,7 +607,7 @@ class Scheduler:
     ) -> None:
         """执行后统一处理（事件、指标、告警、数据库清理）"""
         try:
-            await self._event_bus.emit(
+            await self._emit_event(
                 TaskEvent(
                     event_type=event_type,
                     task_id=entry.id,
@@ -596,47 +625,6 @@ class Scheduler:
                 duration=duration,
             )
 
-            await self._check_and_alert(entry, duration, success)
-
-            if success and isinstance(entry.trigger, DateTrigger):
-                await self._cleanup_completed_date_task(entry)
-
-        except Exception as e:
-            logger.error(f"任务后处理异常: {entry.id}", e=e)
-
-    async def _cleanup_completed_date_task(self, entry: TaskEntry) -> None:
-        """
-        清理已完成的一次性任务
-
-        对于持久化到数据库的一次性任务，执行完成后需要从数据库删除
-        """
-        if not entry.save_to_db:
-            return
-
-        try:
-            deleted = await SchedulerJob.delete_job(entry.id)
-            if deleted:
-                logger.info(
-                    f"一次性任务执行完成，已从数据库删除: {entry.name}({entry.id})"
-                )
-            else:
-                logger.debug(
-                    f"一次性任务未在数据库中找到: {entry.name}({entry.id})"
-                )
-        except Exception as e:
-            logger.error(
-                f"删除一次性任务数据库记录失败: {entry.name}({entry.id})",
-                e=e
-            )
-
-    async def _check_and_alert(
-        self,
-        entry: TaskEntry,
-        duration: float,
-        success: bool,
-    ) -> None:
-        """检查并触发告警"""
-        try:
             await self._alert_manager.check_timeout(
                 task_id=entry.id,
                 task_name=entry.name,
@@ -650,15 +638,39 @@ class Scheduler:
                 group=entry.group,
                 duration=duration,
             )
+
+            if success and isinstance(entry.trigger, DateTrigger):
+                await self._cleanup_completed_date_task(entry)
+
         except Exception as e:
-            logger.error(f"告警检查异常: {entry.id}", e=e)
+            logger.error(
+                f"任务后处理异常: {entry.id}",
+                _LOG_COMMAND,
+                e=e,
+            )
+
+    async def _cleanup_completed_date_task(self, entry: TaskEntry) -> None:
+        """
+        清理已完成的一次性任务
+
+        对于持久化到数据库的一次性任务，执行完成后需要从数据库删除
+        """
+        if not entry.save_to_db:
+            return
+
+        deleted = await SchedulerJob.delete_job(entry.id)
+        if deleted:
+            logger.info(
+                f"一次性任务执行完成，已从数据库删除: {entry.name}({entry.id})",
+                _LOG_COMMAND,
+            )
 
     def _cleanup_completed_tasks(self) -> None:
         """清理过期的已完成任务记录（bisect 二分查找 + 平行时间列表）"""
         if not self._completed_tasks:
             return
 
-        cutoff = time.time() - _COMPLETED_TASK_TTL
+        cutoff = time.time() - COMPLETED_TASK_TTL
         idx = bisect.bisect_left(self._completed_times, cutoff)
 
         if idx > 0:
@@ -683,6 +695,16 @@ class Scheduler:
 
         return None
 
-    def mark_dependency_completed(self, task_id: str) -> None:
-        """标记依赖任务已完成"""
-        self._add_completed_record(task_id)
+    def _update_metrics(self) -> None:
+        """更新调度器指标（任务数、队列大小）"""
+        total = len(self._tasks)
+        paused = sum(
+            1 for t in self._tasks.values()
+            if t.status == TaskStatus.PAUSED
+        )
+        self._metrics.update_scheduler_metrics(
+            total_tasks=total,
+            running_tasks=total - paused,
+            paused_tasks=paused,
+            queue_size=len(self._priority_queue),
+        )

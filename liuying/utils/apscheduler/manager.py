@@ -1,16 +1,14 @@
 """
 高级定时任务管理器
-提供统一的定时任务管理功能,支持任务注册、调度执行、周期管理、异常处理等核心功能
 
-主要特性:
-- 完全自主实现的定时任务调度器,无外部依赖
-- 支持 cron 表达式、固定时间间隔和特定日期时间三种触发器类型
-- 提供装饰器和类接口两种使用方式
-- 支持任务的添加、删除、修改、暂停、恢复等完整功能
-- 支持任务信息查询和分组管理
-- 采用单例模式设计,确保全局唯一的任务管理器实例
+通过 Mixin 组合实现职责分离，提供统一的定时任务管理入口：
+- 任务注册、调度执行、周期管理、异常处理等核心功能
+- 支持 cron、interval、date 三种触发器
+- 支持装饰器和类接口两种使用方式
 - 支持任务优先级、依赖关系和失败重试机制
-- 支持数据库持久化存储,项目重启后自动恢复任务
+- 支持数据库持久化存储，项目重启后自动恢复任务
+
+采用单例模式设计，确保全局唯一的任务管理器实例。
 """
 
 from liuying.utils.apscheduler.alert import alert_manager
@@ -23,9 +21,12 @@ from liuying.utils.apscheduler.mixins import (
     TaskRegistrationMixin,
 )
 from liuying.utils.apscheduler.mixins.decorator import _pending_tasks
+from liuying.utils.apscheduler.models import TaskInfo
 from liuying.utils.apscheduler.scheduler import Scheduler
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
+
+_LOG_COMMAND = "TaskManager"
 
 
 class TaskManager(
@@ -39,7 +40,7 @@ class TaskManager(
     """
     高级定时任务管理器
 
-    通过 Mixin 组合实现职责分离,各模块功能:
+    通过 Mixin 组合实现职责分离，各模块功能:
     - TaskRegistrationMixin: 任务注册与触发器创建
     - TaskLifecycleMixin: 任务生命周期管理(暂停/恢复/移除/修改)
     - TaskGroupMixin: 分组管理
@@ -50,7 +51,7 @@ class TaskManager(
 
     def __init__(self) -> None:
         self._scheduler = Scheduler()
-        self._tasks: dict[str, object] = {}
+        self._tasks: dict[str, TaskInfo] = {}
         self._groups: dict[str, list[str]] = {}
         self._started = False
 
@@ -61,7 +62,7 @@ class TaskManager(
         self._started = True
         await self._scheduler.start()
         await alert_manager.start()
-        logger.info("定时任务管理器已启动")
+        logger.info("定时任务管理器已启动", _LOG_COMMAND)
 
     async def stop(self) -> None:
         """停止任务管理器"""
@@ -70,7 +71,7 @@ class TaskManager(
         self._started = False
         await alert_manager.stop()
         await self._scheduler.stop()
-        logger.info("定时任务管理器已停止")
+        logger.info("定时任务管理器已停止", _LOG_COMMAND)
 
 
 async def register_pending_tasks(task_manager: TaskManager) -> int:
@@ -83,7 +84,7 @@ async def register_pending_tasks(task_manager: TaskManager) -> int:
         成功注册的任务数量
     """
     count = 0
-    for _trigger_type, _func, config in _pending_tasks:
+    for _, _, config in _pending_tasks:
         try:
             existing_task = task_manager.get_task(config.task_id)
 
@@ -98,7 +99,9 @@ async def register_pending_tasks(task_manager: TaskManager) -> int:
             count += 1
         except Exception as e:
             logger.error(
-                f"注册装饰器任务失败: {config.task_id}", e=e
+                f"注册装饰器任务失败: {config.task_id}",
+                _LOG_COMMAND,
+                e=e,
             )
 
     _pending_tasks.clear()
@@ -118,7 +121,8 @@ async def _restore_scheduler_tasks():
     if total_count > 0:
         logger.info(
             f"已加载 {total_count} 个定时任务 "
-            f"(数据库: {restored_count}, 装饰器: {pending_count})"
+            f"(数据库: {restored_count}, 装饰器: {pending_count})",
+            _LOG_COMMAND,
         )
 
 

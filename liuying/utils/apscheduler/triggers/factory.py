@@ -1,14 +1,12 @@
 """
 触发器工厂
-提供统一的触发器创建接口，通过注册表查表解耦各模块对触发器创建的依赖
+
+提供统一的触发器创建接口，通过注册表查表解耦各模块对触发器创建的依赖。
 """
 
 from typing import Any
 
-from liuying.utils.apscheduler.triggers.base import (
-    _TRIGGER_REGISTRY,
-    BaseTrigger,
-)
+from .base import _TRIGGER_REGISTRY, BaseTrigger
 
 
 class TriggerFactory:

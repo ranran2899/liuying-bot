@@ -1,6 +1,7 @@
 """
 任务持久化 Mixin
-负责任务的数据库持久化、恢复和动态函数加载
+
+负责任务的数据库持久化、恢复和动态函数加载。
 """
 
 import asyncio
@@ -10,12 +11,15 @@ from importlib import import_module
 from typing import Any
 
 from liuying.models.scheduler_job import SchedulerJob
-from liuying.utils.apscheduler.mixins.base import TaskManagerBaseMixin
 from liuying.utils.apscheduler.models import TaskConfig
 from liuying.utils.apscheduler.triggers import trigger_factory
 from liuying.utils.apscheduler.triggers.base import BaseTrigger
 from liuying.utils.enum import TaskStatus, TriggerType
 from liuying.utils.log import logger
+
+from .base import TaskManagerBaseMixin
+
+_LOG_COMMAND = "TaskPersistence"
 
 
 class TaskPersistenceMixin(TaskManagerBaseMixin):
@@ -110,7 +114,11 @@ class TaskPersistenceMixin(TaskManagerBaseMixin):
             module = import_module(func_module)
             return getattr(module, func_name)
         except Exception as e:
-            logger.error(f"加载函数 {func_module}.{func_name} 失败", e=e)
+            logger.error(
+                f"加载函数 {func_module}.{func_name} 失败",
+                _LOG_COMMAND,
+                e=e,
+            )
             return None
 
     async def _handle_expired_date_task(
@@ -125,33 +133,33 @@ class TaskPersistenceMixin(TaskManagerBaseMixin):
         返回:
             是否执行了过期任务
         """
+        run_date_str = job.trigger_args_dict.get("run_date")
+        if not run_date_str:
+            return False
+
+        run_date = BaseTrigger.parse_datetime(run_date_str)
+        if run_date > datetime.now():
+            return False
+
+        logger.info(
+            f"检测到过期的一次性任务: {job.name}({job.job_id}), "
+            f"计划执行时间: {run_date}, 立即执行",
+            _LOG_COMMAND,
+        )
+
         try:
-            run_date_str = job.trigger_args_dict.get("run_date")
-            if not run_date_str:
-                return False
-
-            run_date = BaseTrigger._parse_datetime(run_date_str)
-
-            if run_date > datetime.now():
-                return False
-
-            logger.info(
-                f"检测到过期的一次性任务: {job.name}({job.job_id}), "
-                f"计划执行时间: {run_date}, 立即执行"
+            result = func(*job.args_list, **job.kwargs_dict)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as e:
+            logger.error(
+                f"执行过期任务 {job.job_id} 失败",
+                _LOG_COMMAND,
+                e=e,
             )
 
-            try:
-                result = func(*job.args_list, **job.kwargs_dict)
-                if asyncio.iscoroutine(result):
-                    await result
-            except Exception as e:
-                logger.error(f"执行过期任务 {job.job_id} 失败", e=e)
-
-            await job.delete()
-            return True
-        except Exception as e:
-            logger.error(f"处理过期任务 {job.job_id} 时发生错误", e=e)
-            return False
+        await job.delete()
+        return True
 
     async def restore_tasks(self) -> int:
         """从数据库恢复任务到调度器
@@ -168,7 +176,8 @@ class TaskPersistenceMixin(TaskManagerBaseMixin):
             func = self._get_func(job.func_module, job.func_name)
             if not func:
                 logger.warning(
-                    f"任务 {job.job_id} 的函数不存在,已删除该任务"
+                    f"任务 {job.job_id} 的函数不存在,已删除该任务",
+                    _LOG_COMMAND,
                 )
                 await job.delete()
                 deleted_count += 1
@@ -231,11 +240,25 @@ class TaskPersistenceMixin(TaskManagerBaseMixin):
 
                 restored_count += 1
             except Exception as e:
-                logger.error(f"恢复任务 {job.job_id} 失败", e=e)
+                logger.error(
+                    f"恢复任务 {job.job_id} 失败",
+                    _LOG_COMMAND,
+                    e=e,
+                )
 
-        if deleted_count > 0:
-            logger.debug(f"已清理 {deleted_count} 个无效任务")
         if executed_count > 0:
-            logger.info(f"已执行 {executed_count} 个过期的一次性任务")
-        logger.debug(f"从数据库恢复 {restored_count} 个定时任务")
+            logger.info(
+                f"已执行 {executed_count} 个过期的一次性任务",
+                _LOG_COMMAND,
+            )
+        if restored_count > 0:
+            logger.info(
+                f"从数据库恢复 {restored_count} 个定时任务",
+                _LOG_COMMAND,
+            )
+        if deleted_count > 0:
+            logger.debug(
+                f"已清理 {deleted_count} 个无效任务",
+                _LOG_COMMAND,
+            )
         return restored_count

@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import Any, Self
 
-from liuying.utils.apscheduler.triggers.base import (
+from .base import (
     BaseTrigger,
     TriggerResult,
     register_trigger,
@@ -29,7 +29,7 @@ class DateTrigger(BaseTrigger):
     ) -> None:
         super().__init__(timezone=timezone)
 
-        self._run_date = self._parse_datetime(run_date)
+        self._run_date = self.parse_datetime(run_date)
         self._executed = False
 
     @property

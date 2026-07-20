@@ -1,6 +1,8 @@
 """
 定时任务告警系统
-提供任务失败率、连续失败等场景的告警功能
+
+提供任务失败率、连续失败、超时等场景的告警功能，
+通过事件总线发布告警事件，支持注册自定义处理器。
 """
 
 import asyncio
@@ -12,10 +14,22 @@ from enum import StrEnum
 from typing import Any
 import uuid
 
+from liuying.utils.apscheduler.constants import (
+    DEFAULT_ALERT_CHECK_INTERVAL,
+    DEFAULT_ALERT_CONSECUTIVE_FAILURES,
+    DEFAULT_ALERT_COOLDOWN,
+    DEFAULT_ALERT_FAILURE_RATE_THRESHOLD,
+    DEFAULT_ALERT_HISTORY_MAX,
+    DEFAULT_ALERT_LONG_RUNNING_THRESHOLD,
+    DEFAULT_ALERT_MIN_TOTAL_EXECUTIONS,
+    DEFAULT_ALERT_QUEUE_THRESHOLD,
+    DEFAULT_ALERT_TIMEOUT_THRESHOLD,
+)
+from liuying.utils.apscheduler.events import TaskEvent, TaskEventType, event_bus
+from liuying.utils.apscheduler.metrics import MetricsCollector, metrics_collector
 from liuying.utils.log import logger
 
-from .events import TaskEvent, TaskEventType, event_bus
-from .metrics import MetricsCollector, metrics_collector
+_LOG_COMMAND = "SchedulerAlert"
 
 
 class AlertType(StrEnum):
@@ -41,22 +55,22 @@ class AlertConfig:
 
     enabled: bool = True
     """是否启用"""
-    failure_rate_threshold: float = 0.3
+    failure_rate_threshold: float = DEFAULT_ALERT_FAILURE_RATE_THRESHOLD
     """失败率阈值(0-1)"""
-    failure_rate_window_minutes: int = 60
-    """失败率统计窗口(分钟)"""
-    consecutive_failures_threshold: int = 5
+    consecutive_failures_threshold: int = DEFAULT_ALERT_CONSECUTIVE_FAILURES
     """连续失败阈值"""
-    timeout_threshold_seconds: float = 300.0
+    timeout_threshold_seconds: float = DEFAULT_ALERT_TIMEOUT_THRESHOLD
     """超时阈值(秒)"""
-    long_running_threshold_seconds: float = 600.0
+    long_running_threshold_seconds: float = DEFAULT_ALERT_LONG_RUNNING_THRESHOLD
     """长时间运行阈值(秒)"""
-    queue_backlog_threshold: int = 100
+    queue_backlog_threshold: int = DEFAULT_ALERT_QUEUE_THRESHOLD
     """队列积压阈值"""
-    check_interval_seconds: float = 60.0
+    check_interval_seconds: float = DEFAULT_ALERT_CHECK_INTERVAL
     """检查间隔(秒)"""
-    cooldown_seconds: float = 300.0
+    cooldown_seconds: float = DEFAULT_ALERT_COOLDOWN
     """告警冷却时间(秒)"""
+    min_total_executions: int = DEFAULT_ALERT_MIN_TOTAL_EXECUTIONS
+    """失败率告警的最小执行次数门槛"""
     alert_task_ids: list[str] = field(default_factory=list)
     """需要告警的任务ID列表，空列表表示所有任务"""
     alert_groups: list[str] = field(default_factory=list)
@@ -117,7 +131,7 @@ class AlertManager:
     ) -> None:
         self.config = config or AlertConfig()
         self.metrics = metrics or metrics_collector
-        self._alerts: deque[Alert] = deque(maxlen=1000)
+        self._alerts: deque[Alert] = deque(maxlen=DEFAULT_ALERT_HISTORY_MAX)
         self._last_alert_time: dict[str, datetime] = {}
         self._alert_handlers: list[Callable[[Alert], Any]] = []
         self._check_task: asyncio.Task | None = None
@@ -148,7 +162,7 @@ class AlertManager:
             return
         self._running = True
         self._check_task = asyncio.create_task(self._check_loop())
-        logger.info("告警管理器已启动")
+        logger.info("告警管理器已启动", _LOG_COMMAND)
 
     async def stop(self) -> None:
         """停止告警检查"""
@@ -159,7 +173,7 @@ class AlertManager:
                 await self._check_task
             except asyncio.CancelledError:
                 pass
-        logger.info("告警管理器已停止")
+        logger.info("告警管理器已停止", _LOG_COMMAND)
 
     async def _check_loop(self) -> None:
         """检查循环"""
@@ -168,7 +182,7 @@ class AlertManager:
                 await self._check_all_tasks()
                 await self._check_queue()
             except Exception as e:
-                logger.error("告警检查失败", e=e)
+                logger.error("告警检查失败", _LOG_COMMAND, e=e)
             await asyncio.sleep(self.config.check_interval_seconds)
 
     async def _check_all_tasks(self) -> None:
@@ -198,19 +212,20 @@ class AlertManager:
                 )
 
             # 检查失败率
+            failure_rate = 1 - task_metrics.success_rate
             if (
-                task_metrics.total_executions > 10
-                and task_metrics.success_rate < (1 - self.config.failure_rate_threshold)
+                task_metrics.total_executions > self.config.min_total_executions
+                and failure_rate >= self.config.failure_rate_threshold
             ):
                 await self._trigger_alert(
                     AlertType.HIGH_FAILURE_RATE,
                     task_id=task_metrics.task_id,
                     task_name=task_metrics.task_name,
                     group=task_metrics.group,
-                    message=f"任务失败率过高: {task_metrics.success_rate:.1%}",
+                    message=f"任务失败率过高: {failure_rate:.1%}",
                     data={
-                        "success_rate": task_metrics.success_rate,
-                        "threshold": 1 - self.config.failure_rate_threshold,
+                        "failure_rate": failure_rate,
+                        "threshold": self.config.failure_rate_threshold,
                         "total_executions": task_metrics.total_executions,
                     },
                 )
@@ -231,6 +246,43 @@ class AlertManager:
                 },
             )
 
+    async def _check_duration_threshold(
+        self,
+        alert_type: AlertType,
+        task_id: str,
+        task_name: str,
+        group: str,
+        duration: float,
+        threshold: float,
+        message_template: str,
+    ) -> None:
+        """
+        通用时长阈值检查（被 check_timeout/check_long_running 复用）
+
+        参数:
+            alert_type: 告警类型
+            task_id: 任务ID
+            task_name: 任务名称
+            group: 分组名称
+            duration: 执行耗时
+            threshold: 阈值
+            message_template: 消息模板
+        """
+        if not self.config.enabled:
+            return
+        if not self._should_alert_task(task_id, group):
+            return
+        if duration < threshold:
+            return
+        await self._trigger_alert(
+            alert_type,
+            task_id=task_id,
+            task_name=task_name,
+            group=group,
+            message=message_template.format(duration=duration),
+            data={"duration": duration, "threshold": threshold},
+        )
+
     async def check_timeout(
         self,
         task_id: str,
@@ -247,24 +299,15 @@ class AlertManager:
             group: 分组名称
             duration: 执行耗时
         """
-        if not self.config.enabled:
-            return
-
-        if not self._should_alert_task(task_id, group):
-            return
-
-        if duration >= self.config.timeout_threshold_seconds:
-            await self._trigger_alert(
-                AlertType.TASK_TIMEOUT,
-                task_id=task_id,
-                task_name=task_name,
-                group=group,
-                message=f"任务执行超时: {duration:.1f}秒",
-                data={
-                    "duration": duration,
-                    "threshold": self.config.timeout_threshold_seconds,
-                },
-            )
+        await self._check_duration_threshold(
+            AlertType.TASK_TIMEOUT,
+            task_id,
+            task_name,
+            group,
+            duration,
+            self.config.timeout_threshold_seconds,
+            "任务执行超时: {duration:.1f}秒",
+        )
 
     async def check_long_running(
         self,
@@ -282,24 +325,15 @@ class AlertManager:
             group: 分组名称
             duration: 执行耗时
         """
-        if not self.config.enabled:
-            return
-
-        if not self._should_alert_task(task_id, group):
-            return
-
-        if duration >= self.config.long_running_threshold_seconds:
-            await self._trigger_alert(
-                AlertType.LONG_RUNNING,
-                task_id=task_id,
-                task_name=task_name,
-                group=group,
-                message=f"任务运行时间过长: {duration:.1f}秒",
-                data={
-                    "duration": duration,
-                    "threshold": self.config.long_running_threshold_seconds,
-                },
-            )
+        await self._check_duration_threshold(
+            AlertType.LONG_RUNNING,
+            task_id,
+            task_name,
+            group,
+            duration,
+            self.config.long_running_threshold_seconds,
+            "任务运行时间过长: {duration:.1f}秒",
+        )
 
     async def check_missed(
         self,
@@ -319,10 +353,8 @@ class AlertManager:
         """
         if not self.config.enabled:
             return
-
         if not self._should_alert_task(task_id, group):
             return
-
         await self._trigger_alert(
             AlertType.MISSED_EXECUTIONS,
             task_id=task_id,
@@ -373,10 +405,11 @@ class AlertManager:
 
         # 检查冷却时间
         now = datetime.now()
-        if alert_key in self._last_alert_time:
-            last_time = self._last_alert_time[alert_key]
-            if (now - last_time).total_seconds() < self.config.cooldown_seconds:
-                return
+        last_time = self._last_alert_time.get(alert_key)
+        if last_time and (
+            now - last_time
+        ).total_seconds() < self.config.cooldown_seconds:
+            return
 
         alert = Alert(
             alert_id=uuid.uuid4().hex,
@@ -388,7 +421,7 @@ class AlertManager:
             data=data or {},
         )
 
-        # deque(maxlen=1000) 自动淘汰旧记录，无需手动截断
+        # deque(maxlen=N) 自动淘汰旧记录
         self._alerts.append(alert)
         self._last_alert_time[alert_key] = now
 
@@ -411,9 +444,16 @@ class AlertManager:
                 else:
                     handler(alert)
             except Exception as e:
-                logger.error(f"告警处理器执行失败: {handler.__name__}", e=e)
+                logger.error(
+                    f"告警处理器执行失败: {handler.__name__}",
+                    _LOG_COMMAND,
+                    e=e,
+                )
 
-        logger.warning(f"告警触发: {alert_type.name} - {message}")
+        logger.warning(
+            f"告警触发: {alert_type.name} - {message}",
+            _LOG_COMMAND,
+        )
 
     def get_alerts(
         self,

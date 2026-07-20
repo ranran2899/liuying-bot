@@ -8,12 +8,11 @@ from datetime import datetime
 from typing import Any
 
 from liuying.utils.apscheduler.constants import DEFAULT_MISFIRE_GRACE_TIME
-from liuying.utils.apscheduler.mixins.base import TaskManagerBaseMixin
-from liuying.utils.apscheduler.mixins.registration import (
-    TaskRegistrationMixin,
-)
 from liuying.utils.apscheduler.models import TaskConfig
 from liuying.utils.enum import TriggerType
+
+from .base import TaskManagerBaseMixin
+from .registration import TaskRegistrationMixin
 
 _pending_tasks: list[tuple[str, Callable[..., Any], TaskConfig]] = []
 

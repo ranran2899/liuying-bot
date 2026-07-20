@@ -1,6 +1,7 @@
 """
 Cron 表达式触发器
-支持标准 cron 表达式的定时任务触发，采用字段级跳跃算法实现高性能计算
+
+支持标准 cron 表达式的定时任务触发，采用字段级跳跃算法实现高性能计算。
 
 标准 cron 默认值规则：
 - 日期字段（year/month/day/day_of_week）未指定时匹配所有值
@@ -12,7 +13,26 @@ import calendar
 from datetime import datetime, timedelta
 from typing import Any, Self
 
-from liuying.utils.apscheduler.triggers.base import (
+from liuying.utils.apscheduler.constants import (
+    CRON_DAY_MAX,
+    CRON_DAY_MIN,
+    CRON_DAY_OF_WEEK_MAX,
+    CRON_DAY_OF_WEEK_MIN,
+    CRON_HOUR_MAX,
+    CRON_HOUR_MIN,
+    CRON_MINUTE_MAX,
+    CRON_MINUTE_MIN,
+    CRON_MONTH_MAX,
+    CRON_MONTH_MIN,
+    CRON_SECOND_MAX,
+    CRON_SECOND_MIN,
+    CRON_YEAR_MAX,
+    CRON_YEAR_MIN,
+    SCHEDULER_MAX_CRON_ITERATIONS,
+    SCHEDULER_MAX_DAYS_CHECK,
+)
+
+from .base import (
     BaseTrigger,
     TriggerResult,
     register_trigger,
@@ -124,13 +144,15 @@ class CronTrigger(BaseTrigger):
     ) -> None:
         super().__init__(start_date, end_date, timezone)
 
-        self.year_field = CronField("year", 1970, 2099)
-        self.month_field = CronField("month", 1, 12)
-        self.day_field = CronField("day", 1, 31)
-        self.day_of_week_field = CronField("day_of_week", 0, 6)
-        self.hour_field = CronField("hour", 0, 23)
-        self.minute_field = CronField("minute", 0, 59)
-        self.second_field = CronField("second", 0, 59)
+        self.year_field = CronField("year", CRON_YEAR_MIN, CRON_YEAR_MAX)
+        self.month_field = CronField("month", CRON_MONTH_MIN, CRON_MONTH_MAX)
+        self.day_field = CronField("day", CRON_DAY_MIN, CRON_DAY_MAX)
+        self.day_of_week_field = CronField(
+            "day_of_week", CRON_DAY_OF_WEEK_MIN, CRON_DAY_OF_WEEK_MAX
+        )
+        self.hour_field = CronField("hour", CRON_HOUR_MIN, CRON_HOUR_MAX)
+        self.minute_field = CronField("minute", CRON_MINUTE_MIN, CRON_MINUTE_MAX)
+        self.second_field = CronField("second", CRON_SECOND_MIN, CRON_SECOND_MAX)
 
         self.year_field.parse(year)
         self.month_field.parse(month)
@@ -146,8 +168,7 @@ class CronTrigger(BaseTrigger):
         if dt.tzinfo is not None:
             dt = dt.replace(tzinfo=None)
 
-        max_iterations = 1000
-        for _ in range(max_iterations):
+        for _ in range(SCHEDULER_MAX_CRON_ITERATIONS):
             if self._end_date and dt > self._end_date:
                 return None
             if self._start_date and dt < self._start_date:
@@ -199,8 +220,7 @@ class CronTrigger(BaseTrigger):
 
     def _try_advance_day(self, dt: datetime) -> datetime | None:
         """尝试推进到当天匹配的时间"""
-        max_days = 366
-        for _ in range(max_days):
+        for _ in range(SCHEDULER_MAX_DAYS_CHECK):
             max_day = calendar.monthrange(dt.year, dt.month)[1]
 
             if not self.day_field.matches(dt.day) or dt.day > max_day:

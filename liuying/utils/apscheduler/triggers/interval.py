@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import random
 from typing import Any, Self
 
-from liuying.utils.apscheduler.triggers.base import (
+from .base import (
     BaseTrigger,
     TriggerResult,
     register_trigger,
