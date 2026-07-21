@@ -9,7 +9,6 @@ from nonebot_plugin_alconna import (
 )
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
 from ...core.memory import memory_manager
@@ -57,12 +56,10 @@ def setup_memory_commands() -> None:
         group_id = (
             session.scene.id if session.scene.is_group else None
         )
-        try:
-            persona_name = await persona_manager.get_user_persona_name(
-                user_id
-            )
-        except Exception:
-            persona_name = persona_manager.get_active_persona_name()
+        # get_user_persona_name 内部已捕获异常并回退默认人格
+        persona_name = await persona_manager.get_user_persona_name(
+            user_id
+        )
         memories = await memory_manager.get_memory_summary(
             user_id, group_id, limit=10, persona_name=persona_name
         )
@@ -87,12 +84,10 @@ def setup_memory_commands() -> None:
         group_id = (
             session.scene.id if session.scene.is_group else None
         )
-        try:
-            persona_name = await persona_manager.get_user_persona_name(
-                user_id
-            )
-        except Exception:
-            persona_name = persona_manager.get_active_persona_name()
+        # get_user_persona_name 内部已捕获异常并回退默认人格
+        persona_name = await persona_manager.get_user_persona_name(
+            user_id
+        )
         count = await ConversationRecord.clear_history(
             user_id, group_id, persona_name=persona_name
         )
@@ -110,29 +105,14 @@ def setup_memory_commands() -> None:
         group_id = (
             session.scene.id if session.scene.is_group else None
         )
-        try:
-            persona_name = await persona_manager.get_user_persona_name(
-                user_id
-            )
-        except Exception:
-            persona_name = persona_manager.get_active_persona_name()
-
-        err_msg = ""
-        count = 0
-        try:
-            count = await memory_manager.clear_user_memory(
-                user_id, persona_name=persona_name, group_id=group_id
-            )
-        except Exception as e:
-            logger.warning(
-                f"清空记忆失败: {e}", command="AI", e=e
-            )
-            err_msg = f"清空记忆失败: {e}"
-
-        if err_msg:
-            await MessageUtils.build_message(err_msg).finish()
-            return
-
+        # get_user_persona_name 内部已捕获异常并回退默认人格
+        persona_name = await persona_manager.get_user_persona_name(
+            user_id
+        )
+        # 纯ORM操作，让异常自然向上传播暴露数据库问题
+        count = await memory_manager.clear_user_memory(
+            user_id, persona_name=persona_name, group_id=group_id
+        )
         await MessageUtils.build_message(
             f"已清空 {count} 条记忆（人格: {persona_name}）"
         ).finish()

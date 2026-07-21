@@ -28,6 +28,7 @@ RETRY_DELAY = 1.0
 WEBP_QUALITY = 80
 DOWNLOAD_TIMEOUT = 30
 IMAGE_DOWNLOAD_CONCURRENCY = 2
+DEFAULT_NICKNAME = "未知用户"
 
 
 class BottleMessageBuilder:
@@ -36,6 +37,19 @@ class BottleMessageBuilder:
     根据适配器类型构建普通消息或QQ Markdown消息，
     统一展示发送者UID而非原始user_id，保护隐私同时保持身份可识别
     """
+
+    @staticmethod
+    def _get_config(key: str, default):
+        """读取漂流瓶配置项
+
+        参数:
+            key: 配置键名
+            default: 默认值
+
+        返回:
+            配置值
+        """
+        return Config.get_config(CONFIG_MODULE, key, default)
 
     @staticmethod
     def _convert_to_webp(image_data: bytes) -> tuple[bytes, int, int]:
@@ -89,13 +103,20 @@ class BottleMessageBuilder:
 
     @classmethod
     async def _upload_persistent_image(
-        cls, bottle_id: int, image_data: bytes, image_index: int
+        cls,
+        bottle_id: int,
+        webp_data: bytes,
+        width: int,
+        height: int,
+        image_index: int,
     ) -> dict[str, str] | None:
         """上传漂流瓶图片到本地数据库存储（持久化，不删除）
 
         参数:
             bottle_id: 漂流瓶ID
-            image_data: 图片二进制数据
+            webp_data: 已转换的WEBP图片数据
+            width: 图片宽度
+            height: 图片高度
             image_index: 图片序号
 
         返回:
@@ -105,7 +126,7 @@ class BottleMessageBuilder:
         for attempt in range(MAX_RETRIES):
             try:
                 url, _, filename_result = await BedLayout.upload(
-                    file_data=image_data,
+                    file_data=webp_data,
                     filename=filename,
                     extension=".webp",
                     content_type="image/webp",
@@ -122,7 +143,6 @@ class BottleMessageBuilder:
                         continue
                     return None
 
-                _, width, height = cls._convert_to_webp(image_data)
                 await BottleImage.create_image(
                     bottle_id=bottle_id,
                     filename=filename_result,
@@ -166,9 +186,10 @@ class BottleMessageBuilder:
         返回:
             list[dict]: 上传成功的图片信息列表
         """
+        max_pic = int(cls._get_config("MAX_BOTTLE_PIC", 2) or 2)
         image_segments = [
             seg for seg in message if seg.type == "image"
-        ][: int(Config.get_config(CONFIG_MODULE, "MAX_BOTTLE_PIC", 2) or 2)]
+        ][:max_pic]
         if not image_segments:
             return []
 
@@ -183,9 +204,11 @@ class BottleMessageBuilder:
                     image_data = await cls._download_image_segment(seg)
                     if not image_data:
                         return None
-                    webp_data, _, _ = cls._convert_to_webp(image_data)
+                    webp_data, width, height = cls._convert_to_webp(
+                        image_data
+                    )
                     return await cls._upload_persistent_image(
-                        bottle_id, webp_data, index
+                        bottle_id, webp_data, width, height, index
                     )
                 except Exception as e:
                     logger.error(
@@ -200,31 +223,6 @@ class BottleMessageBuilder:
             )
         )
         return [r for r in results if r]
-
-    @staticmethod
-    async def get_bottle_image_urls(
-        bottle_id: int,
-    ) -> list[dict[str, str]]:
-        """获取漂流瓶的所有图片URL及尺寸信息
-
-        参数:
-            bottle_id: 漂流瓶ID
-
-        返回:
-            list[dict]: 包含url/width/height的字典列表
-        """
-        images = await BottleImage.get_images_by_bottle_id(bottle_id)
-        result = []
-        for img in images:
-            url = await BedLayout.get_url(
-                img.filename, storage_type=StorageType.LOCAL
-            )
-            result.append({
-                "url": url,
-                "width": str(img.width),
-                "height": str(img.height),
-            })
-        return result
 
     @staticmethod
     async def get_bottle_image_bytes_list(
@@ -291,8 +289,8 @@ class BottleMessageBuilder:
             logger.error(f"上传图片到云存储失败: {e}", "BottleMsg")
             return None
 
-    @staticmethod
-    async def _resolve_sender_uid(user_id: str) -> str:
+    @classmethod
+    async def _resolve_sender_uid(cls, user_id: str) -> str:
         """解析发送者UID，失败回退到默认昵称
 
         参数:
@@ -303,26 +301,48 @@ class BottleMessageBuilder:
         """
         try:
             uid = await UserInfo.get_user_uid(user_id)
-            return uid or Config.get_config(
-                CONFIG_MODULE, "DEFAULT_NICKNAME", "未知用户"
+            return uid or cls._get_config(
+                "DEFAULT_NICKNAME", DEFAULT_NICKNAME
             )
         except Exception as e:
             logger.warning(
                 f"获取用户UID失败 user_id={user_id}: {e}",
                 "BottleMsg",
             )
-            return Config.get_config(
-                CONFIG_MODULE, "DEFAULT_NICKNAME", "未知用户"
+            return cls._get_config(
+                "DEFAULT_NICKNAME", DEFAULT_NICKNAME
             )
 
     @classmethod
+    async def _resolve_comment_senders(
+        cls, comments: list[BottleComment]
+    ) -> list[str]:
+        """并发解析评论者UID列表
+
+        参数:
+            comments: 评论列表
+
+        返回:
+            list[str]: 评论者UID列表，与comments一一对应
+        """
+        if not comments:
+            return []
+        if not cls._get_config("BOTTLE_MSG_UID", True):
+            default_nick = cls._get_config(
+                "DEFAULT_NICKNAME", DEFAULT_NICKNAME
+            )
+            return [default_nick] * len(comments)
+        return await asyncio.gather(
+            *(cls._resolve_sender_uid(c.user_id) for c in comments)
+        )
+
+    @classmethod
     async def build_normal_message(
-        cls, session: Uninfo, bottle: BottleRecord
+        cls, bottle: BottleRecord
     ) -> list:
         """构建普通消息格式（非QQ官方Bot）
 
         参数:
-            session: 会话信息
             bottle: 漂流瓶记录
 
         返回:
@@ -334,7 +354,7 @@ class BottleMessageBuilder:
         msg_parts = [f"漂流瓶ID: {bottle.id}"]
         if bottle.content:
             msg_parts.append(f"内容: {bottle.content}")
-        if Config.get_config(CONFIG_MODULE, "BOTTLE_MSG_UID", True):
+        if cls._get_config("BOTTLE_MSG_UID", True):
             msg_parts.append(f"发送者UID: {sender}")
         msg_parts.append(f"发送时间: {time_str}")
 
@@ -346,18 +366,39 @@ class BottleMessageBuilder:
 
         comments = await BottleComment.get_approved_comments(bottle.id)
         if comments:
-            comment_msg = cls._format_comments_normal(comments)
-            if Config.get_config(
-                CONFIG_MODULE, "BOTTLE_MSG_SPLIT", True
-            ):
+            comment_msg = await cls._format_comments_normal(comments)
+            if cls._get_config("BOTTLE_MSG_SPLIT", True):
                 messages.append(MessageUtils.build_message(comment_msg))
             else:
                 messages[0] += MessageUtils.build_message(comment_msg)
         return messages
 
     @classmethod
+    async def _upload_images_for_markdown(
+        cls, bottle_id: int, image_bytes_list: list[bytes]
+    ) -> list[dict[str, str]]:
+        """并发上传图片到云存储以获取Markdown可用的URL
+
+        参数:
+            bottle_id: 漂流瓶ID
+            image_bytes_list: 图片字节数据列表
+
+        返回:
+            list[dict[str, str]]: 上传成功的图片信息列表
+        """
+        if not image_bytes_list:
+            return []
+        results = await asyncio.gather(
+            *(
+                cls._upload_temp_image_for_markdown(bottle_id, data, idx)
+                for idx, data in enumerate(image_bytes_list)
+            )
+        )
+        return [r for r in results if r]
+
+    @classmethod
     async def build_qq_markdown_message(
-        cls, session: Uninfo, bottle: BottleRecord
+        cls, bottle: BottleRecord
     ) -> list:
         """构建QQ Markdown消息格式（QQ官方Bot）
 
@@ -365,7 +406,6 @@ class BottleMessageBuilder:
         瓶子本体和评论区合并在同一个模板中，用分割线分开
 
         参数:
-            session: 会话信息
             bottle: 漂流瓶记录
 
         返回:
@@ -380,22 +420,19 @@ class BottleMessageBuilder:
         time_str = bottle.create_time.strftime("%Y-%m-%d %H:%M:%S")
 
         image_bytes_list = await cls.get_bottle_image_bytes_list(bottle.id)
-        image_urls: list[dict[str, str]] = []
-        for idx, img_data in enumerate(image_bytes_list):
-            result = await cls._upload_temp_image_for_markdown(
-                bottle.id, img_data, idx
-            )
-            if result:
-                image_urls.append(result)
+        image_urls = await cls._upload_images_for_markdown(
+            bottle.id, image_bytes_list
+        )
 
-        md_parts = cls._build_markdown_body(
+        md_body = cls._build_markdown_body(
             bottle.id, sender, content_text, time_str, image_urls
         )
 
+        md_parts = [md_body]
         comments = await BottleComment.get_approved_comments(bottle.id)
         if comments:
             md_parts.append(
-                cls._build_markdown_comments(bottle.id, comments)
+                await cls._build_markdown_comments(bottle.id, comments)
             )
 
         md_content = "\n\n".join(md_parts)
@@ -410,8 +447,10 @@ class BottleMessageBuilder:
         content_text: str,
         time_str: str,
         image_urls: list[dict[str, str]],
-    ) -> list[str]:
+    ) -> str:
         """构建QQ Markdown瓶子主体部分
+
+        布局: 标题 -> 元信息引用块 -> 正文 -> 图片列表
 
         参数:
             bottle_id: 漂流瓶ID
@@ -421,45 +460,34 @@ class BottleMessageBuilder:
             image_urls: 图片URL信息列表
 
         返回:
-            list[str]: Markdown片段列表
+            str: Markdown瓶子主体文本
         """
-        sender_line = (
-            f"UID: {sender}\n"
-            if Config.get_config(CONFIG_MODULE, "BOTTLE_MSG_UID", True)
-            else ""
-        )
-        if not image_urls:
-            return [
-                f"***漂流瓶***\n"
-                f"> Time: {time_str}\n"
-                f"ID: {bottle_id}\n"
-                f"{sender_line}"
-                f"{content_text}"
-            ]
+        meta_lines = [f"> 时间: {time_str}"]
+        if cls._get_config("BOTTLE_MSG_UID", True):
+            meta_lines.append(f"> UID: {sender}")
+        meta_block = "\n".join(meta_lines)
 
-        first_image = image_urls[0]
-        parts = [
-            f"![图片 #{first_image['width']}px "
-            f"#{first_image['height']}px]"
-            f"({first_image['url']})\n"
-            f"> Time: {time_str}\n"
-            f"ID: {bottle_id}\n"
-            f"{sender_line}"
+        image_md = "\n\n".join(
+            f"![图片 #{img['width']}px #{img['height']}px]({img['url']})"
+            for img in image_urls
+        )
+
+        body = (
+            f"### 漂流瓶 #{bottle_id}\n\n"
+            f"{meta_block}\n\n"
             f"{content_text}"
-        ]
-        for img_info in image_urls[1:]:
-            parts.append(
-                f"![图片 #{img_info['width']}px "
-                f"#{img_info['height']}px]"
-                f"({img_info['url']})"
-            )
-        return parts
+        )
+        if image_md:
+            body = f"{body}\n\n{image_md}"
+        return body
 
     @classmethod
-    def _build_markdown_comments(
+    async def _build_markdown_comments(
         cls, bottle_id: int, comments: list[BottleComment]
     ) -> str:
         """构建QQ Markdown评论区片段
+
+        布局: 分割线 -> 标题 -> 引用块评论列表 -> 超出提示
 
         参数:
             bottle_id: 漂流瓶ID
@@ -469,35 +497,30 @@ class BottleMessageBuilder:
             str: Markdown评论文本
         """
         total = len(comments)
-        max_comments = int(
-            Config.get_config(CONFIG_MODULE, "MAX_BOTTLE_COMMENTS", 3)
-            or 3
-        )
-        show_uid = Config.get_config(CONFIG_MODULE, "BOTTLE_MSG_UID", True)
-        default_nick = Config.get_config(
-            CONFIG_MODULE, "DEFAULT_NICKNAME", "未知用户"
-        )
+        max_comments = int(cls._get_config("MAX_BOTTLE_COMMENTS", 3) or 3)
         display_comments = comments[:max_comments]
-        comments_text = ""
-        for comment in display_comments:
-            user_name = comment.user_id if show_uid else default_nick
-            comments_text += f"> {user_name}: {comment.content}\n"
+        senders = await cls._resolve_comment_senders(display_comments)
+
+        comments_text = "\n".join(
+            f"> {sender}: {comment.content}"
+            for sender, comment in zip(senders, display_comments)
+        )
 
         footer = (
-            f"_... 共{total}条评论~_"
+            f"\n\n_... 共{total}条评论_"
             if total > max_comments
             else ""
         )
         return (
             f"---\n\n"
-            f"*****漂流瓶 {bottle_id} 的评论区*****\n"
+            f"### 漂流瓶 #{bottle_id} 的评论区\n\n"
             f"{comments_text}"
             f"{footer}"
         )
 
-    @staticmethod
-    def _format_comments_normal(
-        comments: list[BottleComment],
+    @classmethod
+    async def _format_comments_normal(
+        cls, comments: list[BottleComment]
     ) -> str:
         """格式化评论为普通文本
 
@@ -507,18 +530,15 @@ class BottleMessageBuilder:
         返回:
             str: 格式化后的评论文本
         """
-        max_comments = int(
-            Config.get_config(CONFIG_MODULE, "MAX_BOTTLE_COMMENTS", 3)
-            or 3
-        )
-        show_uid = Config.get_config(CONFIG_MODULE, "BOTTLE_MSG_UID", True)
-        default_nick = Config.get_config(
-            CONFIG_MODULE, "DEFAULT_NICKNAME", "未知用户"
-        )
+        max_comments = int(cls._get_config("MAX_BOTTLE_COMMENTS", 3) or 3)
+        display_comments = comments[:max_comments]
+        senders = await cls._resolve_comment_senders(display_comments)
+
         lines = ["评论区:"]
-        for comment in comments[:max_comments]:
-            user_name = comment.user_id if show_uid else default_nick
-            lines.append(f"{user_name}: {comment.content}")
+        lines.extend(
+            f"{sender}: {comment.content}"
+            for sender, comment in zip(senders, display_comments)
+        )
 
         total = len(comments)
         if total > max_comments:
@@ -539,8 +559,8 @@ class BottleMessageBuilder:
             [
                 Button(
                     flag="enter",
-                    label="丢瓶子",
-                    clicked_label="丢瓶子",
+                    label="扔瓶子",
+                    clicked_label="扔瓶子",
                     id="btn_throw",
                     text="扔瓶子",
                     permission="all",
@@ -590,5 +610,5 @@ class BottleMessageBuilder:
         if PlatformUtils.is_qbot(session) and not PlatformUtils.is_qq_guild(
             session
         ):
-            return await cls.build_qq_markdown_message(session, bottle)
-        return await cls.build_normal_message(session, bottle)
+            return await cls.build_qq_markdown_message(bottle)
+        return await cls.build_normal_message(bottle)

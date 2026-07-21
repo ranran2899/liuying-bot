@@ -149,15 +149,17 @@ class ReplyGenerator:
                         if ctx_text
                         else f"[用户发了一张图片: {desc}]"
                     )
-                    use_messages = ReplyPipeline.build_messages(
-                        messages[0].get("content", "") if messages else "",
-                        [
-                            m for m in messages
-                            if m.get("role") != "system"
-                        ],
-                        ctx,
-                    )
-                    ctx.text = original_text
+                    try:
+                        use_messages = ReplyPipeline.build_messages(
+                            messages[0].get("content", "") if messages else "",
+                            [
+                                m for m in messages
+                                if m.get("role") != "system"
+                            ],
+                            ctx,
+                        )
+                    finally:
+                        ctx.text = original_text
 
         if get_config("AGENT_ENABLED", True):
             try:

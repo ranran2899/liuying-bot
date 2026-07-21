@@ -183,27 +183,32 @@ class StickerUsage(Model):
     ) -> dict[str, Any]:
         """获取单个表情包的反馈统计
 
+        使用SQL聚合查询避免全量加载记录到内存。
+
         参数:
             sticker_id: 表情包ID
 
         返回:
             dict: 统计字典
         """
-        records = await cls.filter(sticker_id=sticker_id).all()
-        if not records:
-            return {
-                "total": 0,
-                "positive": 0,
-                "negative": 0,
-                "neutral": 0,
-                "unknown": 0,
-                "positive_rate": 0.0,
-            }
-        positive = sum(1 for r in records if r.reaction == "positive")
-        negative = sum(1 for r in records if r.reaction == "negative")
-        neutral = sum(1 for r in records if r.reaction == "neutral")
-        unknown = sum(1 for r in records if r.reaction == "unknown")
-        total = len(records)
+        sql = (
+            "SELECT reaction, COUNT(id) AS cnt "
+            "FROM ai_sticker_usage "
+            "WHERE sticker_id = :sticker_id "
+            "GROUP BY reaction"
+        )
+        result = await cls.filter().raw(
+            sql, {"sticker_id": sticker_id}
+        )
+        counts: dict[str, int] = {}
+        total = 0
+        for row in result.fetchall():
+            reaction = row.reaction or "unknown"
+            cnt = int(row.cnt or 0)
+            counts[reaction] = cnt
+            total += cnt
+        positive = counts.get("positive", 0)
+        negative = counts.get("negative", 0)
         rated = positive + negative
         positive_rate = (
             positive / rated if rated > 0 else 0.0
@@ -212,7 +217,7 @@ class StickerUsage(Model):
             "total": total,
             "positive": positive,
             "negative": negative,
-            "neutral": neutral,
-            "unknown": unknown,
+            "neutral": counts.get("neutral", 0),
+            "unknown": counts.get("unknown", 0),
             "positive_rate": round(positive_rate, 3),
         }

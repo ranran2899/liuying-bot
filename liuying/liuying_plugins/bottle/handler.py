@@ -14,16 +14,104 @@ from .to_msg import BottleMessageBuilder
 
 CONFIG_MODULE = "bottle"
 BOTTLE_HELP_TEXT = """
-    扔瓶子 [图片/文本]
-    捡瓶子
-    评论漂流瓶 [编号] [文本]
-    点赞漂流瓶 [编号]
-    查看漂流瓶 [编号]
-    """.strip()
+扔瓶子 [图片/文本]
+捡瓶子
+评论漂流瓶 [编号] [文本]
+点赞漂流瓶 [编号]
+查看漂流瓶 [编号]
+""".strip()
 
 
 class BottleHandler:
     """漂流瓶命令处理器"""
+
+    @staticmethod
+    def _get_config(key: str, default):
+        """读取漂流瓶配置项
+
+        参数:
+            key: 配置键名
+            default: 默认值
+
+        返回:
+            配置值
+        """
+        return Config.get_config(CONFIG_MODULE, key, default)
+
+    @classmethod
+    async def _send_bottle_messages(cls, messages: list) -> None:
+        """发送漂流瓶消息列表，最后一条以回复方式finish
+
+        参数:
+            messages: 消息列表
+        """
+        for message in messages[:-1]:
+            await message.send()
+        await messages[-1].finish(reply_to=True)
+
+    @classmethod
+    async def _handle_unapproved_bottle(cls, bottle_id: int) -> None:
+        """处理未通过审核的漂流瓶查看请求
+
+        参数:
+            bottle_id: 漂流瓶ID
+        """
+        record = await BottleRecord.get_by_id(bottle_id)
+        if record is None:
+            await MessageUtils.build_message(
+                "漂流瓶不存在"
+            ).finish(reply_to=True)
+        match record.status:
+            case 100:
+                msg = "漂流瓶已拒绝，无法查看!"
+            case 0:
+                msg = "漂流瓶未审核"
+            case _:
+                msg = "发生未知错误!"
+        await MessageUtils.build_message(msg).finish(reply_to=True)
+
+    @classmethod
+    def _validate_throw_content(
+        cls, text_content: str, image_count: int
+    ) -> str | None:
+        """验证丢瓶子内容合法性
+
+        参数:
+            text_content: 文本内容
+            image_count: 图片数量
+
+        返回:
+            str | None: 错误消息，验证通过返回None
+        """
+        if text_content:
+            max_word = int(
+                cls._get_config("MAX_BOTTLE_WORD", 1200) or 1200
+            )
+            if len(text_content) > max_word:
+                return f"丢瓶子失败啦，请不要超过{max_word}字符哦~"
+            max_lines = int(
+                cls._get_config("MAX_BOTTLE_LINES", 9) or 9
+            )
+            newline_count = len(re.findall(r"[\r\n]+", text_content))
+            if newline_count > max_lines:
+                return f"丢瓶子失败啦，请不要超过{max_lines}行内容哦~"
+
+        max_pic = int(cls._get_config("MAX_BOTTLE_PIC", 2) or 2)
+        if image_count > max_pic:
+            return f"丢瓶子失败啦，请不要超过{max_pic}张图片哦~"
+        return None
+
+    @classmethod
+    async def _reply_empty_content(cls) -> None:
+        """回复空内容提示，根据配置决定是否附带帮助文本"""
+        if cls._get_config("EMBEDDED_HELP", True):
+            await MessageUtils.build_message(
+                f"您还没有写好瓶子的内容哦~\n"
+                f"漂流瓶食用方法: {BOTTLE_HELP_TEXT}"
+            ).finish(reply_to=True)
+        await MessageUtils.build_message(
+            "您还没有写好瓶子的内容哦~"
+        ).finish(reply_to=True)
 
     @classmethod
     async def view_bottle(
@@ -37,26 +125,13 @@ class BottleHandler:
         """
         bottle = await BottleRecord.get_approved_by_id(bottle_id)
         if bottle is None:
-            record = await BottleRecord.get_by_id(bottle_id)
-            if record is None:
-                await MessageUtils.build_message(
-                    "漂流瓶不存在"
-                ).finish(reply_to=True)
-            match record.status:
-                case 100:
-                    msg = "漂流瓶已拒绝，无法查看!"
-                case 0:
-                    msg = "漂流瓶未审核"
-                case _:
-                    msg = "发生未知错误!"
-            await MessageUtils.build_message(msg).finish(reply_to=True)
+            await cls._handle_unapproved_bottle(bottle_id)
+            return
 
         messages = await BottleMessageBuilder.build_bottle_message(
             session, bottle
         )
-        for message in messages[:-1]:
-            await message.send()
-        await messages[-1].finish(reply_to=True)
+        await cls._send_bottle_messages(messages)
 
     @classmethod
     async def comment_bottle(
@@ -137,9 +212,7 @@ class BottleHandler:
         messages = await BottleMessageBuilder.build_bottle_message(
             session, bottle
         )
-        for message in messages[:-1]:
-            await message.send()
-        await messages[-1].finish(reply_to=True)
+        await cls._send_bottle_messages(messages)
 
     @classmethod
     async def throw_bottle(
@@ -159,41 +232,13 @@ class BottleHandler:
         has_image = image_count > 0
 
         if not text_content and not has_image:
-            if Config.get_config(CONFIG_MODULE, "EMBEDDED_HELP", True):
-                await MessageUtils.build_message(
-                    f"您还没有写好瓶子的内容哦~\n"
-                    f"漂流瓶食用方法: {BOTTLE_HELP_TEXT}"
-                ).finish(reply_to=True)
-            await MessageUtils.build_message(
-                "您还没有写好瓶子的内容哦~"
-            ).finish(reply_to=True)
+            await cls._reply_empty_content()
+            return
 
-        max_word = int(
-            Config.get_config(CONFIG_MODULE, "MAX_BOTTLE_WORD", 1200)
-            or 1200
-        )
-        if text_content and len(text_content) > max_word:
+        error_msg = cls._validate_throw_content(text_content, image_count)
+        if error_msg:
             await MessageUtils.build_message(
-                f"丢瓶子失败啦，请不要超过{max_word}字符哦~"
-            ).finish(reply_to=True)
-
-        if text_content:
-            max_lines = int(
-                Config.get_config(CONFIG_MODULE, "MAX_BOTTLE_LINES", 9)
-                or 9
-            )
-            newline_count = len(re.findall(r"[\r\n]+", text_content))
-            if newline_count > max_lines:
-                await MessageUtils.build_message(
-                    f"丢瓶子失败啦，请不要超过{max_lines}行内容哦~"
-                ).finish(reply_to=True)
-
-        max_pic = int(
-            Config.get_config(CONFIG_MODULE, "MAX_BOTTLE_PIC", 2) or 2
-        )
-        if image_count > max_pic:
-            await MessageUtils.build_message(
-                f"丢瓶子失败啦，请不要超过{max_pic}张图片哦~"
+                error_msg
             ).finish(reply_to=True)
 
         platform = PlatformUtils.get_platform(session)

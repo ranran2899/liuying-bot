@@ -128,22 +128,24 @@ class StickerFeedback(Model):
     ) -> dict[str, int]:
         """获取反馈统计
 
+        使用SQL聚合查询避免全量加载记录到内存。
+
         参数:
             sticker_id: 表情包ID
 
         返回:
             dict: 各反馈类型计数
         """
-        records = await cls.filter(sticker_id=sticker_id).all()
-        stats: dict[str, int] = {
-            "like": 0,
-            "dislike": 0,
-            "report": 0,
-            "comment": 0,
-        }
-        for r in records:
-            if r.feedback_type in stats:
-                stats[r.feedback_type] += 1
-            else:
-                stats[r.feedback_type] = 1
+        sql = (
+            "SELECT feedback_type, COUNT(id) AS cnt "
+            "FROM ai_sticker_feedback "
+            "WHERE sticker_id = :sticker_id "
+            "GROUP BY feedback_type"
+        )
+        result = await cls.filter().raw(
+            sql, {"sticker_id": sticker_id}
+        )
+        stats: dict[str, int] = {}
+        for row in result.fetchall():
+            stats[row.feedback_type] = int(row.cnt or 0)
         return stats

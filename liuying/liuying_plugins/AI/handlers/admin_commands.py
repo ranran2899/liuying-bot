@@ -309,24 +309,9 @@ def setup_admin_matchers() -> None:
         - 所有用户所有人格的对话记录（ConversationRecord）
         - 所有用户所有人格的记忆数据及搜索索引（MemoryItem）
         """
-        err_msg = ""
-        record_count = 0
-        memory_count = 0
-        try:
-            record_count = await ConversationRecord.clear_all_records()
-            memory_count = await memory_manager.clear_all_memory()
-        except Exception as e:
-            logger.error(
-                f"全局清空记忆失败: {e}",
-                command="AI",
-                e=e,
-                session=session,
-            )
-            err_msg = f"全局清空记忆失败: {e}"
-
-        if err_msg:
-            await MessageUtils.build_message(err_msg).finish()
-            return
+        # 纯ORM操作，让异常自然向上传播暴露数据库问题
+        record_count = await ConversationRecord.clear_all_records()
+        memory_count = await memory_manager.clear_all_memory()
 
         logger.warning(
             f"管理员 {session.user.id} 全局清空记忆: "

@@ -112,9 +112,6 @@ class ReplyTextPolicy:
     - 多余空行：压缩为最多1个空行
     """
 
-    _SPACE_TAB_RE = _SPACE_TAB_RE
-    """空格与制表符替换正则"""
-
     @staticmethod
     def _protect_image_markers(
         text: str,
@@ -209,7 +206,7 @@ class ReplyTextPolicy:
         cleaned = _URL_RE.sub("", cleaned)
 
         lines = [
-            ReplyTextPolicy._SPACE_TAB_RE.sub(" ", line).strip()
+            _SPACE_TAB_RE.sub(" ", line).strip()
             for line in cleaned.split("\n")
         ]
         compacted: list[str] = []

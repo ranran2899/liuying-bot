@@ -45,19 +45,18 @@ class TargetInference:
     @staticmethod
     def _extract_at_ids(
         message: Any,
-    ) -> tuple[list[str], bool]:
+    ) -> list[str]:
         """从消息中提取被@的用户ID列表
 
         参数:
             message: 消息对象（支持遍历segments）
 
         返回:
-            tuple[list[str], bool]: (被@的ID列表, 是否@了bot)
+            list[str]: 被@的ID列表
         """
         at_ids: list[str] = []
-        is_at_bot = False
         if message is None:
-            return at_ids, is_at_bot
+            return at_ids
         try:
             for seg in message:
                 seg_type = getattr(seg, "type", "") or ""
@@ -87,7 +86,7 @@ class TargetInference:
                         at_ids.append(user_id)
         except Exception:
             pass
-        return at_ids, is_at_bot
+        return at_ids
 
     @staticmethod
     def _extract_reply_sender_id(
@@ -141,7 +140,7 @@ class TargetInference:
         if not self_id:
             return MessageTarget.UNCLEAR
 
-        at_ids, _ = TargetInference._extract_at_ids(
+        at_ids = TargetInference._extract_at_ids(
             getattr(event, "message", None)
         )
         if at_ids:
