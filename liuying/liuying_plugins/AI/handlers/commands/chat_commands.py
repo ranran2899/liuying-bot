@@ -225,7 +225,7 @@ def setup_chat_commands() -> None:
             )
         except Exception as e:
             logger.error(
-                f"AI对话处理失败: {e}",
+                info=f"AI对话处理失败：{e}",
                 command="流萤",
                 e=e,
                 session=session,
