@@ -35,7 +35,7 @@ def _get_agent_max_steps() -> int:
     返回:
         int: Agent最大步数
     """
-    raw = get_config("AGENT_MAX_STEPS", DEFAULT_AGENT_MAX_STEPS)
+    raw = get_config("AGENT", {}).get("max_steps", DEFAULT_AGENT_MAX_STEPS)
     if isinstance(raw, int | float) and not isinstance(raw, bool):
         return max(1, int(raw))
     return DEFAULT_AGENT_MAX_STEPS

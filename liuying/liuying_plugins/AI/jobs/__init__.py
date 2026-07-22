@@ -48,7 +48,7 @@ async def setup_jobs() -> None:
 
     await setup_knowledge_jobs()
 
-    if get_config("GROUP_STYLE_AUTOBUILD_ENABLED", True):
+    if get_config("GROUP_STYLE_AUTOBUILD", {}).get("enabled", True):
         await setup_group_style_autobuild_job()
 
     if get_config("USER_TASKS_ENABLED", True):

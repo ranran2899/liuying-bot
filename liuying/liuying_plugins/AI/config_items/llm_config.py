@@ -1,6 +1,7 @@
 """LLM相关配置项
 
 包含对话模型、嵌入模型、轻量模型、思考模式与Token额度等配置。
+采用嵌套字典组织相关配置项，提升可读性。
 """
 
 from liuying.configs.utils import RegisterConfig
@@ -10,38 +11,39 @@ from ._common import MODULE
 __all__ = ["LLM_CONFIGS"]
 
 LLM_CONFIGS: list[RegisterConfig] = [
-    RegisterConfig(
-        key="CHAT_PROVIDER",
-        value=None,
-        module=MODULE,
-        help="对话模型供应商，None时用默认",
-        default_value=None,
-        type=str,
-    ),
+    # ===== 对话模型 =====
     RegisterConfig(
         key="CHAT_MODEL",
-        value=None,
+        value={
+            "provider": None,
+            "model": None,
+        },
         module=MODULE,
-        help="对话模型名，None时用provider默认",
-        default_value=None,
-        type=str,
+        help=(
+            "对话模型配置\n"
+            " - provider: 供应商，None时用默认\n"
+            " - model: 模型名，None时用provider默认"
+        ),
+        default_value={"provider": None, "model": None},
+        type=dict,
     ),
+    # ===== 嵌入模型 =====
     RegisterConfig(
-        key="EMBEDDING_PROVIDER",
-        value=None,
+        key="EMBEDDING",
+        value={
+            "provider": None,
+            "model": None,
+        },
         module=MODULE,
-        help="嵌入模型供应商",
-        default_value=None,
-        type=str,
+        help=(
+            "嵌入模型配置（用于记忆/知识库向量生成）\n"
+            " - provider: 供应商\n"
+            " - model: 模型名（如embedding-3，不能用对话模型）"
+        ),
+        default_value={"provider": None, "model": None},
+        type=dict,
     ),
-    RegisterConfig(
-        key="EMBEDDING_MODEL",
-        value=None,
-        module=MODULE,
-        help="嵌入模型名",
-        default_value=None,
-        type=str,
-    ),
+    # ===== 思考模式 =====
     RegisterConfig(
         key="THINKING_MODE_ENABLED",
         value=False,
@@ -50,31 +52,29 @@ LLM_CONFIGS: list[RegisterConfig] = [
         default_value=False,
         type=bool,
     ),
-    # ===== Phase11: LLM模型管理 =====
+    # ===== 轻量模型（已废弃，由MODEL_ROUTES替代） =====
     RegisterConfig(
-        key="LITE_MODEL_ENABLED",
-        value=False,
+        key="LITE_MODEL",
+        value={
+            "enabled": False,
+            "provider": None,
+            "name": None,
+        },
         module=MODULE,
-        help="是否启用轻量模型",
-        default_value=False,
-        type=bool,
+        help=(
+            "轻量模型配置（已废弃，由MODEL_ROUTES替代）\n"
+            " - enabled: 是否启用\n"
+            " - provider: 供应商\n"
+            " - name: 模型名"
+        ),
+        default_value={
+            "enabled": False,
+            "provider": None,
+            "name": None,
+        },
+        type=dict,
     ),
-    RegisterConfig(
-        key="LITE_MODEL_PROVIDER",
-        value=None,
-        module=MODULE,
-        help="轻量模型供应商",
-        default_value=None,
-        type=str,
-    ),
-    RegisterConfig(
-        key="LITE_MODEL_NAME",
-        value=None,
-        module=MODULE,
-        help="轻量模型名",
-        default_value=None,
-        type=str,
-    ),
+    # ===== 主模型策略 =====
     RegisterConfig(
         key="STRICT_MAIN_MODEL",
         value=False,
@@ -91,128 +91,116 @@ LLM_CONFIGS: list[RegisterConfig] = [
         default_value=0,
         type=int,
     ),
-    # ===== 用户对话 Token 额度 =====
+    # ===== 用户对话Token额度 =====
     RegisterConfig(
-        key="TOKEN_QUOTA_ENABLED",
-        value=True,
+        key="TOKEN_QUOTA",
+        value={
+            "enabled": True,
+            "reminder_cd": 300,
+            "min_threshold": 1,
+        },
         module=MODULE,
-        help="是否启用用户对话token额度限制",
-        default_value=True,
-        type=bool,
+        help=(
+            "用户对话token额度配置\n"
+            " - enabled: 是否启用额度限制\n"
+            " - reminder_cd: 额度不足提醒冷却（秒）\n"
+            " - min_threshold: 可用token最低阈值"
+        ),
+        default_value={
+            "enabled": True,
+            "reminder_cd": 300,
+            "min_threshold": 1,
+        },
+        type=dict,
     ),
+    # ===== 模型按角色路由 =====
     RegisterConfig(
-        key="TOKEN_QUOTA_REMINDER_CD",
-        value=300,
+        key="MODEL_ROUTES",
+        value={
+            "intent": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.1,
+            },
+            "review": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.1,
+            },
+            "agent": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.3,
+            },
+            "sticker": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.4,
+            },
+            "warmup": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.7,
+            },
+        },
         module=MODULE,
-        help="用户额度不足提醒冷却（秒），防止消息刷屏",
-        default_value=300,
-        type=int,
+        help=(
+            "模型按角色路由配置\n"
+            "每个角色可独立指定 model/provider/temperature\n"
+            "model为None时回退到CHAT_MODEL.model\n"
+            "provider为None时回退到CHAT_MODEL.provider\n"
+            "跨供应商使用模型时必须配置provider\n"
+            " - intent: 意图推断（低温度0.1）\n"
+            " - review: 响应审查（低温度0.1）\n"
+            " - agent: Agent工具调用（中温度0.3）\n"
+            " - sticker: 贴纸选择（中温度0.4）\n"
+            " - warmup: 预热任务（高温度0.7）"
+        ),
+        default_value={
+            "intent": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.1,
+            },
+            "review": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.1,
+            },
+            "agent": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.3,
+            },
+            "sticker": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.4,
+            },
+            "warmup": {
+                "model": None,
+                "provider": None,
+                "temperature": 0.7,
+            },
+        },
+        type=dict,
     ),
+    # ===== AI CLI路由降级 =====
     RegisterConfig(
-        key="TOKEN_QUOTA_MIN_THRESHOLD",
-        value=1,
+        key="AI_CLI",
+        value={
+            "enabled": False,
+            "routes": "",
+        },
         module=MODULE,
-        help="用户可用token最低阈值，剩余低于此值视为不足",
-        default_value=1,
-        type=int,
-    ),
-    # ===== Phase3: 模型按角色路由 =====
-    RegisterConfig(
-        key="MODEL_INTENT",
-        value=None,
-        module=MODULE,
-        help="意图推断角色模型名（None时回退到CHAT_MODEL）",
-        default_value=None,
-        type=str,
-    ),
-    RegisterConfig(
-        key="MODEL_INTENT_TEMPERATURE",
-        value=0.1,
-        module=MODULE,
-        help="意图推断角色温度",
-        default_value=0.1,
-        type=float,
-    ),
-    RegisterConfig(
-        key="MODEL_REVIEW",
-        value=None,
-        module=MODULE,
-        help="响应审查角色模型名（None时回退到CHAT_MODEL）",
-        default_value=None,
-        type=str,
-    ),
-    RegisterConfig(
-        key="MODEL_REVIEW_TEMPERATURE",
-        value=0.1,
-        module=MODULE,
-        help="响应审查角色温度",
-        default_value=0.1,
-        type=float,
-    ),
-    RegisterConfig(
-        key="MODEL_AGENT",
-        value=None,
-        module=MODULE,
-        help="Agent工具调用角色模型名（None时回退到CHAT_MODEL）",
-        default_value=None,
-        type=str,
-    ),
-    RegisterConfig(
-        key="MODEL_AGENT_TEMPERATURE",
-        value=0.3,
-        module=MODULE,
-        help="Agent工具调用角色温度",
-        default_value=0.3,
-        type=float,
-    ),
-    RegisterConfig(
-        key="MODEL_STICKER",
-        value=None,
-        module=MODULE,
-        help="贴纸选择角色模型名（None时回退到CHAT_MODEL）",
-        default_value=None,
-        type=str,
-    ),
-    RegisterConfig(
-        key="MODEL_STICKER_TEMPERATURE",
-        value=0.4,
-        module=MODULE,
-        help="贴纸选择角色温度",
-        default_value=0.4,
-        type=float,
-    ),
-    RegisterConfig(
-        key="MODEL_WARMUP",
-        value=None,
-        module=MODULE,
-        help="预热任务角色模型名（None时回退到CHAT_MODEL）",
-        default_value=None,
-        type=str,
-    ),
-    RegisterConfig(
-        key="MODEL_WARMUP_TEMPERATURE",
-        value=0.7,
-        module=MODULE,
-        help="预热任务角色温度",
-        default_value=0.7,
-        type=float,
-    ),
-    # ===== Phase4: AI Provider多CLI路由 =====
-    RegisterConfig(
-        key="AI_CLI_ENABLED",
-        value=False,
-        module=MODULE,
-        help="是否启用CLI路由降级（HTTP provider全部失败时尝试CLI工具）",
-        default_value=False,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="AI_CLI_ROUTES",
-        value="",
-        module=MODULE,
-        help='CLI路由列表JSON（如[{"name":"gemini_cli","command":["gemini"],"use_stdin":true,"timeout":30,"priority":1}]）',
-        default_value="",
-        type=str,
+        help=(
+            "CLI路由降级配置（HTTP provider全部失败时尝试CLI工具）\n"
+            " - enabled: 是否启用\n"
+            ' - routes: CLI路由列表JSON（如[{"name":"gemini_cli",'
+            '"command":["gemini"],"use_stdin":true,"timeout":30,"priority":1}]）'
+        ),
+        default_value={"enabled": False, "routes": ""},
+        type=dict,
     ),
 ]
 """LLM相关配置项列表"""

@@ -32,6 +32,7 @@ class RecallMixin:
     # 类型提示，由宿主类 MemoryManager 初始化
     _db: Any
     _embedding_dim: int = _EMBEDDING_DIM
+    _embedding_service: Any
 
     async def recall(
         self,
@@ -228,10 +229,14 @@ class RecallMixin:
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
-        query_vec = MemoryEmbeddingUtils.hash_bow_embedding(
-            query, self._embedding_dim
+        query_vec = await self._embedding_service.embed_text(
+            query
         )
-        return await self._db.search_vector(query_vec, limit)
+        return await self._db.search_vector(
+            query_vec,
+            limit,
+            self._embedding_service.model_version,
+        )
 
     async def _search_embedding(
         self, query: str, limit: int
@@ -248,10 +253,14 @@ class RecallMixin:
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
-        query_vec = MemoryEmbeddingUtils.hash_bow_embedding(
-            query, self._embedding_dim
+        query_vec = await self._embedding_service.embed_text(
+            query
         )
-        return await self._db.search_embedding(query_vec, limit)
+        return await self._db.search_embedding(
+            query_vec,
+            limit,
+            self._embedding_service.model_version,
+        )
 
     async def _search_time(
         self,

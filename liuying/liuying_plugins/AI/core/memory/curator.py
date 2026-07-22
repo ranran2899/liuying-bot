@@ -16,7 +16,7 @@ from liuying.utils.log import logger
 from ...models.conversation_record import ConversationRecord
 from ...models.memory_item import MemoryItem
 from ...models.user_persona import UserPersonaProfile
-from ._common import _REINFORCE_THRESHOLD, MemoryEmbeddingUtils
+from ._common import _REINFORCE_THRESHOLD
 from .extractors import CurationExtractor
 from .manager import memory_manager
 
@@ -196,10 +196,11 @@ class MemoryCurator:
             return 0
 
         vectors: list[tuple[int, list[float]]] = []
-        for mem in memories:
-            vec = MemoryEmbeddingUtils.hash_bow_embedding(
-                mem.summary or mem.content or ""
-            )
+        texts = [
+            mem.summary or mem.content or "" for mem in memories
+        ]
+        embeddings = await self._embedding_service.embed_batch(texts)
+        for mem, vec in zip(memories, embeddings):
             vectors.append((mem.id, vec))
 
         dedup_count = 0
@@ -306,15 +307,11 @@ class MemoryCurator:
 
         clusters: list[list[MemoryItem]] = []
         # 预计算所有记忆的嵌入向量，避免双重循环中重复计算
-        mem_vectors: list[tuple[MemoryItem, list[float]]] = [
-            (
-                mem,
-                MemoryEmbeddingUtils.hash_bow_embedding(
-                    mem.summary or ""
-                ),
-            )
-            for mem in memories
-        ]
+        texts = [mem.summary or "" for mem in memories]
+        embeddings = await self._embedding_service.embed_batch(texts)
+        mem_vectors: list[tuple[MemoryItem, list[float]]] = list(
+            zip(memories, embeddings)
+        )
         rep_vectors: list[list[float]] = []
         for mem, mem_vec in mem_vectors:
             placed = False

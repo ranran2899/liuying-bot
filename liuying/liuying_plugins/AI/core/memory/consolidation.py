@@ -30,6 +30,7 @@ class ConsolidationMixin:
 
     # 类型提示，由宿主类 MemoryManager 初始化
     _db: Any
+    _embedding_service: Any
 
     async def reinforce(self, memory_id: int) -> None:
         """巩固记忆

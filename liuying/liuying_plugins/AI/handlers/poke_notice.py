@@ -33,7 +33,7 @@ def setup_poke_notice() -> None:
             bot: Bot对象
             event: 事件对象
         """
-        if not get_config("POKE_BACK_ENABLED", True):
+        if not get_config("POKE", {}).get("enabled", True):
             return
 
         notice_type = str(
@@ -60,7 +60,7 @@ def setup_poke_notice() -> None:
             getattr(event, "group_id", "") or ""
         )
 
-        prob = get_config("POKE_BACK_PROBABILITY", 0.3)
+        prob = get_config("POKE", {}).get("probability", 0.3)
         if random.random() >= prob:
             return
 

@@ -111,7 +111,7 @@ class AgentRunner:
         start_time = time.time()
         use_registry = registry or tool_registry
         use_budget = time_budget if time_budget is not None else float(
-            get_config("RESPONSE_TIMEOUT", 180)
+            get_config("AGENT", {}).get("response_timeout", 180)
         )
 
         if not messages:

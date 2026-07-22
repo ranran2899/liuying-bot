@@ -1,6 +1,7 @@
 """TTS相关配置项
 
 包含TTS供应商、模型、音色与自动触发等配置。
+采用嵌套字典组织相关配置项，提升可读性。
 """
 
 from liuying.configs.utils import RegisterConfig
@@ -10,62 +11,49 @@ from ._common import MODULE
 __all__ = ["TTS_CONFIGS"]
 
 TTS_CONFIGS: list[RegisterConfig] = [
+    # ===== TTS基础配置 =====
     RegisterConfig(
-        key="TTS_PROVIDER",
-        value=None,
+        key="TTS",
+        value={
+            "enabled": False,
+            "provider": None,
+            "model": "tts-1",
+            "voice": "alloy",
+            "llm_decision_enabled": False,
+        },
         module=MODULE,
-        help="TTS语音供应商",
-        default_value=None,
-        type=str,
+        help=(
+            "TTS语音配置\n"
+            " - enabled: 是否启用\n"
+            " - provider: 供应商\n"
+            " - model: 模型名\n"
+            " - voice: 默认音色\n"
+            " - llm_decision_enabled: LLM决策TTS"
+        ),
+        default_value={
+            "enabled": False,
+            "provider": None,
+            "model": "tts-1",
+            "voice": "alloy",
+            "llm_decision_enabled": False,
+        },
+        type=dict,
     ),
+    # ===== 自动TTS =====
     RegisterConfig(
-        key="TTS_MODEL",
-        value="tts-1",
+        key="TTS_AUTO",
+        value={
+            "enabled": False,
+            "probability": 0.2,
+        },
         module=MODULE,
-        help="TTS模型名",
-        default_value="tts-1",
-        type=str,
-    ),
-    RegisterConfig(
-        key="TTS_VOICE",
-        value="alloy",
-        module=MODULE,
-        help="默认TTS音色",
-        default_value="alloy",
-        type=str,
-    ),
-    RegisterConfig(
-        key="TTS_ENABLED",
-        value=False,
-        module=MODULE,
-        help="是否启用TTS",
-        default_value=False,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="TTS_AUTO_ENABLED",
-        value=False,
-        module=MODULE,
-        help="是否自动TTS",
-        default_value=False,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="TTS_AUTO_PROBABILITY",
-        value=0.2,
-        module=MODULE,
-        help="自动TTS触发概率",
-        default_value=0.2,
-        type=float,
-    ),
-    # ===== Phase8: TTS增强 =====
-    RegisterConfig(
-        key="TTS_LLM_DECISION_ENABLED",
-        value=False,
-        module=MODULE,
-        help="是否启用LLM决策TTS",
-        default_value=False,
-        type=bool,
+        help=(
+            "自动TTS配置\n"
+            " - enabled: 是否启用\n"
+            " - probability: 触发概率"
+        ),
+        default_value={"enabled": False, "probability": 0.2},
+        type=dict,
     ),
 ]
 """TTS相关配置项列表"""

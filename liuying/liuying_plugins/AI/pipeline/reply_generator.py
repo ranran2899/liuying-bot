@@ -161,7 +161,7 @@ class ReplyGenerator:
                     finally:
                         ctx.text = original_text
 
-        if get_config("AGENT_ENABLED", True):
+        if get_config("AGENT", {}).get("enabled", True):
             try:
                 result = await AgentRunner.run_agent(
                     use_messages,

@@ -105,7 +105,7 @@ class AiCliRouter:
         返回:
             list[AiCliRoute]: 按priority排序的路由列表
         """
-        raw = get_config("AI_CLI_ROUTES", "")
+        raw = get_config("AI_CLI", {}).get("routes", "")
         if not raw:
             return []
         try:
@@ -153,7 +153,7 @@ class AiCliRouter:
         返回:
             list[AiCliRoute]: 按priority排序的路由列表
         """
-        raw = str(get_config("AI_CLI_ROUTES", "") or "")
+        raw = str(get_config("AI_CLI", {}).get("routes", "") or "")
         if raw == self._config_hash and self._routes_cache is not None:
             return self._routes_cache
         self._config_hash = raw
@@ -178,7 +178,7 @@ class AiCliRouter:
         返回:
             str | None: 响应文本，全部失败返回None
         """
-        if not get_config("AI_CLI_ENABLED", False):
+        if not get_config("AI_CLI", {}).get("enabled", False):
             return None
         routes = self.get_routes()
         if not routes:

@@ -377,6 +377,8 @@ class TaskService:
             message: 消息内容
         """
         bot = get_bot()
+        if bot is None:
+            raise RuntimeError("Bot实例未初始化")
         if task.group_id:
             target = Target(
                 id=str(task.group_id), private=False

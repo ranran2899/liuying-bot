@@ -108,22 +108,24 @@ class ModelRouter:
         返回:
             ModelRole: 模型角色配置
         """
-        model_key = f"MODEL_{role.upper()}"
-        temp_key = f"MODEL_{role.upper()}_TEMPERATURE"
-        provider_key = f"MODEL_{role.upper()}_PROVIDER"
+        # 嵌套配置：MODEL_ROUTES 为按角色分组的字典
+        routes = get_config("MODEL_ROUTES", {})
+        role_config = routes.get(role, {}) if isinstance(routes, dict) else {}
 
         # 角色专属模型未配置时回退到 CHAT_MODEL
         model = str(
-            get_config(model_key, "")
-            or get_config("CHAT_MODEL", "")
+            role_config.get("model", "")
+            or get_config("CHAT_MODEL", {}).get("model", "")
             or ""
         )
         temperature = float(
-            get_config(temp_key, _DEFAULT_TEMPERATURES.get(role, 0.6))
+            role_config.get(
+                "temperature", _DEFAULT_TEMPERATURES.get(role, 0.6)
+            )
         )
         provider = str(
-            get_config(provider_key, "")
-            or get_config("CHAT_PROVIDER", "")
+            role_config.get("provider", "")
+            or get_config("CHAT_MODEL", {}).get("provider", "")
             or ""
         )
         return ModelRole(

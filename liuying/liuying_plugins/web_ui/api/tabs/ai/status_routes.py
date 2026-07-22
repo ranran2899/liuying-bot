@@ -35,14 +35,20 @@ async def _() -> Result[dict]:
         {
             "enabled": get_ai_config("ENABLE_AI", True),
             "persona": get_ai_config("DEFAULT_PERSONA", "liuying"),
-            "agent_enabled": get_ai_config("AGENT_ENABLED", True),
+            "agent_enabled": get_ai_config("AGENT", {}).get(
+                "enabled", True
+            ),
             "memory_enabled": get_ai_config("MEMORY_ENABLED", True),
-            "tts_enabled": get_ai_config("TTS_ENABLED", False),
+            "tts_enabled": get_ai_config("TTS", {}).get("enabled", False),
             "safety_filter_enabled": get_ai_config(
                 "SAFETY_FILTER_ENABLED", True
             ),
-            "fragment_style": get_ai_config("FRAGMENT_STYLE", "prompt"),
-            "vision_enabled": get_ai_config("VISION_ENABLED", True),
+            "fragment_style": get_ai_config("FRAGMENT", {}).get(
+                "style", "prompt"
+            ),
+            "vision_enabled": get_ai_config("VISION", {}).get(
+                "enabled", True
+            ),
             "timestamp": datetime.now().isoformat(),
         }
     )

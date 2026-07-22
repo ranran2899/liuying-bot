@@ -134,55 +134,58 @@ class ProviderHealth:
         name = str(provider_name or "").strip()
         if not name:
             return
-        lat = max(0.0, float(latency_ms or 0))
-        now = time.time()
-        with self._lock:
-            row = self._stats.get(name)
-            if row is None:
-                self._stats[name] = {
-                    "sample_count": 1,
-                    "success_count": 1 if success else 0,
-                    "failure_count": 0 if success else 1,
-                    "avg_latency_ms": lat,
-                    "last_request_at": now,
-                    "last_success_at": (
-                        now if success else 0.0
-                    ),
-                    "last_failure_at": (
-                        0.0 if success else now
-                    ),
-                    "last_error_kind": str(error_kind or "")[
-                        :32
-                    ],
-                    "last_seen_at": now,
-                }
-            else:
-                row["sample_count"] = (
-                    int(row["sample_count"]) + 1
-                )
-                row["success_count"] = int(
-                    row["success_count"]
-                ) + (1 if success else 0)
-                row["failure_count"] = int(
-                    row["failure_count"]
-                ) + (0 if success else 1)
-                old_avg = float(row["avg_latency_ms"] or 0)
-                new_avg = (
-                    lat
-                    if old_avg <= 0
-                    else _EMA_ALPHA * lat
-                    + (1 - _EMA_ALPHA) * old_avg
-                )
-                row["avg_latency_ms"] = new_avg
-                row["last_request_at"] = now
-                if success:
-                    row["last_success_at"] = now
+        try:
+            lat = max(0.0, float(latency_ms or 0))
+            now = time.time()
+            with self._lock:
+                row = self._stats.get(name)
+                if row is None:
+                    self._stats[name] = {
+                        "sample_count": 1,
+                        "success_count": 1 if success else 0,
+                        "failure_count": 0 if success else 1,
+                        "avg_latency_ms": lat,
+                        "last_request_at": now,
+                        "last_success_at": (
+                            now if success else 0.0
+                        ),
+                        "last_failure_at": (
+                            0.0 if success else now
+                        ),
+                        "last_error_kind": str(error_kind or "")[
+                            :32
+                        ],
+                        "last_seen_at": now,
+                    }
                 else:
-                    row["last_failure_at"] = now
-                row["last_error_kind"] = str(error_kind or "")[
-                    :32
-                ]
-                row["last_seen_at"] = now
+                    row["sample_count"] = (
+                        int(row["sample_count"]) + 1
+                    )
+                    row["success_count"] = int(
+                        row["success_count"]
+                    ) + (1 if success else 0)
+                    row["failure_count"] = int(
+                        row["failure_count"]
+                    ) + (0 if success else 1)
+                    old_avg = float(row["avg_latency_ms"] or 0)
+                    new_avg = (
+                        lat
+                        if old_avg <= 0
+                        else _EMA_ALPHA * lat
+                        + (1 - _EMA_ALPHA) * old_avg
+                    )
+                    row["avg_latency_ms"] = new_avg
+                    row["last_request_at"] = now
+                    if success:
+                        row["last_success_at"] = now
+                    else:
+                        row["last_failure_at"] = now
+                    row["last_error_kind"] = str(error_kind or "")[
+                        :32
+                    ]
+                    row["last_seen_at"] = now
+        except Exception:
+            pass
 
     def get_stats(
         self, provider_name: str

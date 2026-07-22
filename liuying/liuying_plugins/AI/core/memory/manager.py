@@ -15,11 +15,11 @@ from ...models.memory_item import MemoryItem
 from ..knowledge_db import knowledge_base
 from ._common import (
     _DEFAULT_PERSONA,
-    _EMBEDDING_DIM,
     MemoryEmbeddingUtils,
 )
 from .background_intelligence import background_intelligence
 from .consolidation import ConsolidationMixin
+from .embedding_service import EmbeddingService
 from .evolves import EvolveMixin
 from .recall import RecallMixin
 
@@ -39,7 +39,8 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
             db: KnowledgeBase实例，None时用单例
         """
         self._db = db or knowledge_base
-        self._embedding_dim = _EMBEDDING_DIM
+        self._embedding_service = EmbeddingService()
+        self._embedding_dim = self._embedding_service.embedding_dim
         self._bg_tasks: set[asyncio.Task] = set()
 
     async def add(
@@ -162,8 +163,8 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
             memory: 记忆项
         """
         search_text = f"{memory.summary} {memory.content}"
-        embedding = MemoryEmbeddingUtils.hash_bow_embedding(
-            search_text, self._embedding_dim
+        embedding = await self._embedding_service.embed_text(
+            search_text
         )
         entities = MemoryEmbeddingUtils.extract_entities_simple(search_text)
         await self._db.index_document(
@@ -178,7 +179,7 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
                 "tier": memory.tier,
                 "persona_name": memory.persona_name,
             },
-            model_version="hash_bow",
+            model_version=self._embedding_service.model_version,
         )
 
     async def get_memory_summary(

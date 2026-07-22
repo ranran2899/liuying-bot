@@ -34,7 +34,7 @@ class LLMHelper:
         异常:
             ValueError: provider未配置或不存在
         """
-        provider_name = name or get_config("CHAT_PROVIDER", None)
+        provider_name = name or get_config("CHAT_MODEL", {}).get("provider", None)
         if provider_name:
             provider = llm_manager.get_provider(provider_name)
             if provider:
@@ -103,7 +103,7 @@ class LLMHelper:
             provider = llm_manager.get_provider(name)
             return bool(provider and provider.get_capability(capability))
 
-        chat_provider = get_config("CHAT_PROVIDER", None)
+        chat_provider = get_config("CHAT_MODEL", {}).get("provider", None)
         if preferred and _supports(preferred):
             names.append(preferred.lower())
         if (
@@ -149,10 +149,10 @@ class LLMHelper:
             ValueError: provider未配置
             Exception: 调用失败
         """
-        use_model = model or get_config("CHAT_MODEL", None) or ""
+        use_model = model or get_config("CHAT_MODEL", {}).get("model", None) or ""
         candidates = self._build_candidates(
             Capability.CHAT,
-            provider_name or get_config("CHAT_PROVIDER", None),
+            provider_name or get_config("CHAT_MODEL", {}).get("provider", None),
         )
         call_options = {
             **(options or {}),
@@ -242,7 +242,7 @@ class LLMHelper:
             流式调用暂不支持中途切换provider，仅做首选provider冷却检测。
             若首选provider冷却，则回退到非流式chat_text并一次性yield结果。
         """
-        preferred = provider_name or get_config("CHAT_PROVIDER", None)
+        preferred = provider_name or get_config("CHAT_MODEL", {}).get("provider", None)
         if preferred and provider_router.is_cooling(preferred):
             logger.warning(
                 f"provider {preferred} 处于冷却期，流式调用回退到非流式",
@@ -260,7 +260,7 @@ class LLMHelper:
             raise ValueError(
                 f"provider '{provider.name}' 不支持流式对话"
             )
-        use_model = model or get_config("CHAT_MODEL", None) or ""
+        use_model = model or get_config("CHAT_MODEL", {}).get("model", None) or ""
         call_options = {
             **(options or {}),
             "reasoning_enabled": get_config(
@@ -291,10 +291,10 @@ class LLMHelper:
         异常:
             ValueError: provider不支持嵌入
         """
-        use_model = model or get_config("EMBEDDING_MODEL", None) or ""
+        use_model = model or get_config("EMBEDDING", {}).get("model", None) or ""
         candidates = self._build_candidates(
             Capability.EMBEDDING,
-            provider_name or get_config("EMBEDDING_PROVIDER", None),
+            provider_name or get_config("EMBEDDING", {}).get("provider", None),
         )
 
         async def _call(name: str) -> list[float]:
@@ -328,11 +328,11 @@ class LLMHelper:
         异常:
             ValueError: provider不支持TTS
         """
-        use_model = model or get_config("TTS_MODEL", "tts-1")
-        use_voice = voice or get_config("TTS_VOICE", "alloy")
+        use_model = model or get_config("TTS", {}).get("model", "tts-1")
+        use_voice = voice or get_config("TTS", {}).get("voice", "alloy")
         candidates = self._build_candidates(
             Capability.AUDIO,
-            provider_name or get_config("TTS_PROVIDER", None),
+            provider_name or get_config("TTS", {}).get("provider", None),
         )
 
         async def _call(name: str) -> bytes:
@@ -370,10 +370,10 @@ class LLMHelper:
         异常:
             ValueError: provider不支持图片生成
         """
-        use_model = model or get_config("IMAGE_MODEL", "dall-e-3")
+        use_model = model or get_config("IMAGE", {}).get("model", "dall-e-3")
         candidates = self._build_candidates(
             Capability.IMAGE,
-            provider_name or get_config("IMAGE_PROVIDER", None),
+            provider_name or get_config("IMAGE", {}).get("provider", None),
         )
 
         async def _call(name: str) -> list[str]:

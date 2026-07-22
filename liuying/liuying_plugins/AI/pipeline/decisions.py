@@ -109,14 +109,14 @@ class ReplyDecisions:
         返回:
             bytes | None: 音频数据，不发时返回None
         """
-        if not get_config("TTS_ENABLED", False) or not get_config(
-            "TTS_AUTO_ENABLED", False
-        ):
+        if not get_config("TTS", {}).get("enabled", False) or not get_config(
+            "TTS_AUTO", {}
+        ).get("enabled", False):
             return None
         if len(text) < _TTS_AUTO_TEXT_MIN_LEN:
             return None
 
-        if random.random() >= get_config("TTS_AUTO_PROBABILITY", 0.2):
+        if random.random() >= get_config("TTS_AUTO", {}).get("probability", 0.2):
             return None
         try:
             persona = await persona_manager.get_user_persona_config(
@@ -126,7 +126,7 @@ class ReplyDecisions:
                 persona
             )
             voice = tts_config.get(
-                "voice", get_config("TTS_VOICE", "alloy")
+                "voice", get_config("TTS", {}).get("voice", "alloy")
             )
             return await llm_helper.tts(text, voice=voice)
         except Exception as e:
@@ -152,9 +152,9 @@ class ReplyDecisions:
         """
         if not ctx.group_id:
             return None
-        if not get_config("REACTION_ENABLED", True):
+        if not get_config("REACTION", {}).get("enabled", True):
             return None
-        prob = get_config("REACTION_PROBABILITY", 0.15)
+        prob = get_config("REACTION", {}).get("probability", 0.15)
         if random.random() >= prob:
             return None
         return HumanizeToolkit.pick_reaction_face_id("neutral")

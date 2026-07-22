@@ -318,7 +318,7 @@ class VisionCapabilityRouter:
             )
 
         default_provider = get_config("CHAT_PROVIDER", None)
-        default_model = get_config("CHAT_MODEL", None)
+        default_model = get_config("CHAT_MODEL", {}).get("model", None)
         if default_provider and default_model:
             candidates.append((default_provider, default_model))
 

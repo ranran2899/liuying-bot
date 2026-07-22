@@ -71,7 +71,7 @@ class PromptBuilder:
                     ctx.user_id,
                     ctx.text,
                     ctx.group_id,
-                    top_k=get_config("MEMORY_RECALL_TOP_K", 5),
+                    top_k=get_config("MEMORY_RECALL", {}).get("top_k", 5),
                     persona_name=ctx.persona_name,
                 )
             except Exception as e:
@@ -169,7 +169,7 @@ class PromptBuilder:
 
         if (
             ctx.group_id
-            and get_config("FRAGMENT_STYLE", "prompt") == "prompt"
+            and get_config("FRAGMENT", {}).get("style", "prompt") == "prompt"
         ):
             parts.append(HumanizeToolkit.build_group_chat_style_prompt())
 

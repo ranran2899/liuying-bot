@@ -138,7 +138,7 @@ async def _run_group_style_autobuild() -> None:
     遍历所有群上下文记录，对每个活跃群组采样消息并分析风格，
     更新 GroupContextSnapshot.style 字段。
     """
-    if not get_config("GROUP_STYLE_AUTOBUILD_ENABLED", True):
+    if not get_config("GROUP_STYLE_AUTOBUILD", {}).get("enabled", True):
         return
     logger.info(
         "群风格自动学习任务启动",
@@ -178,10 +178,10 @@ async def setup_group_style_autobuild_job() -> None:
 
     默认12小时执行一次，通过 GROUP_STYLE_AUTOBUILD_INTERVAL 配置。
     """
-    if not get_config("GROUP_STYLE_AUTOBUILD_ENABLED", True):
+    if not get_config("GROUP_STYLE_AUTOBUILD", {}).get("enabled", True):
         return
     interval_hours = int(
-        get_config("GROUP_STYLE_AUTOBUILD_INTERVAL", 12)
+        get_config("GROUP_STYLE_AUTOBUILD", {}).get("interval", 12)
     )
     interval_hours = max(1, interval_hours)
 

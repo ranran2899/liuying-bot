@@ -184,13 +184,13 @@ class StickerCuration:
         返回:
             bool: 是否发送
         """
-        if not get_config("STICKER_ENABLED", True):
+        if not get_config("STICKER", {}).get("enabled", True):
             return False
         if not is_private and self._in_cooldown(group_id):
             return False
         prob = (
             probability if probability is not None
-            else float(get_config("STICKER_PROBABILITY", 0.24))
+            else float(get_config("STICKER", {}).get("probability", 0.24))
         )
         return random.random() < prob
 

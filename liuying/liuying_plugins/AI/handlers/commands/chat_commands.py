@@ -132,7 +132,7 @@ def setup_chat_commands() -> None:
                 return
 
         image_descs: list[str] = []
-        if get_config("VISION_ENABLED", True):
+        if get_config("VISION", {}).get("enabled", True):
             image_descs = (
                 await ChatMatchersHelper._extract_image_descriptions(
                     event
@@ -161,7 +161,7 @@ def setup_chat_commands() -> None:
         )
 
         # 消息批量缓冲：合并短时间内的多条消息
-        if get_config("REPLY_BUFFER_ENABLED", True):
+        if get_config("REPLY_BUFFER", {}).get("enabled", True):
             session_key = (
                 f"private:{user_id}"
                 if is_private

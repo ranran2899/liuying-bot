@@ -70,7 +70,7 @@ class TokenQuotaService:
         返回:
             bool: 是否启用
         """
-        return bool(get_config("TOKEN_QUOTA_ENABLED", True))
+        return bool(get_config("TOKEN_QUOTA", {}).get("enabled", True))
 
     def _get_reminder_cd(self) -> int:
         """获取提醒 CD（秒）
@@ -78,7 +78,9 @@ class TokenQuotaService:
         返回:
             int: 提醒冷却秒数
         """
-        raw = get_config("TOKEN_QUOTA_REMINDER_CD", self._DEFAULT_REMINDER_CD)
+        raw = get_config("TOKEN_QUOTA", {}).get(
+            "reminder_cd", self._DEFAULT_REMINDER_CD
+        )
         if not isinstance(raw, int | float):
             raw = self._DEFAULT_REMINDER_CD
         return max(0, int(raw))
@@ -89,7 +91,9 @@ class TokenQuotaService:
         返回:
             int: 最低可用 token 数
         """
-        raw = get_config("TOKEN_QUOTA_MIN_THRESHOLD", self._DEFAULT_MIN_THRESHOLD)
+        raw = get_config("TOKEN_QUOTA", {}).get(
+            "min_threshold", self._DEFAULT_MIN_THRESHOLD
+        )
         if not isinstance(raw, int | float):
             raw = self._DEFAULT_MIN_THRESHOLD
         return max(1, int(raw))

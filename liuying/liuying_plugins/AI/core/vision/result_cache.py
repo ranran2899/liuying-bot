@@ -47,7 +47,7 @@ class ImageResultCache:
         返回:
             bool: 是否启用
         """
-        return bool(get_config("IMAGE_RESULT_CACHE_ENABLED", True))
+        return bool(get_config("VISION", {}).get("result_cache_enabled", True))
 
     def _make_key(self, url: str) -> str:
         """根据URL生成缓存键

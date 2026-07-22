@@ -46,7 +46,7 @@ class ProactiveHelper:
         遍历所有群上下文，对长时间无活动的群决策是否主动发话。
         深夜静默时段（默认0-7点跨午夜）跳过。
         """
-        if not get_config("PROACTIVE_ENABLED", True):
+        if not get_config("PROACTIVE", {}).get("enabled", True):
             return
 
         if context_manager.is_rest_time():
@@ -60,9 +60,9 @@ class ProactiveHelper:
             return
 
         idle_threshold = datetime.now() - timedelta(
-            minutes=get_config("GROUP_IDLE_MINUTES", 90)
+            minutes=get_config("PROACTIVE", {}).get("group_idle_minutes", 90)
         )
-        daily_limit = get_config("PROACTIVE_DAILY_LIMIT", 3)
+        daily_limit = get_config("PROACTIVE", {}).get("daily_limit", 3)
         sent_count = 0
 
         for group in groups:
@@ -75,8 +75,8 @@ class ProactiveHelper:
 
             if not context_manager.is_group_active_hour(
                 group.group_id,
-                quiet_start=get_config("GROUP_QUIET_START", 0),
-                quiet_end=get_config("GROUP_QUIET_END", 7),
+                quiet_start=get_config("GROUP_QUIET", {}).get("start", 0),
+                quiet_end=get_config("GROUP_QUIET", {}).get("end", 7),
             ):
                 logger.debug(
                     f"群 {group.group_id} 处于深夜静默时段，跳过",
@@ -192,7 +192,7 @@ class ProactiveHelper:
         仅向 favor_value >= _PROACTIVE_FAVOR_THRESHOLD 的用户发送，
         每次执行受 PROACTIVE_DAILY_LIMIT 限制。
         """
-        if not get_config("PROACTIVE_ENABLED", True):
+        if not get_config("PROACTIVE", {}).get("enabled", True):
             return
 
         hour = datetime.now().hour
@@ -201,7 +201,7 @@ class ProactiveHelper:
 
         greeting_type = "早安" if hour == 8 else "晚安"
 
-        daily_limit = get_config("PROACTIVE_DAILY_LIMIT", 3)
+        daily_limit = get_config("PROACTIVE", {}).get("daily_limit", 3)
         sent_count = 0
 
         users = await UserInfo.filter(
@@ -299,11 +299,11 @@ class ProactiveHelper:
 
 async def setup_proactive_jobs() -> None:
     """注册主动行为定时任务"""
-    if not get_config("PROACTIVE_ENABLED", True):
+    if not get_config("PROACTIVE", {}).get("enabled", True):
         logger.info("主动行为任务已禁用", command="AI")
         return
 
-    interval_minutes = get_config("PROACTIVE_INTERVAL_MINUTES", 30)
+    interval_minutes = get_config("PROACTIVE", {}).get("interval_minutes", 30)
     await task_manager.add_interval(
         task_id=_PROACTIVE_TASK_ID,
         func=ProactiveHelper._check_group_idle_and_send,

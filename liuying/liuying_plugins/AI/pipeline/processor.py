@@ -118,15 +118,21 @@ class ReplyProcessor:
             for r in reversed(records)
         ]
 
-        if not history or not get_config("CONTEXT_COMPRESS_ENABLED", True):
+        if not history or not get_config(
+            "CONTEXT_COMPRESS", {}
+        ).get("enabled", True):
             return history
 
         try:
             chunks = [
                 f"{m['role']}: {m.get('content', '')}" for m in history
             ]
-            max_tokens = get_config("CONTEXT_MAX_TOKENS", 2000)
-            keep_recent = get_config("CONTEXT_KEEP_RECENT", 6)
+            max_tokens = get_config(
+                "CONTEXT_COMPRESS", {}
+            ).get("max_tokens", 2000)
+            keep_recent = get_config(
+                "CONTEXT_COMPRESS", {}
+            ).get("keep_recent", 6)
 
             async def _call_compress(
                 msgs: list[dict[str, str]],

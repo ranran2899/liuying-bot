@@ -75,7 +75,7 @@ class Diagnostics:
             checks["ai_enabled"] = False
         else:
             checks["ai_enabled"] = True
-        chat_provider = get_config("CHAT_PROVIDER", None)
+        chat_provider = get_config("CHAT_MODEL", {}).get("provider", None)
         checks["chat_provider"] = bool(chat_provider)
         if not chat_provider:
             ok = False
@@ -99,7 +99,7 @@ class Diagnostics:
         issues: list[str] = []
         if not get_config("MEMORY_ENABLED", True):
             issues.append("记忆系统未启用")
-        top_k = get_config("MEMORY_RECALL_TOP_K", 5)
+        top_k = get_config("MEMORY_RECALL", {}).get("top_k", 5)
         if not isinstance(top_k, int) or top_k <= 0:
             issues.append("MEMORY_RECALL_TOP_K配置异常")
         return {
@@ -114,14 +114,14 @@ class Diagnostics:
             dict: LLM模块检查结果
         """
         issues: list[str] = []
-        if not get_config("CHAT_PROVIDER", None):
+        if not get_config("CHAT_MODEL", {}).get("provider", None):
             issues.append("未配置CHAT_PROVIDER")
         strict = get_config("STRICT_MAIN_MODEL", False)
-        lite = get_config("LITE_MODEL_ENABLED", False)
+        lite = get_config("LITE_MODEL", {}).get("enabled", False)
         if strict and lite:
             issues.append("严格主模型与轻量模型同时开启")
         return {
-            "provider": get_config("CHAT_PROVIDER", None),
+            "provider": get_config("CHAT_MODEL", {}).get("provider", None),
             "issues": issues,
         }
 

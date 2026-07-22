@@ -47,6 +47,15 @@ class MemoryEmbeddingUtils:
     """
 
     @staticmethod
+    def default_dim() -> int:
+        """返回默认嵌入维度
+
+        返回:
+            int: 默认嵌入维度
+        """
+        return _EMBEDDING_DIM
+
+    @staticmethod
     def hash_bow_embedding(
         text: str, dim: int = _EMBEDDING_DIM
     ) -> list[float]:

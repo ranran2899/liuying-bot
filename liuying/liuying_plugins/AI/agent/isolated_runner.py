@@ -28,8 +28,12 @@ def _load_module(
         Any: 模块对象
     """
     path = Path(script_path).resolve()
+    if not path.is_absolute():
+        raise ValueError("脚本路径必须是绝对路径")
+    if not path.exists():
+        raise FileNotFoundError(f"脚本不存在: {path}")
     for p in sys_paths:
-        if p and p not in sys.path:
+        if p and Path(p).is_absolute() and p not in sys.path:
             sys.path.insert(0, p)
     module_name = f"_isolated_skill_{path.stem}_{hash(str(path))}"
     spec = importlib.util.spec_from_file_location(

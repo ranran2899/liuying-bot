@@ -42,7 +42,7 @@ def setup_tts_commands() -> None:
 
         使用当前用户激活的人格对应的语音配置。
         """
-        if not get_config("TTS_ENABLED", False):
+        if not get_config("TTS", {}).get("enabled", False):
             await MessageUtils.build_message("TTS功能未启用").finish()
             return
 
@@ -60,7 +60,7 @@ def setup_tts_commands() -> None:
             )
             tts_config = persona_manager.get_persona_tts_config(persona)
             voice = tts_config.get(
-                "voice", get_config("TTS_VOICE", "alloy")
+                "voice", get_config("TTS", {}).get("voice", "alloy")
             )
             audio = await llm_helper.tts(text, voice=voice)
         except Exception as e:

@@ -1,6 +1,7 @@
 """拟人化相关配置项
 
 包含打字延迟、错别字、贴纸、表情表态、拍一拍、引用回复等配置。
+采用嵌套字典组织相关配置项，提升可读性。
 """
 
 from liuying.configs.utils import RegisterConfig
@@ -10,30 +11,29 @@ from ._common import MODULE
 __all__ = ["HUMANIZE_CONFIGS"]
 
 HUMANIZE_CONFIGS: list[RegisterConfig] = [
+    # ===== 打字延迟 =====
     RegisterConfig(
-        key="HUMANIZE_TYPING_ENABLED",
-        value=True,
+        key="HUMANIZE_TYPING",
+        value={
+            "enabled": True,
+            "cps": 7.0,
+            "max_delay": 5.0,
+        },
         module=MODULE,
-        help="是否启用打字延迟拟人化",
-        default_value=True,
-        type=bool,
+        help=(
+            "打字延迟拟人化配置\n"
+            " - enabled: 是否启用\n"
+            " - cps: 打字速度（字符/秒）\n"
+            " - max_delay: 最大打字延迟（秒）"
+        ),
+        default_value={
+            "enabled": True,
+            "cps": 7.0,
+            "max_delay": 5.0,
+        },
+        type=dict,
     ),
-    RegisterConfig(
-        key="HUMANIZE_TYPING_CPS",
-        value=7.0,
-        module=MODULE,
-        help="打字速度（字符/秒）",
-        default_value=7.0,
-        type=float,
-    ),
-    RegisterConfig(
-        key="HUMANIZE_TYPING_MAX_DELAY",
-        value=5.0,
-        module=MODULE,
-        help="最大打字延迟（秒）",
-        default_value=5.0,
-        type=float,
-    ),
+    # ===== 错别字 =====
     RegisterConfig(
         key="HUMANIZE_TYPO_PROBABILITY",
         value=0.0,
@@ -42,63 +42,76 @@ HUMANIZE_CONFIGS: list[RegisterConfig] = [
         default_value=0.0,
         type=float,
     ),
+    # ===== 贴纸 =====
     RegisterConfig(
-        key="STICKER_ENABLED",
-        value=True,
+        key="STICKER",
+        value={
+            "enabled": True,
+            "probability": 0.24,
+            "semantic_enabled": True,
+            "cache_enabled": True,
+            "auto_label_enabled": False,
+        },
         module=MODULE,
-        help="是否启用贴纸",
-        default_value=True,
-        type=bool,
+        help=(
+            "贴纸配置\n"
+            " - enabled: 是否启用\n"
+            " - probability: 触发概率\n"
+            " - semantic_enabled: 语义分析\n"
+            " - cache_enabled: 缓存\n"
+            " - auto_label_enabled: 自动标注"
+        ),
+        default_value={
+            "enabled": True,
+            "probability": 0.24,
+            "semantic_enabled": True,
+            "cache_enabled": True,
+            "auto_label_enabled": False,
+        },
+        type=dict,
     ),
+    # ===== 表情表态 =====
     RegisterConfig(
-        key="STICKER_PROBABILITY",
-        value=0.24,
+        key="REACTION",
+        value={
+            "enabled": True,
+            "probability": 0.15,
+        },
         module=MODULE,
-        help="贴纸触发概率",
-        default_value=0.24,
-        type=float,
+        help=(
+            "表情表态配置\n"
+            " - enabled: 是否启用\n"
+            " - probability: 沉默时表态概率"
+        ),
+        default_value={
+            "enabled": True,
+            "probability": 0.15,
+        },
+        type=dict,
     ),
-    # ===== Phase4: 拟人化发送 =====
+    # ===== 拍一拍 =====
     RegisterConfig(
-        key="REACTION_ENABLED",
-        value=True,
+        key="POKE",
+        value={
+            "enabled": True,
+            "probability": 0.3,
+            "proactive_enabled": False,
+        },
         module=MODULE,
-        help="是否启用表情表态",
-        default_value=True,
-        type=bool,
+        help=(
+            "拍一拍配置\n"
+            " - enabled: 是否启用拍一拍回复\n"
+            " - probability: 被戳后戳回概率\n"
+            " - proactive_enabled: 主动拍一拍"
+        ),
+        default_value={
+            "enabled": True,
+            "probability": 0.3,
+            "proactive_enabled": False,
+        },
+        type=dict,
     ),
-    RegisterConfig(
-        key="REACTION_PROBABILITY",
-        value=0.15,
-        module=MODULE,
-        help="沉默时表情表态概率",
-        default_value=0.15,
-        type=float,
-    ),
-    RegisterConfig(
-        key="POKE_BACK_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用拍一拍回复",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="POKE_BACK_PROBABILITY",
-        value=0.3,
-        module=MODULE,
-        help="被戳后戳回的概率",
-        default_value=0.3,
-        type=float,
-    ),
-    RegisterConfig(
-        key="PROACTIVE_POKE_ENABLED",
-        value=False,
-        module=MODULE,
-        help="是否启用主动拍一拍（定时主动戳活跃用户）",
-        default_value=False,
-        type=bool,
-    ),
+    # ===== 输入状态 =====
     RegisterConfig(
         key="INPUT_STATUS_ENABLED",
         value=False,
@@ -107,6 +120,7 @@ HUMANIZE_CONFIGS: list[RegisterConfig] = [
         default_value=False,
         type=bool,
     ),
+    # ===== 引用回复 =====
     RegisterConfig(
         key="QUOTE_REPLY_ENABLED",
         value=True,
@@ -115,6 +129,7 @@ HUMANIZE_CONFIGS: list[RegisterConfig] = [
         default_value=True,
         type=bool,
     ),
+    # ===== @回复 =====
     RegisterConfig(
         key="AT_REPLY_ENABLED",
         value=True,
@@ -123,70 +138,46 @@ HUMANIZE_CONFIGS: list[RegisterConfig] = [
         default_value=True,
         type=bool,
     ),
+    # ===== 碎片化输出 =====
     RegisterConfig(
-        key="FRAGMENT_STYLE",
-        value="prompt",
+        key="FRAGMENT",
+        value={
+            "style": "prompt",
+            "max_chars": 40,
+        },
         module=MODULE,
-        help="碎片化输出风格：off或prompt",
-        default_value="prompt",
-        type=str,
+        help=(
+            "碎片化输出配置\n"
+            " - style: 风格（off或prompt）\n"
+            " - max_chars: 单段最大字符数"
+        ),
+        default_value={
+            "style": "prompt",
+            "max_chars": 40,
+        },
+        type=dict,
     ),
+    # ===== 消息批量缓冲 =====
     RegisterConfig(
-        key="FRAGMENT_MAX_CHARS",
-        value=40,
+        key="REPLY_BUFFER",
+        value={
+            "enabled": True,
+            "group_delay": 1.2,
+            "private_delay": 0.8,
+        },
         module=MODULE,
-        help="碎片化输出单段最大字符数",
-        default_value=40,
-        type=int,
-    ),
-    RegisterConfig(
-        key="STICKER_SEMANTIC_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用贴纸语义分析",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="STICKER_CACHE_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用贴纸缓存",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="STICKER_AUTO_LABEL_ENABLED",
-        value=False,
-        module=MODULE,
-        help="是否启用贴纸自动标注",
-        default_value=False,
-        type=bool,
-    ),
-    # ===== Phase2: 消息批量缓冲 =====
-    RegisterConfig(
-        key="REPLY_BUFFER_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用消息批量缓冲（合并短时间内的多条消息）",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="REPLY_BUFFER_GROUP_DELAY",
-        value=1.2,
-        module=MODULE,
-        help="群聊消息缓冲窗口（秒）",
-        default_value=1.2,
-        type=float,
-    ),
-    RegisterConfig(
-        key="REPLY_BUFFER_PRIVATE_DELAY",
-        value=0.8,
-        module=MODULE,
-        help="私聊消息缓冲窗口（秒）",
-        default_value=0.8,
-        type=float,
+        help=(
+            "消息批量缓冲配置\n"
+            " - enabled: 是否启用\n"
+            " - group_delay: 群聊缓冲窗口（秒）\n"
+            " - private_delay: 私聊缓冲窗口（秒）"
+        ),
+        default_value={
+            "enabled": True,
+            "group_delay": 1.2,
+            "private_delay": 0.8,
+        },
+        type=dict,
     ),
 ]
 """拟人化相关配置项列表"""

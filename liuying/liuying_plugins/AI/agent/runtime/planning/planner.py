@@ -182,7 +182,7 @@ class TurnPlanner:
         返回:
             tuple[str, bool]: (视觉提示文本, 是否支持视觉)
         """
-        model = str(get_config("CHAT_MODEL", "") or "")
+        model = str(get_config("CHAT_MODEL", {}).get("model", "") or "")
         supports, confidence = (
             vision_router.detect_by_keyword(model)
         )

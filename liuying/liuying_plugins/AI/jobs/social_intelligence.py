@@ -111,15 +111,15 @@ class SocialIntelligenceHelper:
             return 0
 
         time_period = context_manager.get_current_time_period()
-        daily_quota = get_config("SOCIAL_QUOTA_PER_USER", 5)
-        cooldown = get_config("SOCIAL_QUOTA_COOLDOWN", 3600)
+        daily_quota = get_config("SOCIAL_QUOTA", {}).get("per_user", 5)
+        cooldown = get_config("SOCIAL_QUOTA", {}).get("cooldown", 3600)
         gate_enabled = get_config("SOCIAL_GATE_ENABLED", False)
         sent = 0
         for group in groups:
             if not context_manager.is_group_active_hour(
                 group.group_id,
-                quiet_start=get_config("GROUP_QUIET_START", 0),
-                quiet_end=get_config("GROUP_QUIET_END", 7),
+                quiet_start=get_config("GROUP_QUIET", {}).get("start", 0),
+                quiet_end=get_config("GROUP_QUIET", {}).get("end", 7),
             ):
                 continue
 
@@ -233,7 +233,7 @@ class SocialIntelligenceHelper:
         随机选一个高好感度用户戳一下，作为亲昵互动。
         深夜静默时段跳过，受配额限制避免过度打扰。
         """
-        if not get_config("PROACTIVE_POKE_ENABLED", False):
+        if not get_config("POKE", {}).get("proactive_enabled", False):
             return
         if context_manager.is_rest_time():
             return
@@ -365,8 +365,8 @@ class SocialIntelligenceHelper:
             is_active=True
         ).all()
 
-        daily_quota = get_config("SOCIAL_QUOTA_PER_USER", 5)
-        cooldown = get_config("SOCIAL_QUOTA_COOLDOWN", 3600)
+        daily_quota = get_config("SOCIAL_QUOTA", {}).get("per_user", 5)
+        cooldown = get_config("SOCIAL_QUOTA", {}).get("cooldown", 3600)
         gate_enabled = get_config("SOCIAL_GATE_ENABLED", False)
         scenario = "话题延续"
 
@@ -456,7 +456,7 @@ def register_social_triggers() -> None:
         return get_config("SOCIAL_INTELLIGENCE_ENABLED", True)
 
     def _poke_enabled(_cfg: Any) -> bool:
-        return get_config("PROACTIVE_POKE_ENABLED", False)
+        return get_config("POKE", {}).get("proactive_enabled", False)
 
     social_trigger_registry.register(
         SocialTrigger(

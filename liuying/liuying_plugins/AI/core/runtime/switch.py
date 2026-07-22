@@ -52,20 +52,41 @@ FEATURE_LIST: tuple[str, ...] = (
 """受运行时开关管理的子功能名列表"""
 
 
-_CONFIG_KEY_MAP: dict[str, str] = {
-    "ai": "ENABLE_AI",
-    "agent": "AGENT_ENABLED",
-    "memory": "MEMORY_ENABLED",
-    "vision": "VISION_ENABLED",
-    "tts": "TTS_ENABLED",
-    "sticker": "STICKER_ENABLED",
-    "proactive": "PROACTIVE_ENABLED",
-    "social_intelligence": "SOCIAL_INTELLIGENCE_ENABLED",
-    "diary": "DIARY_ENABLED",
-    "webui": "WEBUI_ENABLED",
-    "safety_filter": "SAFETY_FILTER_ENABLED",
+_CONFIG_KEY_MAP: dict[str, tuple[str, str | None]] = {
+    "ai": ("ENABLE_AI", None),
+    "agent": ("AGENT", "enabled"),
+    "memory": ("MEMORY_ENABLED", None),
+    "vision": ("VISION", "enabled"),
+    "tts": ("TTS", "enabled"),
+    "sticker": ("STICKER", "enabled"),
+    "proactive": ("PROACTIVE", "enabled"),
+    "social_intelligence": ("SOCIAL_INTELLIGENCE_ENABLED", None),
+    "diary": ("DIARY_ENABLED", None),
+    "webui": ("WEBUI_ENABLED", None),
+    "safety_filter": ("SAFETY_FILTER_ENABLED", None),
 }
-"""功能名到配置键的映射（用于读写配置文件）"""
+"""功能名到配置键的映射（用于读写配置文件）
+
+值为 (config_key, sub_key) 元组：
+- sub_key 为 None 时直接读写 config_key
+- sub_key 不为 None 时读写 config_key 配置组下的 sub_key 子键
+"""
+
+
+def _config_key_str(feature: str) -> str:
+    """获取功能对应的配置键字符串表示
+
+    参数:
+        feature: 功能名
+
+    返回:
+        str: 配置键字符串，嵌套键格式为 "GROUP.sub_key"
+    """
+    mapping = _CONFIG_KEY_MAP.get(feature)
+    if not mapping:
+        return ""
+    config_key, sub_key = mapping
+    return f"{config_key}.{sub_key}" if sub_key else config_key
 
 
 @dataclass(slots=True)
@@ -141,10 +162,19 @@ class RuntimeSwitchManager:
         返回:
             bool: 是否启用
         """
-        config_key = _CONFIG_KEY_MAP.get(feature, "")
-        if not config_key:
+        mapping = _CONFIG_KEY_MAP.get(feature)
+        if not mapping:
             return True
-        value = get_config(config_key, True)
+        config_key, sub_key = mapping
+        if sub_key is None:
+            value = get_config(config_key, True)
+        else:
+            config_group = get_config(config_key, {})
+            value = (
+                config_group.get(sub_key, True)
+                if isinstance(config_group, dict)
+                else True
+            )
         return bool(value)
 
     def _save_to_config(self, feature: str, enabled: bool) -> bool:
@@ -157,10 +187,20 @@ class RuntimeSwitchManager:
         返回:
             bool: 是否成功持久化
         """
-        config_key = _CONFIG_KEY_MAP.get(feature, "")
-        if not config_key:
+        mapping = _CONFIG_KEY_MAP.get(feature)
+        if not mapping:
             return False
-        ConfigManager.set_config(_MODULE, config_key, enabled)
+        config_key, sub_key = mapping
+        if sub_key is None:
+            ConfigManager.set_config(_MODULE, config_key, enabled)
+        else:
+            config_group = get_config(config_key, {})
+            if not isinstance(config_group, dict):
+                config_group = {}
+            config_group[sub_key] = enabled
+            ConfigManager.set_config(
+                _MODULE, config_key, config_group
+            )
         return True
 
     def is_enabled(
@@ -332,7 +372,7 @@ class RuntimeSwitchManager:
 
             result: list[FeatureStatus] = []
             for feature in FEATURE_LIST:
-                config_key = _CONFIG_KEY_MAP.get(feature, "")
+                config_key = _config_key_str(feature)
 
                 if user_id:
                     user_cfg = self._user_overrides.get(user_id)
@@ -440,7 +480,7 @@ class RuntimeSwitchManager:
                     {
                         "name": f,
                         "enabled": self._global_state.get(f, True),
-                        "config_key": _CONFIG_KEY_MAP.get(f, ""),
+                        "config_key": _config_key_str(f),
                     }
                     for f in FEATURE_LIST
                 ],

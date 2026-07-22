@@ -319,9 +319,9 @@ class SkillpackLoader:
         返回:
             int: 注册的工具数
         """
-        if not get_config("MCP_ENABLED", False):
+        if not get_config("MCP", {}).get("enabled", False):
             return 0
-        config_json = str(get_config("MCP_SERVERS", ""))
+        config_json = str(get_config("MCP", {}).get("servers", ""))
         if not config_json.strip():
             return 0
         count = mcp_bridge.load_config(config_json)

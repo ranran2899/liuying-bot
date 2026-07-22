@@ -53,7 +53,7 @@ def _type_name(t: Any) -> str:
     """将Python类型对象转换为前端类型字符串
 
     参数:
-        t: Python类型对象（bool/int/float/str等）
+        t: Python类型对象（bool/int/float/str/dict/list等）
 
     返回:
         str: 类型名字符串
@@ -66,6 +66,10 @@ def _type_name(t: Any) -> str:
         return "float"
     if t is str:
         return "str"
+    if t is dict:
+        return "dict"
+    if t is list:
+        return "list"
     return "str"
 
 
@@ -114,7 +118,7 @@ def cast_value(value: Any, value_type: str) -> Any:
 
     参数:
         value: 原始值
-        value_type: 目标类型名（bool/int/float/str）
+        value_type: 目标类型名（bool/int/float/str/dict/list）
 
     返回:
         Any: 转换后的值
@@ -132,6 +136,14 @@ def cast_value(value: Any, value_type: str) -> Any:
         return int(value)
     if value_type == "float":
         return float(value)
+    if value_type == "dict":
+        if isinstance(value, dict):
+            return value
+        raise ValueError(f"dict类型配置需传入dict，收到: {type(value)}")
+    if value_type == "list":
+        if isinstance(value, list):
+            return value
+        raise ValueError(f"list类型配置需传入list，收到: {type(value)}")
     return str(value)
 
 
