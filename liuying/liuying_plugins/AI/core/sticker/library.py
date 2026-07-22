@@ -9,8 +9,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import random
 
-from liuying.utils.log import logger
-
 from ...models.sticker_item import StickerItem
 
 _DEFAULT_STICKER_ROOT = Path("data") / "ai_plugin" / "stickers"
@@ -263,16 +261,8 @@ class StickerLibrary:
         返回:
             bool: 是否成功
         """
-        try:
-            await StickerItem.set_disabled(item_id, disabled)
-            return True
-        except Exception as e:
-            logger.warning(
-                f"禁用表情包失败 {item_id}: {e}",
-                command="AI",
-                e=e,
-            )
-            return False
+        await StickerItem.set_disabled(item_id, disabled)
+        return True
 
 
 sticker_library = StickerLibrary()

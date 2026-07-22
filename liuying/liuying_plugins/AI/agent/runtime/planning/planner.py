@@ -8,8 +8,10 @@
 from liuying.utils.log import logger
 
 from ....config import get_config
+from ....core.chat_intent import semantic_frame_inferrer
 from ....core.json_utils import extract_json_payload
 from ....core.llm import llm_helper
+from ....core.llm.model_router import ROLE_AGENT, model_router
 from ....core.vision import vision_router
 from ..catalog.tool_catalog import ToolCatalog, tool_catalog
 from ..constants import (
@@ -28,7 +30,7 @@ from .types import TurnPlan
 
 __all__ = ["TurnPlan", "TurnPlanner"]
 
-_PLAN_SYSTEM_PROMPT = """你是ai回合规划器。
+_PLAN_SYSTEM_PROMPT = """你是回合规划器。
 分析用户消息和上下文，决策本回合的最佳行为。
 
 可选动作：
@@ -180,30 +182,19 @@ class TurnPlanner:
         返回:
             tuple[str, bool]: (视觉提示文本, 是否支持视觉)
         """
-        try:
-            model = str(get_config("CHAT_MODEL", "") or "")
-            supports, confidence = (
-                vision_router.detect_by_keyword(model)
-            )
-            if supports:
-                return (
-                    f"用户发送了图片，路由到视觉模型（置信度{confidence:.2f}）",
-                    True,
-                )
+        model = str(get_config("CHAT_MODEL", "") or "")
+        supports, confidence = (
+            vision_router.detect_by_keyword(model)
+        )
+        if supports:
             return (
-                "用户发送了图片，当前模型可能不支持视觉，降级到描述注入",
-                False,
+                f"用户发送了图片，路由到视觉模型（置信度{confidence:.2f}）",
+                True,
             )
-        except Exception as e:
-            logger.debug(
-                f"视觉能力检测失败，降级到描述注入: {e}",
-                command="AI",
-                e=e,
-            )
-            return (
-                "用户发送了图片，视觉能力检测失败，降级到描述注入",
-                False,
-            )
+        return (
+            "用户发送了图片，当前模型可能不支持视觉，降级到描述注入",
+            False,
+        )
 
     async def plan(
         self,
@@ -224,8 +215,34 @@ class TurnPlanner:
             TurnPlan: 规划结果
         """
         if not use_llm:
-            return self.plan_fast(user_message, context_summary, has_image)
+            plan = self.plan_fast(user_message, context_summary, has_image)
+        else:
+            plan = await self._plan_with_llm(
+                user_message, context_summary, has_image
+            )
 
+        # 语义帧增强（独立于LLM规划路径，覆盖规则与LLM两种模式）
+        plan = await self._augment_plan_with_semantic_frame(
+            plan, user_message, context_summary, use_llm
+        )
+        return plan
+
+    async def _plan_with_llm(
+        self,
+        user_message: str,
+        context_summary: str,
+        has_image: bool,
+    ) -> TurnPlan:
+        """LLM精细规划
+
+        参数:
+            user_message: 用户消息
+            context_summary: 上下文摘要
+            has_image: 是否包含图片
+
+        返回:
+            TurnPlan: 规划结果
+        """
         catalog = self._get_catalog()
         catalog_prompt = catalog.build_catalog_prompt()
         if not catalog_prompt:
@@ -239,12 +256,15 @@ class TurnPlanner:
 
         try:
             llm = self._get_llm()
+            role = model_router.resolve(ROLE_AGENT)
             _, response = await llm.chat(
                 [
                     {"role": "system", "content": _PLAN_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
-                options={"temperature": 0.1},
+                model=role.model or None,
+                options=role.apply_to_options(),
+                provider_name=role.provider or None,
             )
             plan = self._parse_plan_response(response, user_message)
             if has_image:
@@ -260,6 +280,82 @@ class TurnPlanner:
                 e=e,
             )
             return self.plan_fast(user_message, context_summary, has_image)
+
+    async def _augment_plan_with_semantic_frame(
+        self,
+        plan: TurnPlan,
+        user_message: str,
+        context_summary: str,
+        use_llm: bool,
+    ) -> TurnPlan:
+        """用语义帧增强规划
+
+        调用 semantic_frame_inferrer 推断当前回合的语义帧，
+        将 recommend_silence/requires_emotional_care/sticker_appropriate
+        等信号应用到规划，并把完整语义帧字典写入 plan.semantic_frame
+        供响应器消费 tts_style_hint/sticker_mood_hint/bot_emotion 等字段。
+
+        参数:
+            plan: 原始规划
+            user_message: 用户消息
+            context_summary: 上下文摘要
+            use_llm: 是否使用LLM推断（False时用规则快速推断）
+
+        返回:
+            TurnPlan: 增强后的规划
+        """
+        if not get_config("CHAT_INTENT_ENABLED", True):
+            return plan
+        try:
+            frame = await semantic_frame_inferrer.infer(
+                user_message=user_message,
+                context_summary=context_summary,
+                use_llm=use_llm,
+            )
+        except Exception as e:
+            logger.debug(
+                f"语义帧推断失败，跳过增强: {e}",
+                command="AI",
+                e=e,
+            )
+            return plan
+
+        plan.semantic_frame = frame.to_dict()
+
+        # 静默建议优先级最高：覆盖规划动作
+        if frame.recommend_silence and plan.action == TURN_ACTION_REPLY:
+            plan.action = TURN_ACTION_SILENCE
+            plan.output_mode = OUTPUT_MODE_SILENCE
+            if plan.reason:
+                plan.reason = f"{plan.reason}（语义帧建议静默）"
+            else:
+                plan.reason = "语义帧建议静默"
+            return plan
+
+        # 情感关怀：附加意图标签，提示响应器采用温和风格
+        if frame.requires_emotional_care:
+            if "emotional_care" not in plan.intent_tags:
+                plan.intent_tags.append("emotional_care")
+
+        # 贴纸适配：附加意图标签，提示响应器可发贴纸
+        if frame.sticker_appropriate:
+            if "sticker" not in plan.intent_tags:
+                plan.intent_tags.append("sticker")
+
+        # 元问题：附加意图标签，提示走人格/帮助路径
+        if frame.meta_question:
+            if "meta_question" not in plan.intent_tags:
+                plan.intent_tags.append("meta_question")
+
+        # 模糊度：语义帧值优先（LLM语义分析比规划器更细粒度）
+        if frame.ambiguity_level > 0:
+            plan.ambiguity_level = frame.ambiguity_level
+            if frame.ambiguity_level >= 0.7 and plan.action == TURN_ACTION_REPLY:
+                plan.action = TURN_ACTION_ASK_CLARIFY
+                if not plan.reason:
+                    plan.reason = "语义帧判断模糊度较高，请求澄清"
+
+        return plan
 
     async def _augment_plan_with_vision_route(
         self, plan: TurnPlan
@@ -357,9 +453,10 @@ class TurnPlanner:
 
         # 从配置读取上限，允许运行时调整Agent最大步数
         config_max = _get_agent_max_steps()
-        try:
-            max_steps = int(data.get("max_steps", config_max))
-        except (TypeError, ValueError):
+        raw_steps = data.get("max_steps", config_max)
+        if isinstance(raw_steps, int | float) and not isinstance(raw_steps, bool):
+            max_steps = int(raw_steps)
+        else:
             max_steps = config_max
         max_steps = max(1, min(max_steps, config_max))
 

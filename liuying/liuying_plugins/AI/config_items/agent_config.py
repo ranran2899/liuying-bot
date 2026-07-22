@@ -67,5 +67,40 @@ AGENT_CONFIGS: list[RegisterConfig] = [
         default_value=True,
         type=bool,
     ),
+    # ===== Phase1: 聊天意图语义帧 =====
+    RegisterConfig(
+        key="CHAT_INTENT_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用LLM语义帧推断（关闭时仅用关键词规则）",
+        default_value=True,
+        type=bool,
+    ),
+    # ===== 用户自定义定时任务 =====
+    RegisterConfig(
+        key="USER_TASKS_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用用户自定义定时任务",
+        default_value=True,
+        type=bool,
+    ),
+    # ===== MCP桥接 =====
+    RegisterConfig(
+        key="MCP_ENABLED",
+        value=False,
+        module=MODULE,
+        help="是否启用MCP桥接（远程工具协议）",
+        default_value=False,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="MCP_SERVERS",
+        value="",
+        module=MODULE,
+        help="MCP服务器配置（JSON数组）",
+        default_value="",
+        type=str,
+    ),
 ]
 """Agent相关配置项列表"""

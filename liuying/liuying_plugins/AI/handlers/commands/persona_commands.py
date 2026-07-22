@@ -51,12 +51,9 @@ def setup_persona_commands() -> None:
 
         # 无参：展示人格列表及描述
         if not name:
-            try:
-                current = await persona_manager.get_user_persona_name(
-                    user_id
-                )
-            except Exception:
-                current = persona_manager.get_active_persona_name()
+            current = await persona_manager.get_user_persona_name(
+                user_id
+            )
             personas = persona_manager.list_personas_with_desc()
             if not personas:
                 await MessageUtils.build_message(

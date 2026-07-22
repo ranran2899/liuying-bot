@@ -42,9 +42,9 @@ class PluginView:
         self._meta = meta
         extra_raw = getattr(meta, "extra", None) or {}
         if not isinstance(extra_raw, dict):
-            try:
+            if isinstance(extra_raw, list | tuple):
                 extra_raw = dict(extra_raw)
-            except (TypeError, ValueError):
+            else:
                 extra_raw = {}
         self._extra = extra_raw
 

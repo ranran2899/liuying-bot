@@ -8,8 +8,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from liuying.utils.log import logger
-
 from ..runtime.catalog.tool_catalog import tool_catalog
 from ..runtime.constants import (
     EVIDENCE_KIND_TOOL,
@@ -86,16 +84,9 @@ class ToolRegistry:
             tool: 工具实例
         """
         self._tools[tool.name] = tool
-        try:
-            tool_catalog.categorize_by_metadata(
-                tool.name, tool.to_metadata()
-            )
-        except Exception as e:
-            logger.debug(
-                f"工具分类失败（不影响注册）: {tool.name} -> {e}",
-                command="AI",
-                e=e,
-            )
+        tool_catalog.categorize_by_metadata(
+            tool.name, tool.to_metadata()
+        )
 
     def unregister(self, name: str) -> None:
         """注销工具
@@ -105,14 +96,7 @@ class ToolRegistry:
         """
         tool = self._tools.pop(name, None)
         if tool:
-            try:
-                tool_catalog.unregister_tool(name)
-            except Exception as e:
-                logger.debug(
-                    f"工具取消分类失败: {name} -> {e}",
-                    command="AI",
-                    e=e,
-                )
+            tool_catalog.unregister_tool(name)
 
     def get(self, name: str) -> AgentTool | None:
         """获取工具

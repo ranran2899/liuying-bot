@@ -17,6 +17,9 @@ import yaml
 
 from liuying.utils.log import logger
 
+from ..config import get_config
+from .mcp_bridge import mcp_bridge
+from .skill_isolation import skill_isolation_runner
 from .skillpacks import BuiltinSkillpackRegistrar
 from .tools import AgentTool, ToolRegistry, tool_registry
 
@@ -51,6 +54,7 @@ class SkillSpec:
         parameters: 参数JSON Schema
         enabled: 是否启用
         metadata: 附加元信息
+        isolation: 隔离配置（mode=process时子进程隔离）
     """
 
     name: str
@@ -60,6 +64,7 @@ class SkillSpec:
     parameters: dict[str, Any] = field(default_factory=dict)
     enabled: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
+    isolation: dict[str, Any] = field(default_factory=dict)
 
 
 class SkillpackLoader:
@@ -167,6 +172,7 @@ class SkillpackLoader:
             parameters=frontmatter.get("parameters", {}),
             enabled=bool(frontmatter.get("enabled", True)),
             metadata=frontmatter,
+            isolation=frontmatter.get("isolation", {}),
         )
 
     def register_all(
@@ -186,73 +192,142 @@ class SkillpackLoader:
         for spec in specs:
             if not spec.enabled or spec.entrypoint is None:
                 continue
-            try:
-                module = self._load_skill_module(spec.entrypoint)
-
-                if hasattr(module, "register"):
-                    module.register(registry)
-                    registered += 1
-                elif hasattr(module, "build_tools"):
-                    tools = module.build_tools()
-                    for tool in tools:
-                        registry.register(tool)
-                    registered += len(tools)
-                elif hasattr(module, "run"):
-
-                    async def _run(
-                        _module: Any = module, **kwargs: Any
-                    ) -> str:
-                        """执行技能
-
-                        参数:
-                            _module: 绑定的技能模块（默认参数避免闭包捕获循环变量）
-                            **kwargs: 参数
-
-                        返回:
-                            str: 执行结果
-                        """
-                        result = await _module.run(**kwargs)
-                        return (
-                            result
-                            if isinstance(result, str)
-                            else str(result)
-                        )
-
-                    registry.register(
-                        AgentTool(
-                            name=spec.name,
-                            description=spec.description,
-                            parameters=spec.parameters,
-                            func=_run,
-                        )
-                    )
-                    registered += 1
-            except Exception as e:
-                logger.warning(
-                    f"注册技能 {spec.name} 失败: {e}",
-                    command="AI",
-                    e=e,
+            # 非可信技能使用子进程隔离执行
+            if spec.isolation.get("mode") == "process":
+                registered += self._register_isolated_skill(
+                    spec, registry
                 )
+                continue
+            module = self._load_skill_module(spec.entrypoint)
+
+            if hasattr(module, "register"):
+                module.register(registry)
+                registered += 1
+            elif hasattr(module, "build_tools"):
+                tools = module.build_tools()
+                for tool in tools:
+                    registry.register(tool)
+                registered += len(tools)
+            elif hasattr(module, "run"):
+
+                async def _run(
+                    _module: Any = module, **kwargs: Any
+                ) -> str:
+                    """执行技能
+
+                    参数:
+                        _module: 绑定的技能模块（默认参数避免闭包捕获循环变量）
+                        **kwargs: 参数
+
+                    返回:
+                        str: 执行结果
+                    """
+                    result = await _module.run(**kwargs)
+                    return (
+                        result
+                        if isinstance(result, str)
+                        else str(result)
+                    )
+
+                registry.register(
+                    AgentTool(
+                        name=spec.name,
+                        description=spec.description,
+                        parameters=spec.parameters,
+                        func=_run,
+                    )
+                )
+                registered += 1
 
         # 注册内置单文件技能包（news/weather/datetime/wiki/game_info）
-        try:
-            registered += (
-                BuiltinSkillpackRegistrar.register_builtin_skillpacks(
-                    registry
-                )
+        registered += (
+            BuiltinSkillpackRegistrar.register_builtin_skillpacks(
+                registry
             )
-        except Exception as e:
-            logger.warning(
-                f"内置技能包注册失败: {e}",
-                command="AI",
-                e=e,
-            )
+        )
 
         logger.info(
             f"技能包注册完成，共{registered}个工具",
             command="AI",
         )
         return registered
+
+    def _register_isolated_skill(
+        self, spec: SkillSpec, registry: ToolRegistry
+    ) -> int:
+        """注册子进程隔离执行的技能
+
+        为非可信技能创建隔离执行handler，调用时在子进程中运行。
+
+        参数:
+            spec: 技能规格
+            registry: 工具注册表
+
+        返回:
+            int: 注册的工具数
+        """
+        if spec.entrypoint is None:
+            return 0
+        entrypoint = spec.entrypoint
+        timeout = int(spec.isolation.get("timeout", 30))
+        inherit_env = bool(
+            spec.isolation.get("inherit_env", False)
+        )
+
+        async def _isolated_run(**kwargs: Any) -> str:
+            """在子进程中隔离执行技能
+
+            参数:
+                **kwargs: 技能参数
+
+            返回:
+                str: 执行结果
+            """
+            return await skill_isolation_runner.run_in_subprocess(
+                script_path=entrypoint,
+                function="run",
+                kwargs=kwargs,
+                timeout=timeout,
+                inherit_env=inherit_env,
+            )
+
+        registry.register(
+            AgentTool(
+                name=spec.name,
+                description=f"[隔离] {spec.description}",
+                parameters=spec.parameters,
+                func=_isolated_run,
+            )
+        )
+        logger.info(
+            f"隔离技能 {spec.name} 已注册",
+            command="AI",
+        )
+        return 1
+
+    async def register_mcp_tools(
+        self, registry: ToolRegistry = tool_registry
+    ) -> int:
+        """注册MCP远程工具
+
+        从配置加载MCP服务器定义，发现并注册远程工具。
+        需在异步上下文中调用（MCP注册涉及子进程通信）。
+
+        参数:
+            registry: 工具注册表
+
+        返回:
+            int: 注册的工具数
+        """
+        if not get_config("MCP_ENABLED", False):
+            return 0
+        config_json = str(get_config("MCP_SERVERS", ""))
+        if not config_json.strip():
+            return 0
+        count = mcp_bridge.load_config(config_json)
+        if count == 0:
+            return 0
+        return await mcp_bridge.register_tools(registry)
 
     def _extract_frontmatter(
         self, text: str

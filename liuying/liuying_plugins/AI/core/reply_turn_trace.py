@@ -17,8 +17,6 @@ import time
 from typing import Any
 import uuid
 
-from liuying.utils.log import logger
-
 __all__ = [
     "ReplyTurnTrace",
     "reply_turn_trace",
@@ -119,28 +117,21 @@ class ReplyTurnTrace:
         trace = str(trace_id or "").strip() or (
             ReplyTurnTrace.new_trace_id()
         )
-        try:
-            with self._lock:
-                self._entries[trace] = {
-                    "trace_id": trace,
-                    "ts": time.time(),
-                    "session_type": str(session_type or "")[
-                        :24
-                    ],
-                    "group_id": str(group_id or "")[:32],
-                    "user_id": str(user_id or "")[:32],
-                    "stages": [],
-                    "outcome": "",
-                    "diagnosis_code": "",
-                    "detail": dict(detail or {}),
-                }
-                self._prune_old_entries()
-        except Exception as e:
-            logger.debug(
-                f"追踪记录创建失败: {e}",
-                command="AI",
-                e=e,
-            )
+        with self._lock:
+            self._entries[trace] = {
+                "trace_id": trace,
+                "ts": time.time(),
+                "session_type": str(session_type or "")[
+                    :24
+                ],
+                "group_id": str(group_id or "")[:32],
+                "user_id": str(user_id or "")[:32],
+                "stages": [],
+                "outcome": "",
+                "diagnosis_code": "",
+                "detail": dict(detail or {}),
+            }
+            self._prune_old_entries()
         return trace
 
     def record_stage(
@@ -173,25 +164,18 @@ class ReplyTurnTrace:
             "key": str(key or "")[:64],
             "label": str(label or key or "")[:80],
             "status": str(status or "info")[:16],
-            "detail": str(detail or "")[_DETAIL_LIMIT:],
+            "detail": str(detail or "")[:_DETAIL_LIMIT],
         }
-        try:
-            with self._lock:
-                entry = self._entries.get(trace)
-                if entry is None:
-                    return
-                stages = entry.get("stages", [])
-                stages.append(stage)
-                if len(stages) > _MAX_STAGES:
-                    stages = stages[-_MAX_STAGES:]
-                entry["stages"] = stages
-                entry["ts"] = time.time()
-        except Exception as e:
-            logger.debug(
-                f"追踪阶段记录失败: {e}",
-                command="AI",
-                e=e,
-            )
+        with self._lock:
+            entry = self._entries.get(trace)
+            if entry is None:
+                return
+            stages = entry.get("stages", [])
+            stages.append(stage)
+            if len(stages) > _MAX_STAGES:
+                stages = stages[-_MAX_STAGES:]
+            entry["stages"] = stages
+            entry["ts"] = time.time()
 
     def finish_trace(
         self,
@@ -216,24 +200,17 @@ class ReplyTurnTrace:
         ).strip()
         if not trace:
             return
-        try:
-            with self._lock:
-                entry = self._entries.get(trace)
-                if entry is None:
-                    return
-                entry["ts"] = time.time()
-                entry["outcome"] = str(outcome or "")[:32]
-                entry["diagnosis_code"] = str(
-                    diagnosis_code or ""
-                )[:64]
-                if detail:
-                    entry["detail"].update(detail)
-        except Exception as e:
-            logger.debug(
-                f"追踪完成失败: {e}",
-                command="AI",
-                e=e,
-            )
+        with self._lock:
+            entry = self._entries.get(trace)
+            if entry is None:
+                return
+            entry["ts"] = time.time()
+            entry["outcome"] = str(outcome or "")[:32]
+            entry["diagnosis_code"] = str(
+                diagnosis_code or ""
+            )[:64]
+            if detail:
+                entry["detail"].update(detail)
 
     def get_trace(
         self, trace_id: str

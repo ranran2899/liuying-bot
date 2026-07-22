@@ -21,6 +21,7 @@ from ...core.safety import AclChecker
 from ...core.target_inference import MessageTarget, target_inference
 from ...core.tools import MessageExtractor
 from ...pipeline.processor import ReplyResult, reply_processor
+from ...pipeline.reply_buffer import reply_buffer
 from ..chat_helpers import ChatMatchersHelper, _ai_user_states
 
 __all__ = ["setup_chat_commands"]
@@ -159,6 +160,24 @@ def setup_chat_commands() -> None:
             session=session,
         )
 
+        # 消息批量缓冲：合并短时间内的多条消息
+        if get_config("REPLY_BUFFER_ENABLED", True):
+            session_key = (
+                f"private:{user_id}"
+                if is_private
+                else f"group:{group_id}:{user_id}"
+            )
+            combined = await reply_buffer.submit(
+                session_key=session_key,
+                text=text,
+                is_private=is_private,
+                message_id=getattr(event, "message_id", None),
+            )
+            if combined is None:
+                # 已被合并到前一条消息，跳过处理
+                return
+            text = combined
+
         await _handle_reply(
             session,
             user_id,
@@ -202,18 +221,11 @@ def setup_chat_commands() -> None:
             if group_id and get_config(
                 "SOCIAL_INTELLIGENCE_ENABLED", True
             ):
-                try:
-                    group_social.record_message(
-                        group_id=group_id,
-                        user_id=user_id,
-                        text=text,
-                    )
-                except Exception as e:
-                    logger.debug(
-                        f"群社交记录失败: {e}",
-                        command="AI",
-                        e=e,
-                    )
+                group_social.record_message(
+                    group_id=group_id,
+                    user_id=user_id,
+                    text=text,
+                )
 
             result = await reply_processor.handle_text(
                 user_id=user_id,
@@ -225,10 +237,9 @@ def setup_chat_commands() -> None:
             )
         except Exception as e:
             logger.error(
-                info=f"AI对话处理失败：{e}",
+                f"AI对话处理失败：{e}",
                 command="流萤",
                 e=e,
-                session=session,
             )
             err_text = "出了点小问题，待会再试试~"
 

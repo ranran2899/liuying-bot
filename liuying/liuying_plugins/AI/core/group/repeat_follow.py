@@ -164,11 +164,11 @@ class RepeatFollow:
         threshold = get_config(
             "REPEAT_FOLLOW_THRESHOLD", _FOLLOW_THRESHOLD
         )
-        try:
-            value = int(threshold)
-            return max(2, value)
-        except (TypeError, ValueError):
-            return _FOLLOW_THRESHOLD
+        if isinstance(threshold, int | float) and not isinstance(
+            threshold, bool
+        ):
+            return max(2, int(threshold))
+        return _FOLLOW_THRESHOLD
 
     def _get_ttl_seconds(self) -> int:
         """获取TTL秒数
@@ -179,11 +179,9 @@ class RepeatFollow:
         ttl = get_config(
             "REPEAT_FOLLOW_TTL_SECONDS", _TTL_SECONDS
         )
-        try:
-            value = int(ttl)
-            return max(10, value)
-        except (TypeError, ValueError):
-            return _TTL_SECONDS
+        if isinstance(ttl, int | float) and not isinstance(ttl, bool):
+            return max(10, int(ttl))
+        return _TTL_SECONDS
 
     def check_and_follow(
         self,

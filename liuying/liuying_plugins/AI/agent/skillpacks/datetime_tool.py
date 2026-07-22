@@ -4,7 +4,7 @@
 """
 
 from datetime import datetime
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 _DEFAULT_TZ = "Asia/Shanghai"
 """默认时区"""
@@ -27,11 +27,7 @@ def get_current_time(timezone: str = "Asia/Shanghai") -> str:
         str: 格式化的当前时间描述
     """
     tz_name = (timezone or _DEFAULT_TZ).strip()
-    try:
-        tz = ZoneInfo(tz_name)
-    except (ZoneInfoNotFoundError, ValueError):
-        tz = ZoneInfo(_DEFAULT_TZ)
-        tz_name = f"{tz_name}(无效，回退{_DEFAULT_TZ})"
+    tz = ZoneInfo(tz_name)
 
     now = datetime.now(tz)
     weekday = _WEEKDAYS[now.weekday()]

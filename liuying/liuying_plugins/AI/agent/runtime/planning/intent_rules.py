@@ -36,10 +36,9 @@ def _get_agent_max_steps() -> int:
         int: Agent最大步数
     """
     raw = get_config("AGENT_MAX_STEPS", DEFAULT_AGENT_MAX_STEPS)
-    try:
+    if isinstance(raw, int | float) and not isinstance(raw, bool):
         return max(1, int(raw))
-    except (TypeError, ValueError):
-        return DEFAULT_AGENT_MAX_STEPS
+    return DEFAULT_AGENT_MAX_STEPS
 
 
 @dataclass(slots=True)

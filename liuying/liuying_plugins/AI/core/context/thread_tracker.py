@@ -7,6 +7,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+import re
 
 from liuying.utils.log import logger
 
@@ -21,6 +22,42 @@ _MAX_ACTIVE_THREADS = 10
 
 _SUMMARY_KEYWORDS = 5
 """主题关键词数量"""
+
+_CJK_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
+"""CJK字符匹配模式"""
+
+_CJK_SPLIT_RE = re.compile(r"([\u4e00-\u9fff\u3400-\u4dbf]+)")
+"""CJK文本分割模式"""
+
+
+def _tokenize_text(text: str) -> set[str]:
+    """分词: CJK按字符bigram, 非CJK按空格分词
+
+    解决中文文本 split() 无效的问题,使用字符级bigram
+    保证 Jaccard 相似度对中文有实际区分能力。
+
+    参数:
+        text: 输入文本
+
+    返回:
+        set[str]: 词元集合
+    """
+    tokens: set[str] = set()
+    parts = _CJK_SPLIT_RE.split(text)
+    for part in parts:
+        if not part:
+            continue
+        if _CJK_RE.match(part):
+            chars = [c for c in part if c.strip()]
+            for i in range(len(chars) - 1):
+                tokens.add(chars[i] + chars[i + 1])
+            for c in chars:
+                tokens.add(c)
+        else:
+            for word in part.split():
+                if len(word) >= 2:
+                    tokens.add(word.lower())
+    return tokens
 
 
 @dataclass(slots=True)
@@ -303,7 +340,7 @@ class ThreadTracker:
         """
         if not thread.keywords or not text:
             return 0.0
-        text_words = set(text.split())
+        text_words = _tokenize_text(text)
         keyword_set = set(thread.keywords)
         if not text_words or not keyword_set:
             return 0.0
@@ -325,7 +362,7 @@ class ThreadTracker:
         """
         if not text:
             return []
-        words = text.split()
+        words = _tokenize_text(text)
         freq: dict[str, int] = {}
         for word in words:
             if len(word) >= 2:

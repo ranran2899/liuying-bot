@@ -57,35 +57,32 @@ class TargetInference:
         at_ids: list[str] = []
         if message is None:
             return at_ids
-        try:
-            for seg in message:
-                seg_type = getattr(seg, "type", "") or ""
-                if seg_type in ("at", "mention_user", "mention"):
-                    data = (
-                        seg.data
-                        if hasattr(seg, "data")
-                        else {}
+        for seg in message:
+            seg_type = getattr(seg, "type", "") or ""
+            if seg_type in ("at", "mention_user", "mention"):
+                data = (
+                    seg.data
+                    if hasattr(seg, "data")
+                    else {}
+                )
+                if isinstance(data, dict):
+                    user_id = str(
+                        data.get("qq")
+                        or data.get("user_id")
+                        or data.get("target_id")
+                        or ""
                     )
-                    if isinstance(data, dict):
-                        user_id = str(
-                            data.get("qq")
-                            or data.get("user_id")
-                            or data.get("target_id")
-                            or ""
+                else:
+                    user_id = str(
+                        getattr(data, "qq", None)
+                        or getattr(data, "user_id", None)
+                        or getattr(
+                            data, "target_id", None
                         )
-                    else:
-                        user_id = str(
-                            getattr(data, "qq", None)
-                            or getattr(data, "user_id", None)
-                            or getattr(
-                                data, "target_id", None
-                            )
-                            or ""
-                        )
-                    if user_id:
-                        at_ids.append(user_id)
-        except Exception:
-            pass
+                        or ""
+                    )
+                if user_id:
+                    at_ids.append(user_id)
         return at_ids
 
     @staticmethod
@@ -102,23 +99,20 @@ class TargetInference:
         """
         if reply is None:
             return ""
-        try:
-            sender = getattr(reply, "sender", None)
-            if sender is not None:
-                user_id = (
-                    getattr(sender, "user_id", None)
-                    or getattr(sender, "id", None)
-                )
-                if user_id:
-                    return str(user_id)
+        sender = getattr(reply, "sender", None)
+        if sender is not None:
             user_id = (
-                getattr(reply, "user_id", None)
-                or getattr(reply, "sender_id", None)
+                getattr(sender, "user_id", None)
+                or getattr(sender, "id", None)
             )
             if user_id:
                 return str(user_id)
-        except Exception:
-            pass
+        user_id = (
+            getattr(reply, "user_id", None)
+            or getattr(reply, "sender_id", None)
+        )
+        if user_id:
+            return str(user_id)
         return ""
 
     @staticmethod

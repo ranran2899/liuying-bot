@@ -15,6 +15,7 @@ from .sticker_usage import StickerUsage
 from .token_ledger_record import TokenLedgerRecord
 from .user_persona import UserPersonaProfile
 from .user_persona_selection import UserPersonaSelection
+from .user_task import UserTask
 
 __all__ = [
     "ConversationRecord",
@@ -28,4 +29,5 @@ __all__ = [
     "TokenLedgerRecord",
     "UserPersonaProfile",
     "UserPersonaSelection",
+    "UserTask",
 ]

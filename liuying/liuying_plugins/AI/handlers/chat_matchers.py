@@ -15,6 +15,7 @@ from .commands import (
     setup_chat_commands,
     setup_memory_commands,
     setup_persona_commands,
+    setup_task_commands,
     setup_tts_commands,
 )
 from .poke_notice import setup_poke_notice
@@ -36,6 +37,7 @@ def setup_matchers() -> None:
     setup_chat_commands()
     setup_persona_commands()
     setup_memory_commands()
+    setup_task_commands()
     setup_tts_commands()
     ChatMatchersHelper._register_group_ban_notice()
     setup_poke_notice()

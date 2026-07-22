@@ -101,9 +101,12 @@ class SocialQuota:
                     user_log.get(scenario, []) or []
                 )
                 if isinstance(timestamps, list) and timestamps:
-                    try:
-                        last = float(timestamps[-1])
-                    except Exception:
+                    last_val = timestamps[-1]
+                    if isinstance(
+                        last_val, int | float
+                    ) and not isinstance(last_val, bool):
+                        last = float(last_val)
+                    else:
                         last = 0.0
                     if now_ts - last < cd:
                         return True

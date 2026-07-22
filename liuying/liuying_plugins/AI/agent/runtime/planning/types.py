@@ -41,6 +41,9 @@ class TurnPlan:
         group_id: 当前群组ID（执行器注入上下文用）
         user_message: 原始用户消息（执行器兜底用）
         persona_name: 当前bot人格名（用于记忆/情绪隔离）
+        semantic_frame: 语义帧字典（由LLM语义帧推断器生成，
+            供响应器消费 tts_style_hint/sticker_mood_hint/
+            bot_emotion 等字段；None表示未推断）
     """
 
     action: str = TURN_ACTION_REPLY
@@ -62,6 +65,7 @@ class TurnPlan:
     group_id: str | None = None
     user_message: str = ""
     persona_name: str = "default"
+    semantic_frame: dict[str, Any] | None = None
 
     @property
     def is_silence(self) -> bool:
@@ -99,4 +103,7 @@ class TurnPlan:
             "group_id": self.group_id,
             "user_message": self.user_message,
             "persona_name": self.persona_name,
+            "semantic_frame": dict(self.semantic_frame)
+            if self.semantic_frame
+            else None,
         }

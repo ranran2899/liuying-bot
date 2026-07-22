@@ -8,16 +8,12 @@ Agent循环、安全过滤、拟人化处理、贴纸决策、碎片化分段、
 """
 
 import asyncio
-import random
 import time
 from typing import Any
-
-from nonebot_plugin_alconna import Image
 
 from liuying.models.ban_console import BanConsole
 from liuying.utils.log import logger
 
-from ..agent.runner import AgentResult
 from ..config import get_config
 from ..core.active_learning import active_learning
 from ..core.context import ContextPolicy
@@ -31,17 +27,14 @@ from ..core.persona import persona_manager
 from ..core.reply_turn_trace import reply_turn_trace
 from ..core.safety import token_quota_service
 from ..models.conversation_record import ConversationRecord
+from .decisions import ReplyDecisions
 from .helpers import ReplyPipeline
 from .humanize import HumanizeToolkit
 from .prompt_builder import PromptBuilder
 from .reply_generator import ReplyGenerator
 from .response_review import response_reviewer
-from .sticker import sticker_manager
 from .text_policy import ReplyTextPolicy
 from .types import ReplyContext, ReplyResult
-
-_TTS_AUTO_TEXT_MIN_LEN = 5
-"""自动TTS最小文本长度"""
 
 _QUOTA_INSUFFICIENT_TPL: str = (
     "咦？你的token似乎不足捏（剩余 {remaining} token），"
@@ -165,176 +158,6 @@ class ReplyProcessor:
                 e=e,
             )
             return history
-
-    async def _decide_sticker(
-        self,
-        text: str,
-        ctx: ReplyContext,
-        agent_result: AgentResult | None = None,
-    ) -> Image | None:
-        """贴纸决策
-
-        优先使用 agent_result.response.sticker_mood_hint；
-        同时传入 user_id 以便策展器记录偏好。
-
-        参数:
-            text: 回复文本
-            ctx: 回复上下文
-            agent_result: Agent结果（用于提取情绪提示）
-
-        返回:
-            Image | None: 贴纸图片对象，不发时返回None
-        """
-        try:
-            persona = await persona_manager.get_user_persona_config(
-                ctx.user_id
-            )
-            persona_mood = persona_manager.get_persona_sticker_mood(
-                persona
-            )
-            mood_hint = ""
-            if agent_result and agent_result.response:
-                mood_hint = agent_result.response.sticker_mood_hint
-            item = await sticker_manager.choose_reply_sticker_item(
-                text,
-                persona_mood=persona_mood,
-                mood_hint=mood_hint,
-                group_id=ctx.group_id,
-                is_private=ctx.is_private,
-                user_id=ctx.user_id,
-            )
-            if not item:
-                return None
-            # 记录使用，便于反馈学习
-            await sticker_manager.record_usage(
-                sticker_id=item.id,
-                context_text=text,
-                detected_mood=mood_hint or persona_mood,
-                persona_mood=persona_mood,
-                group_id=ctx.group_id or "",
-                user_id=ctx.user_id,
-                bot_id=ctx.bot_id or "",
-            )
-            return await sticker_manager.item_to_image(item)
-        except Exception as e:
-            logger.debug(
-                f"贴纸决策失败: {e}", command="AI", e=e
-            )
-            return None
-
-    async def _decide_tts(
-        self, text: str, ctx: ReplyContext
-    ) -> bytes | None:
-        """TTS决策
-
-        根据配置概率自动将回复文本合成语音。
-        仅在 TTS_ENABLED 与 TTS_AUTO_ENABLED 均开启时触发，
-        文本长度需达到 _TTS_AUTO_TEXT_MIN_LEN 阈值。
-
-        参数:
-            text: 回复文本
-            ctx: 回复上下文
-
-        返回:
-            bytes | None: 音频数据，不发时返回None
-        """
-        if not get_config("TTS_ENABLED", False) or not get_config(
-            "TTS_AUTO_ENABLED", False
-        ):
-            return None
-        if len(text) < _TTS_AUTO_TEXT_MIN_LEN:
-            return None
-
-        if random.random() >= get_config("TTS_AUTO_PROBABILITY", 0.2):
-            return None
-        try:
-            persona = await persona_manager.get_user_persona_config(
-                ctx.user_id
-            )
-            tts_config = persona_manager.get_persona_tts_config(persona)
-            voice = tts_config.get("voice", get_config("TTS_VOICE", "alloy"))
-            return await llm_helper.tts(text, voice=voice)
-        except Exception as e:
-            logger.debug(
-                f"TTS决策失败: {e}", command="AI", e=e
-            )
-            return None
-
-    def _decide_silence_reaction(
-        self, ctx: ReplyContext
-    ) -> int | None:
-        """沉默时按概率决定表情表态face_id
-
-        仅群聊 + REACTION_ENABLED + 概率命中时返回face_id，
-        由发送方拿到message_id后调用ProtocolHelper.emoji_react执行。
-
-        参数:
-            ctx: 回复上下文
-
-        返回:
-            int | None: face_id，None为不表态
-        """
-        if not ctx.group_id:
-            return None
-        if not get_config("REACTION_ENABLED", True):
-            return None
-        prob = get_config("REACTION_PROBABILITY", 0.15)
-        if random.random() >= prob:
-            return None
-        return HumanizeToolkit.pick_reaction_face_id("neutral")
-
-    @staticmethod
-    def _decide_typing_status(
-        ctx: ReplyContext, typing_delay: float
-    ) -> bool:
-        """判断是否需要模拟输入状态
-
-        仅私聊 + INPUT_STATUS_ENABLED + 延迟>1.5s时触发，
-        避免在群聊刷屏输入状态打扰他人。
-
-        参数:
-            ctx: 回复上下文
-            typing_delay: 打字延迟（秒）
-
-        返回:
-            bool: 是否需要模拟输入状态
-        """
-        if not ctx.is_private:
-            return False
-        if not get_config("INPUT_STATUS_ENABLED", False):
-            return False
-        return typing_delay > 1.5
-
-    @staticmethod
-    async def _maybe_prepend_catchphrase(
-        text: str, ctx: ReplyContext
-    ) -> str:
-        """按概率在回复前插入人格口头禅
-
-        从用户当前人格的traits.catchphrase列表按概率前置插入。
-        失败时返回原始文本，不影响主流程。
-
-        参数:
-            text: 拟人化后的回复文本
-            ctx: 回复上下文
-
-        返回:
-            str: 可能前置了口头禅的文本
-        """
-        persona = await persona_manager.get_user_persona_config(
-            ctx.user_id
-        )
-        traits = persona.get("traits") or {}
-        if not isinstance(traits, dict):
-            return text
-        catchphrases = traits.get("catchphrase") or []
-        if not catchphrases or not isinstance(
-            catchphrases, list
-        ):
-            return text
-        return HumanizeToolkit.maybe_prepend_catchphrase(
-            text, catchphrases
-        )
 
     async def handle(self, ctx: ReplyContext) -> ReplyResult:
         """主入口：处理用户消息并生成回复
@@ -503,7 +326,7 @@ class ReplyProcessor:
                 trace_id=trace_id, outcome="silence"
             )
             # 沉默时按概率表情表态（仅群聊，由发送方拿到message_id后执行）
-            react_face_id = self._decide_silence_reaction(ctx)
+            react_face_id = ReplyDecisions.decide_silence_reaction(ctx)
             return ReplyResult(
                 text="",
                 react_face_id=react_face_id,
@@ -544,7 +367,7 @@ class ReplyProcessor:
         )
 
         # 口头禅运行时插入：从人格catchphrase按概率前置
-        humanized_text = await self._maybe_prepend_catchphrase(
+        humanized_text = await ReplyDecisions.maybe_prepend_catchphrase(
             humanized_text, ctx
         )
 
@@ -553,7 +376,7 @@ class ReplyProcessor:
         )
 
         # 拟人化协议扩展决策：输入状态/引用回复/@回复
-        should_set_typing = self._decide_typing_status(
+        should_set_typing = ReplyDecisions.decide_typing_status(
             ctx, typing_delay
         )
         should_quote = HumanizeToolkit.should_quote_reply(
@@ -575,8 +398,10 @@ class ReplyProcessor:
         # 并行执行贴纸决策、TTS决策与持久化
         # gather确保任一协程异常时取消其他任务，避免悬挂任务
         sticker_path, tts_audio, _ = await asyncio.gather(
-            self._decide_sticker(humanized_text, ctx, agent_result),
-            self._decide_tts(humanized_text, ctx),
+            ReplyDecisions.decide_sticker(
+                humanized_text, ctx, agent_result
+            ),
+            ReplyDecisions.decide_tts(humanized_text, ctx),
             ReplyPipeline.persist_conversation(
                 ctx, ctx.text, humanized_text, agent_result, elapsed
             ),

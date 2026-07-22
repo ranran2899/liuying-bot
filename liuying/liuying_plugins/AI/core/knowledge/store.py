@@ -318,26 +318,19 @@ class KnowledgeStore:
             user_id: 用户ID
             group_id: 群组ID
         """
-        try:
-            primary = results[0].plugin.plugin_name if results else ""
-            await KnowledgeQueryLog.add_log(
-                query_text=text[:_MAX_QUERY_LOG_LENGTH],
-                matched_plugin=primary,
-                user_id=user_id,
-                group_id=group_id,
-                extra={
-                    "matched_count": len(results),
-                    "top_score": (
-                        round(results[0].score, 3) if results else 0.0
-                    ),
-                },
-            )
-        except Exception as e:
-            logger.debug(
-                f"记录知识库查询日志失败: {e}",
-                command="AI",
-                e=e,
-            )
+        primary = results[0].plugin.plugin_name if results else ""
+        await KnowledgeQueryLog.add_log(
+            query_text=text[:_MAX_QUERY_LOG_LENGTH],
+            matched_plugin=primary,
+            user_id=user_id,
+            group_id=group_id,
+            extra={
+                "matched_count": len(results),
+                "top_score": (
+                    round(results[0].score, 3) if results else 0.0
+                ),
+            },
+        )
 
     async def build_prompt_block(
         self,
@@ -438,12 +431,9 @@ class KnowledgeStore:
             if tools:
                 with_tools_count += 1
 
-        try:
-            hot = await KnowledgeQueryLog.get_hot_plugins(
-                days=7, limit=10
-            )
-        except Exception:
-            hot = []
+        hot = await KnowledgeQueryLog.get_hot_plugins(
+            days=7, limit=10
+        )
 
         stats = KnowledgeStats(
             total=len(all_items),
@@ -470,15 +460,9 @@ class KnowledgeStore:
         返回:
             list[dict]: 热门插件列表
         """
-        try:
-            return await KnowledgeQueryLog.get_hot_plugins(
-                days=days, limit=limit
-            )
-        except Exception as e:
-            logger.debug(
-                f"获取热门插件失败: {e}", command="AI", e=e
-            )
-            return []
+        return await KnowledgeQueryLog.get_hot_plugins(
+            days=days, limit=limit
+        )
 
     async def set_plugin_enabled(
         self, plugin_name: str, enabled: bool
@@ -509,26 +493,20 @@ class KnowledgeStore:
         返回:
             int: 清理的记录数
         """
-        try:
-            since = datetime.now() - timedelta(days=days)
-            old_logs = await KnowledgeQueryLog.filter(
-                query_time__lt=since
-            ).limit(5000).all()
-            count = 0
-            for log in old_logs:
-                await log.delete()
-                count += 1
-            if count > 0:
-                logger.info(
-                    f"清理过期知识库查询日志: {count} 条",
-                    command="AI",
-                )
-            return count
-        except Exception as e:
-            logger.debug(
-                f"清理查询日志失败: {e}", command="AI", e=e
+        since = datetime.now() - timedelta(days=days)
+        old_logs = await KnowledgeQueryLog.filter(
+            query_time__lt=since
+        ).limit(5000).all()
+        count = 0
+        for log in old_logs:
+            await log.delete()
+            count += 1
+        if count > 0:
+            logger.info(
+                f"清理过期知识库查询日志: {count} 条",
+                command="AI",
             )
-            return 0
+        return count
 
 
 knowledge_store = KnowledgeStore()

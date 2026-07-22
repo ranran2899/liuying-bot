@@ -107,10 +107,11 @@ class SearchRanker:
         返回:
             float: 转换结果
         """
-        try:
+        if isinstance(value, int | float) and not isinstance(
+            value, bool
+        ):
             return float(value)
-        except (TypeError, ValueError):
-            return default
+        return default
 
     @staticmethod
     def query_looks_latest(query: str) -> bool:

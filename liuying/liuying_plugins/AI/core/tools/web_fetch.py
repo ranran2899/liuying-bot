@@ -59,15 +59,12 @@ class WebFetcher:
         返回:
             bool: 是否有效
         """
-        if not url:
+        if not url or not isinstance(url, str):
             return False
-        try:
-            parsed = urlparse(url)
-            return bool(
-                parsed.scheme in ("http", "https") and parsed.netloc
-            )
-        except Exception:
-            return False
+        parsed = urlparse(url)
+        return bool(
+            parsed.scheme in ("http", "https") and parsed.netloc
+        )
 
     @staticmethod
     def _strip_html_tags(html: str) -> str:

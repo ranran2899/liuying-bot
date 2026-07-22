@@ -21,27 +21,15 @@ from ..models.user_persona import UserPersonaProfile
 from ..models.user_persona_selection import UserPersonaSelection
 from .llm import llm_helper as _default_llm_helper
 from .persona_templates import (
+    FAVOR_ATTITUDES,
     PERSONA_UPDATE_PROMPT,
+    extract_persona_desc,
     get_fallback_prompt,
     render_persona_template,
 )
 
 _PERSONAS_DIR = Path(__file__).parent.parent / "personas"
 """人格配置文件目录"""
-
-_FAVOR_ATTITUDES: dict[str, str] = {
-    "陌生": "礼貌但保持距离，不主动套近乎",
-    "初识": "友好但不过分亲近，保持基本礼貌",
-    "熟悉": "可以自然交流，偶尔开玩笑",
-    "友好": "态度温和，愿意帮助对方",
-    "信任": "像朋友一样自然，可以分享日常",
-    "亲密": "关系很好，可以聊更多话题",
-    "挚友": "像老朋友一样自然，可以畅所欲言",
-    "至交": "非常亲密，可以分享内心想法",
-    "知己": "心灵相通，可以深入交流",
-    "恋人": "温柔亲密，主动表达关心和爱意",
-}
-"""好感度态度档"""
 
 
 class PersonaManager:
@@ -106,16 +94,9 @@ class PersonaManager:
         返回:
             str: 用户当前激活的人格名
         """
-        try:
-            name = await UserPersonaSelection.get_persona_name(user_id)
-            if name and self._persona_exists(name):
-                return name
-        except Exception as e:
-            logger.debug(
-                f"读取用户人格选择失败，回退全局默认: {e}",
-                command="AI",
-                e=e,
-            )
+        name = await UserPersonaSelection.get_persona_name(user_id)
+        if name and self._persona_exists(name):
+            return name
         return self.get_active_persona_name()
 
     async def set_user_persona(
@@ -276,9 +257,7 @@ class PersonaManager:
                     {
                         "name": name,
                         "display_name": persona.get("name", name),
-                        "description": self._extract_persona_desc(
-                            persona
-                        ),
+                        "description": extract_persona_desc(persona),
                     }
                 )
             except Exception as e:
@@ -295,35 +274,6 @@ class PersonaManager:
                     }
                 )
         return result
-
-    def _extract_persona_desc(self, persona: dict) -> str:
-        """从人格配置提取简短描述
-
-        优先使用 description 字段；未配置时回退到从 system_prompt
-        提取首行有效内容。
-
-        参数:
-            persona: 人格配置字典
-
-        返回:
-            str: 简短描述（不超过80字）
-        """
-        desc = persona.get("description") or ""
-        if isinstance(desc, str) and desc.strip():
-            return desc.strip()[:80]
-        prompt = persona.get("system_prompt", "")
-        if not prompt:
-            return ""
-        first_line = ""
-        for line in prompt.split("\n"):
-            line = line.strip()
-            _skip = ("姓名", "年龄", "性别")
-            if line and not any(line.startswith(s) for s in _skip):
-                first_line = line
-                break
-        if not first_line:
-            first_line = prompt.strip().split("\n")[0].strip()
-        return first_line[:80]
 
     async def build_system_prompt(
         self,
@@ -348,7 +298,7 @@ class PersonaManager:
 
         favor_info = await UserFavor.get_favor_info(user_id)
         favor_level = favor_info.get("favor_level", "陌生")
-        attitude = _FAVOR_ATTITUDES.get(favor_level, "")
+        attitude = FAVOR_ATTITUDES.get(favor_level, "")
         if attitude:
             parts.append(
                 f"\n\n[好感度与语气]\n当前好感: {favor_level}\n"

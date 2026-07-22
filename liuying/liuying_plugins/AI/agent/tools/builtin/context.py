@@ -42,13 +42,10 @@ async def get_favor(user_id: str) -> str:
     返回:
         str: 好感度信息文本
     """
-    try:
-        info = await UserFavor.get_favor_info(user_id)
-        favor_value = info.get("favor_value", 0)
-        favor_level = info.get("favor_level", "陌生")
-        return f"好感度: {favor_value} ({favor_level})"
-    except Exception as e:
-        return f"查询失败: {e}"
+    info = await UserFavor.get_favor_info(user_id)
+    favor_value = info.get("favor_value", 0)
+    favor_level = info.get("favor_level", "陌生")
+    return f"好感度: {favor_value} ({favor_level})"
 
 
 @register_tool(

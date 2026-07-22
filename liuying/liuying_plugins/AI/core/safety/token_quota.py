@@ -78,11 +78,10 @@ class TokenQuotaService:
         返回:
             int: 提醒冷却秒数
         """
-        try:
-            cd = int(get_config("TOKEN_QUOTA_REMINDER_CD", self._DEFAULT_REMINDER_CD))
-            return max(0, cd)
-        except (TypeError, ValueError):
-            return self._DEFAULT_REMINDER_CD
+        raw = get_config("TOKEN_QUOTA_REMINDER_CD", self._DEFAULT_REMINDER_CD)
+        if not isinstance(raw, int | float):
+            raw = self._DEFAULT_REMINDER_CD
+        return max(0, int(raw))
 
     def _get_min_threshold(self) -> int:
         """获取最低可用阈值
@@ -90,13 +89,10 @@ class TokenQuotaService:
         返回:
             int: 最低可用 token 数
         """
-        try:
-            threshold = int(
-                get_config("TOKEN_QUOTA_MIN_THRESHOLD", self._DEFAULT_MIN_THRESHOLD)
-            )
-            return max(1, threshold)
-        except (TypeError, ValueError):
-            return self._DEFAULT_MIN_THRESHOLD
+        raw = get_config("TOKEN_QUOTA_MIN_THRESHOLD", self._DEFAULT_MIN_THRESHOLD)
+        if not isinstance(raw, int | float):
+            raw = self._DEFAULT_MIN_THRESHOLD
+        return max(1, int(raw))
 
     def _should_remind(self, user_id: str) -> bool:
         """检查是否应发送余额不足提醒（满足 CD 条件）
@@ -150,15 +146,7 @@ class TokenQuotaService:
         if not self._is_enabled() or not user_id:
             return QuotaCheckResult(allowed=True, remaining=-1)
 
-        try:
-            available = await UserToken.get_available(user_id)
-        except Exception as e:
-            logger.debug(
-                f"查询用户 token 额度失败，放行: {e}",
-                command="AI",
-                e=e,
-            )
-            return QuotaCheckResult(allowed=True, remaining=-1)
+        available = await UserToken.get_available(user_id)
 
         threshold = self._get_min_threshold()
         if available >= threshold:
@@ -203,34 +191,21 @@ class TokenQuotaService:
         if tokens <= 0:
             return {"consumed": 0, "ok": True, "error": ""}
 
-        try:
-            instance = await UserToken.consume(user_id, tokens)
-            logger.debug(
-                f"用户 {user_id} 消耗 token: {tokens}，"
-                f"剩余 {instance.user_token}",
-                command="AI",
-            )
-            # 用户扣费后额度恢复，清除提醒记录
-            if instance.user_token > 0:
-                self.clear_reminder(user_id)
-            return {
-                "consumed": tokens,
-                "ok": True,
-                "error": "",
-                "remaining": instance.user_token,
-            }
-        except Exception as e:
-            logger.info(
-                f"用户 {user_id} 扣费失败（token 与铜币均不足或其他错误）"
-                f": {e}",
-                command="AI",
-                e=e,
-            )
-            return {
-                "consumed": 0,
-                "ok": False,
-                "error": str(e),
-            }
+        instance = await UserToken.consume(user_id, tokens)
+        logger.debug(
+            f"用户 {user_id} 消耗 token: {tokens}，"
+            f"剩余 {instance.user_token}",
+            command="AI",
+        )
+        # 用户扣费后额度恢复，清除提醒记录
+        if instance.user_token > 0:
+            self.clear_reminder(user_id)
+        return {
+            "consumed": tokens,
+            "ok": True,
+            "error": "",
+            "remaining": instance.user_token,
+        }
 
 
 token_quota_service = TokenQuotaService()

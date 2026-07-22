@@ -224,30 +224,3 @@ class ReplyTextPolicy:
         return ReplyTextPolicy._restore_image_markers(
             cleaned, image_markers
         ).strip()
-
-    @staticmethod
-    def looks_like_markdown_reply(text: Any) -> bool:
-        """检测文本是否包含 Markdown 格式
-
-        参数:
-            text: 待检测文本
-
-        返回:
-            bool: 是否包含Markdown格式
-        """
-        raw = str(text or "")
-        if not raw.strip():
-            return False
-        return bool(
-            _FENCED_CODE_RE.search(raw)
-            or _MARKDOWN_LINK_RE.search(raw)
-            or _MARKDOWN_IMAGE_RE.search(raw)
-            or _BOLD_RE.search(raw)
-            or _ITALIC_STAR_RE.search(raw)
-            or _HEADING_RE.search(raw)
-            or _TASK_BULLET_RE.search(raw)
-            or _BULLET_RE.search(raw)
-            or _NUMBERED_RE.search(raw)
-            or _BLOCKQUOTE_RE.search(raw)
-            or _TABLE_SEPARATOR_RE.search(raw)
-        )

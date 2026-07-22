@@ -259,25 +259,18 @@ class TokenLedger:
         cost_score = cls._calc_cost_score(
             model, prompt_tokens, completion_tokens
         )
-        try:
-            await TokenLedgerRecord.add_record(
-                provider=provider,
-                model=model,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                group_id=group_id,
-                user_id=user_id,
-                purpose=purpose,
-                cost_score=cost_score,
-                extra=extra,
-            )
-        except Exception as e:
-            logger.debug(
-                f"Token账本记录写入失败（不影响主流程）: {e}",
-                command="AI",
-                e=e,
-            )
+        await TokenLedgerRecord.add_record(
+            provider=provider,
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            group_id=group_id,
+            user_id=user_id,
+            purpose=purpose,
+            cost_score=cost_score,
+            extra=extra,
+        )
 
     @classmethod
     async def get_summary(

@@ -19,6 +19,7 @@ from ..config import get_config
 from ..core.context import context_manager
 from ..core.json_utils import extract_json_payload
 from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..core.persona import persona_manager
 from ..models.group_context import GroupContextSnapshot
 
@@ -137,9 +138,12 @@ class ProactiveHelper:
         )
 
         try:
+            role = model_router.resolve(ROLE_WARMUP)
             response = await llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.7},
+                model=role.model or None,
+                options=role.apply_to_options(),
+                provider_name=role.provider or None,
             )
             data = extract_json_payload(response)
             if data is None:
@@ -254,9 +258,12 @@ class ProactiveHelper:
             prompt = await persona_manager.get_active_persona_template(
                 "private_greeting", greeting_type=greeting_type
             )
+            role = model_router.resolve(ROLE_WARMUP)
             response = await llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.8},
+                model=role.model or None,
+                options=role.apply_to_options(),
+                provider_name=role.provider or None,
             )
             return response.strip()
         except Exception as e:

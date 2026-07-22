@@ -4,8 +4,6 @@
 每个技能通过 llm_helper.web_search 实现免配置查询。
 """
 
-from liuying.utils.log import logger
-
 from ..runtime.constants import (
     INTENT_TAG_LOCAL,
     INTENT_TAG_NETWORK,
@@ -170,15 +168,8 @@ class BuiltinSkillpackRegistrar:
 
         registered = 0
         for tool in tools:
-            try:
-                registry.register(tool)
-                registered += 1
-            except Exception as e:
-                logger.warning(
-                    f"注册内置技能包失败: {tool.name} -> {e}",
-                    command="AI",
-                    e=e,
-                )
+            registry.register(tool)
+            registered += 1
         return registered
 
 

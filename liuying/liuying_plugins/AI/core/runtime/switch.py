@@ -144,11 +144,8 @@ class RuntimeSwitchManager:
         config_key = _CONFIG_KEY_MAP.get(feature, "")
         if not config_key:
             return True
-        try:
-            value = get_config(config_key, True)
-            return bool(value)
-        except Exception:
-            return True
+        value = get_config(config_key, True)
+        return bool(value)
 
     def _save_to_config(self, feature: str, enabled: bool) -> bool:
         """持久化功能开关到配置文件
@@ -163,16 +160,8 @@ class RuntimeSwitchManager:
         config_key = _CONFIG_KEY_MAP.get(feature, "")
         if not config_key:
             return False
-        try:
-            ConfigManager.set_config(_MODULE, config_key, enabled)
-            return True
-        except Exception as e:
-            logger.warning(
-                f"持久化开关失败 {feature}={enabled}: {e}",
-                command="AI",
-                e=e,
-            )
-            return False
+        ConfigManager.set_config(_MODULE, config_key, enabled)
+        return True
 
     def is_enabled(
         self,

@@ -7,6 +7,11 @@
 """
 
 from .active_learning import ActiveLearning, active_learning
+from .chat_intent import (
+    SemanticFrameInferrer,
+    TurnSemanticFrame,
+    semantic_frame_inferrer,
+)
 from .context import ContextManager, context_manager
 from .emotion import EmotionManager, emotion_manager
 from .group import ProfileService, profile_service
@@ -54,12 +59,14 @@ __all__ = [
     "ProfileService",
     "PromptHookRegistry",
     "ReplyTurnTrace",
+    "SemanticFrameInferrer",
     "SocialContext",
     "SocialGate",
     "SocialQuota",
     "SocialTrigger",
     "SocialTriggerRegistry",
     "TargetInference",
+    "TurnSemanticFrame",
     "active_learning",
     "context_manager",
     "diagnostics",
@@ -71,6 +78,7 @@ __all__ = [
     "persona_manager",
     "profile_service",
     "reply_turn_trace",
+    "semantic_frame_inferrer",
     "social_gate",
     "social_quota",
     "social_trigger_registry",

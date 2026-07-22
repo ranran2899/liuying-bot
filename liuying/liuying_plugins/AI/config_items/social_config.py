@@ -123,5 +123,22 @@ SOCIAL_CONFIGS: list[RegisterConfig] = [
         default_value=0.3,
         type=float,
     ),
+    # ===== 群风格自动学习 =====
+    RegisterConfig(
+        key="GROUP_STYLE_AUTOBUILD_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用群风格自动学习",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="GROUP_STYLE_AUTOBUILD_INTERVAL",
+        value=12,
+        module=MODULE,
+        help="群风格自动学习间隔（小时）",
+        default_value=12,
+        type=int,
+    ),
 ]
 """社交与主动行为配置项列表"""

@@ -13,6 +13,7 @@ from liuying.utils.log import logger
 from ...models.sticker_item import StickerItem
 from ..json_utils import extract_json_payload
 from ..llm import llm_helper
+from ..llm.model_router import ROLE_STICKER, model_router
 
 
 class StickerMood(StrEnum):
@@ -151,9 +152,12 @@ class StickerSemanticsAnalyzer:
                 moods="/".join(_MOOD_VALUES),
                 scenes="/".join(_SCENE_VALUES),
             )
+            role = model_router.resolve(ROLE_STICKER)
             _, content = await llm_helper.chat(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.1},
+                model=role.model or None,
+                options=role.apply_to_options(),
+                provider_name=role.provider or None,
             )
             parsed = self._parse_analysis(content)
             result.mood = parsed.get("mood", "")
@@ -204,17 +208,9 @@ class StickerSemanticsAnalyzer:
         返回:
             int: 处理的贴纸数量
         """
-        try:
-            stickers = await StickerItem.filter(
-                is_disabled=False,
-            ).limit(limit).all()
-        except Exception as e:
-            logger.warning(
-                f"查询未标注贴纸失败: {e}",
-                command="AI",
-                e=e,
-            )
-            return 0
+        stickers = await StickerItem.filter(
+            is_disabled=False,
+        ).limit(limit).all()
         count = 0
         for sticker in stickers:
             if sticker.id in self._cache:

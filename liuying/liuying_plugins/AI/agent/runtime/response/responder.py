@@ -357,8 +357,8 @@ class PersonaResponder:
         返回:
             str: 系统提示词
         """
+        persona_mgr = self._get_persona_manager()
         try:
-            persona_mgr = self._get_persona_manager()
             persona = await persona_mgr.get_user_persona_config(
                 user_id
             )

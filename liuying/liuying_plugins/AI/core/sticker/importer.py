@@ -451,14 +451,8 @@ class StickerImporter:
                 continue
             full_path = self.root_dir / it.file_path
             if not full_path.exists():
-                try:
-                    await it.delete()
-                    removed += 1
-                except Exception as e:
-                    logger.debug(
-                        f"删除缺失记录失败 {it.id}: {e}",
-                        command="AI",
-                    )
+                await it.delete()
+                removed += 1
         if removed > 0:
             logger.info(
                 f"清理缺失表情包记录{removed}条",

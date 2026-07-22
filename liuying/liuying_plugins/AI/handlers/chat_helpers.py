@@ -130,8 +130,14 @@ class ChatMatchersHelper:
             ChatMatchersHelper._describe_single_image(img)
             for img in images
         ]
-        results = await asyncio.gather(*tasks)
-        return [desc for desc in results if desc]
+        results = await asyncio.gather(
+            *tasks, return_exceptions=True
+        )
+        return [
+            desc
+            for desc in results
+            if isinstance(desc, str) and desc
+        ]
 
     @staticmethod
     async def _send_reply(

@@ -13,6 +13,7 @@ from liuying.utils.log import logger
 from ..config import get_config
 from ..core.json_utils import extract_json_payload
 from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_REVIEW, model_router
 
 _REVIEW_PROMPT = """你是一个回复审查助手。请审核以下AI回复是否适合发送给用户。
 
@@ -105,9 +106,12 @@ class ResponseReviewer:
                 reply_text=reply_text[:500],
                 persona_style=persona_style,
             )
+            role = model_router.resolve(ROLE_REVIEW)
             _, content = await llm_helper.chat(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.1},
+                model=role.model or None,
+                options=role.apply_to_options(),
+                provider_name=role.provider or None,
             )
             return self._parse_review_result(
                 content, reply_text

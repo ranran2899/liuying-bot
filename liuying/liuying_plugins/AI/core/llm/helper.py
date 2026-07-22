@@ -11,6 +11,7 @@ from liuying.services.LLM import Capability, llm_manager
 from liuying.utils.log import logger
 
 from ...config import get_config
+from .ai_routes import ai_cli_router
 from .provider_router import provider_router
 
 
@@ -168,14 +169,28 @@ class LLMHelper:
                 use_model, messages, call_options
             )
 
-        result = await provider_router.call_with_failover(
-            candidates, _call
-        )
-        logger.debug(
-            f"LLM对话调用成功，模型: {use_model}",
-            command="AI",
-        )
-        return result
+        try:
+            result = await provider_router.call_with_failover(
+                candidates, _call
+            )
+            logger.debug(
+                f"LLM对话调用成功，模型: {use_model}",
+                command="AI",
+            )
+            return result
+        except Exception as http_err:
+            # HTTP provider全部失败，尝试CLI路由降级
+            cli_result = await ai_cli_router.call(
+                prompt="",
+                messages=messages,
+            )
+            if cli_result:
+                logger.info(
+                    "HTTP provider全部失败，CLI路由降级成功",
+                    command="AI",
+                )
+                return "", cli_result
+            raise http_err
 
     async def chat_text(
         self,

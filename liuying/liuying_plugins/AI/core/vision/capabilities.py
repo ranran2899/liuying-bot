@@ -317,13 +317,10 @@ class VisionCapabilityRouter:
                 (self._preferred_vision_provider, self._preferred_vision_model)
             )
 
-        try:
-            default_provider = get_config("CHAT_PROVIDER", None)
-            default_model = get_config("CHAT_MODEL", None)
-            if default_provider and default_model:
-                candidates.append((default_provider, default_model))
-        except Exception:
-            pass
+        default_provider = get_config("CHAT_PROVIDER", None)
+        default_model = get_config("CHAT_MODEL", None)
+        if default_provider and default_model:
+            candidates.append((default_provider, default_model))
 
         seen: set[str] = set()
         for provider, model in candidates:

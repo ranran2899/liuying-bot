@@ -245,23 +245,17 @@ class FeedbackLearner:
         返回:
             StickerUsage | None: 使用记录
         """
-        try:
-            await StickerItem.increment_usage(sticker_id)
-            return await StickerUsage.add_record(
-                sticker_id=sticker_id,
-                user_id=user_id,
-                group_id=group_id,
-                bot_id=bot_id,
-                context_text=context_text,
-                detected_mood=detected_mood,
-                persona_mood=persona_mood,
-                reaction="unknown",
-            )
-        except Exception as e:
-            logger.debug(
-                f"记录表情包使用失败: {e}", command="AI", e=e
-            )
-            return None
+        await StickerItem.increment_usage(sticker_id)
+        return await StickerUsage.add_record(
+            sticker_id=sticker_id,
+            user_id=user_id,
+            group_id=group_id,
+            bot_id=bot_id,
+            context_text=context_text,
+            detected_mood=detected_mood,
+            persona_mood=persona_mood,
+            reaction="unknown",
+        )
 
     async def record_reaction(
         self,
@@ -282,23 +276,13 @@ class FeedbackLearner:
             group_id: 群组ID
             user_id: 用户ID
         """
-        try:
-            await StickerUsage.update_reaction(usage_id, reaction)
-        except Exception as e:
-            logger.debug(
-                f"更新使用记录反应失败: {e}", command="AI", e=e
-            )
+        await StickerUsage.update_reaction(usage_id, reaction)
 
         if not sticker_id:
             return
 
         is_positive = reaction == _REACTION_POSITIVE
-        try:
-            await StickerItem.update_feedback(sticker_id, is_positive)
-        except Exception as e:
-            logger.debug(
-                f"更新表情包反馈计数失败: {e}", command="AI", e=e
-            )
+        await StickerItem.update_feedback(sticker_id, is_positive)
 
         if mood:
             if group_id:
@@ -330,48 +314,42 @@ class FeedbackLearner:
         返回:
             bool: 是否成功
         """
-        try:
-            await StickerFeedback.add_feedback(
-                sticker_id=sticker_id,
-                user_id=user_id,
-                group_id=group_id,
-                feedback_type=feedback_type,
-                comment=comment,
+        await StickerFeedback.add_feedback(
+            sticker_id=sticker_id,
+            user_id=user_id,
+            group_id=group_id,
+            feedback_type=feedback_type,
+            comment=comment,
+        )
+
+        is_positive = feedback_type == "like"
+        is_negative = feedback_type in ("dislike", "report")
+
+        if is_positive or is_negative:
+            await StickerItem.update_feedback(
+                sticker_id, is_positive
+            )
+            item = await self._library.get_item(sticker_id)
+            if item:
+                for mood in item.get_mood_tags():
+                    if group_id:
+                        self._get_pref(
+                            group_id, is_group=True
+                        ).update(mood, is_positive)
+                    if user_id:
+                        self._get_pref(
+                            user_id, is_group=False
+                        ).update(mood, is_positive)
+
+        # 举报自动禁用
+        if feedback_type == "report":
+            await self._library.set_disabled(sticker_id, True)
+            logger.info(
+                f"表情包被举报自动禁用: {sticker_id}",
+                command="AI",
             )
 
-            is_positive = feedback_type == "like"
-            is_negative = feedback_type in ("dislike", "report")
-
-            if is_positive or is_negative:
-                await StickerItem.update_feedback(
-                    sticker_id, is_positive
-                )
-                item = await self._library.get_item(sticker_id)
-                if item:
-                    for mood in item.get_mood_tags():
-                        if group_id:
-                            self._get_pref(
-                                group_id, is_group=True
-                            ).update(mood, is_positive)
-                        if user_id:
-                            self._get_pref(
-                                user_id, is_group=False
-                            ).update(mood, is_positive)
-
-            # 举报自动禁用
-            if feedback_type == "report":
-                await self._library.set_disabled(sticker_id, True)
-                logger.info(
-                    f"表情包被举报自动禁用: {sticker_id}",
-                    command="AI",
-                )
-
-            return True
-        except Exception as e:
-            logger.warning(
-                f"记录表情包反馈失败: {e}", command="AI", e=e
-            )
-            return False
+        return True
 
     def get_preference_report(
         self,

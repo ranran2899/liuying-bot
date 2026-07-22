@@ -163,5 +163,30 @@ HUMANIZE_CONFIGS: list[RegisterConfig] = [
         default_value=False,
         type=bool,
     ),
+    # ===== Phase2: 消息批量缓冲 =====
+    RegisterConfig(
+        key="REPLY_BUFFER_ENABLED",
+        value=True,
+        module=MODULE,
+        help="是否启用消息批量缓冲（合并短时间内的多条消息）",
+        default_value=True,
+        type=bool,
+    ),
+    RegisterConfig(
+        key="REPLY_BUFFER_GROUP_DELAY",
+        value=1.2,
+        module=MODULE,
+        help="群聊消息缓冲窗口（秒）",
+        default_value=1.2,
+        type=float,
+    ),
+    RegisterConfig(
+        key="REPLY_BUFFER_PRIVATE_DELAY",
+        value=0.8,
+        module=MODULE,
+        help="私聊消息缓冲窗口（秒）",
+        default_value=0.8,
+        type=float,
+    ),
 ]
 """拟人化相关配置项列表"""

@@ -39,10 +39,7 @@ class KnowledgeExtractor:
         """
         if value is None:
             return default
-        try:
-            return str(value)
-        except Exception:
-            return default
+        return str(value)
 
     @staticmethod
     def extract_commands(

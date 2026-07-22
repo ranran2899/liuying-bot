@@ -44,13 +44,10 @@ class InnerStateHelper:
         返回:
             float: 小时数，无记录返回999.0
         """
-        if not updated_at:
+        if not updated_at or not isinstance(updated_at, str):
             return 999.0
-        try:
-            ts = datetime.fromisoformat(updated_at).timestamp()
-            return max(0.0, (time.time() - ts) / 3600.0)
-        except (ValueError, TypeError):
-            return 999.0
+        ts = datetime.fromisoformat(updated_at).timestamp()
+        return max(0.0, (time.time() - ts) / 3600.0)
 
     @staticmethod
     def _normalize_energy_label(value: Any) -> str:
@@ -69,18 +66,19 @@ class InnerStateHelper:
         """
         if value is None:
             return ""
+        if isinstance(value, int | float) and not isinstance(
+            value, bool
+        ):
+            f = float(value)
+            if f >= 0.7:
+                return "高"
+            if f >= 0.4:
+                return "中"
+            return "低"
         text = str(value).strip()
         if text in ("高", "中", "低"):
             return text
-        try:
-            f = float(text)
-        except (TypeError, ValueError):
-            return text
-        if f >= 0.7:
-            return "高"
-        if f >= 0.4:
-            return "中"
-        return "低"
+        return text
 
     @staticmethod
     def merge_state_with_decay(
@@ -150,14 +148,15 @@ class InnerStateHelper:
         if not isinstance(incoming_warmth, dict):
             incoming_warmth = {}
         for uid, score in incoming_warmth.items():
-            try:
-                current_warmth[str(uid)] = (
-                    InnerStateHelper.clip_relation_warmth(
-                        float(score)
-                    )
-                )
-            except (ValueError, TypeError):
+            if not isinstance(score, int | float) or isinstance(
+                score, bool
+            ):
                 continue
+            current_warmth[str(uid)] = (
+                InnerStateHelper.clip_relation_warmth(
+                    float(score)
+                )
+            )
         merged["relation_warmth"] = current_warmth
 
         merged["updated_at"] = datetime.now().isoformat()
