@@ -21,6 +21,7 @@ from ..config import get_config
 from ..core.context import context_manager
 from ..core.group import ProfileToolkit
 from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..core.persona import persona_manager
 from ..core.runtime import ProtocolHelper
 from ..core.social import social_gate, social_quota
@@ -143,7 +144,9 @@ class SocialIntelligenceHelper:
                     continue
                 text = await llm_helper.chat_text(
                     [{"role": "user", "content": prompt}],
-                    options={"temperature": 0.7},
+                    options=model_router.resolve(
+                        ROLE_WARMUP
+                    ).apply_to_options(),
                 )
                 if not text or len(text) >= 100:
                     continue
@@ -390,7 +393,9 @@ class SocialIntelligenceHelper:
             try:
                 text = await llm_helper.chat_text(
                     [{"role": "user", "content": prompt}],
-                    options={"temperature": 0.7},
+                    options=model_router.resolve(
+                        ROLE_WARMUP
+                    ).apply_to_options(),
                 )
                 if not text or len(text) >= 100:
                     continue

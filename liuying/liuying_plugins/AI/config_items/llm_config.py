@@ -1,6 +1,6 @@
 """LLM相关配置项
 
-包含对话模型、嵌入模型、轻量模型、思考模式与Token额度等配置。
+包含对话模型、嵌入模型、思考模式、Token额度与模型按角色路由等配置。
 采用嵌套字典组织相关配置项，提升可读性。
 """
 
@@ -51,28 +51,6 @@ LLM_CONFIGS: list[RegisterConfig] = [
         help="是否开启深度思考请求（开启时向模型请求思考链）",
         default_value=False,
         type=bool,
-    ),
-    # ===== 轻量模型（已废弃，由MODEL_ROUTES替代） =====
-    RegisterConfig(
-        key="LITE_MODEL",
-        value={
-            "enabled": False,
-            "provider": None,
-            "name": None,
-        },
-        module=MODULE,
-        help=(
-            "轻量模型配置（已废弃，由MODEL_ROUTES替代）\n"
-            " - enabled: 是否启用\n"
-            " - provider: 供应商\n"
-            " - name: 模型名"
-        ),
-        default_value={
-            "enabled": False,
-            "provider": None,
-            "name": None,
-        },
-        type=dict,
     ),
     # ===== 主模型策略 =====
     RegisterConfig(

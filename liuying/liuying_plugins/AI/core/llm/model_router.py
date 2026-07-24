@@ -101,6 +101,9 @@ class ModelRouter:
     def resolve(self, role: str) -> ModelRole:
         """解析角色对应的模型配置
 
+        对配置异常（非dict/None/非法数值）做防御性处理，
+        保证任何配置形态下都返回有效的 ModelRole。
+
         参数:
             role: 角色名（ROLE_INTENT/ROLE_REVIEW/ROLE_AGENT/
                 ROLE_STICKER/ROLE_WARMUP/ROLE_CHAT）
@@ -110,24 +113,38 @@ class ModelRouter:
         """
         # 嵌套配置：MODEL_ROUTES 为按角色分组的字典
         routes = get_config("MODEL_ROUTES", {})
-        role_config = routes.get(role, {}) if isinstance(routes, dict) else {}
-
-        # 角色专属模型未配置时回退到 CHAT_MODEL
-        model = str(
-            role_config.get("model", "")
-            or get_config("CHAT_MODEL", {}).get("model", "")
-            or ""
+        role_config = (
+            routes.get(role, {}) if isinstance(routes, dict) else {}
         )
-        temperature = float(
-            role_config.get(
-                "temperature", _DEFAULT_TEMPERATURES.get(role, 0.6)
-            )
+        if not isinstance(role_config, dict):
+            role_config = {}
+
+        # CHAT_MODEL 同样防御非 dict 形态
+        chat_model_cfg = get_config("CHAT_MODEL", {})
+        if not isinstance(chat_model_cfg, dict):
+            chat_model_cfg = {}
+
+        # 角色专属 model/provider 未配置（None/空串）时回退到 CHAT_MODEL
+        model = str(
+            role_config.get("model")
+            or chat_model_cfg.get("model")
+            or ""
         )
         provider = str(
-            role_config.get("provider", "")
-            or get_config("CHAT_MODEL", {}).get("provider", "")
+            role_config.get("provider")
+            or chat_model_cfg.get("provider")
             or ""
         )
+
+        # temperature 防御 None/非法值，回退到角色默认温度
+        default_temp = _DEFAULT_TEMPERATURES.get(role, 0.6)
+        try:
+            temperature = float(
+                role_config.get("temperature", default_temp)
+            )
+        except (TypeError, ValueError):
+            temperature = default_temp
+
         return ModelRole(
             model=model, temperature=temperature, provider=provider
         )

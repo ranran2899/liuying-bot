@@ -14,6 +14,7 @@ from liuying.utils.log import logger
 from ..config import get_config
 from ..core.context import context_manager
 from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..core.memory import memory_manager
 from ..core.persona import persona_manager
 
@@ -71,7 +72,9 @@ class DiaryHelper:
         try:
             diary_text = await llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.7},
+                options=model_router.resolve(
+                    ROLE_WARMUP
+                ).apply_to_options(),
             )
             if diary_text:
                 await memory_manager.add(

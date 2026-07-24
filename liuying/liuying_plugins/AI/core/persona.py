@@ -175,20 +175,12 @@ class PersonaManager:
             name: 人格名称
 
         返回:
-            dict: 人格配置字典，加载失败时回退到默认或内置兜底
+            dict: 人格配置字典
+
+        异常:
+            FileNotFoundError: 人格文件不存在
         """
-        try:
-            return self.load_persona(name)
-        except FileNotFoundError:
-            try:
-                return self.load_persona("default")
-            except FileNotFoundError:
-                return {
-                    "name": "AI助手",
-                    "system_prompt": "你是一个友好的AI助手。",
-                    "traits": {},
-                    "taboos": [],
-                }
+        return self.load_persona(name)
 
     async def get_user_persona_config(self, user_id: str) -> dict:
         """获取用户当前激活的人格配置
@@ -213,20 +205,11 @@ class PersonaManager:
 
         返回:
             dict: 人格配置字典
+
+        异常:
+            FileNotFoundError: 人格文件不存在
         """
-        active_name = self.get_active_persona_name()
-        try:
-            return self.load_persona(active_name)
-        except FileNotFoundError:
-            try:
-                return self.load_persona("default")
-            except FileNotFoundError:
-                return {
-                    "name": "AI助手",
-                    "system_prompt": "你是一个友好的AI助手。",
-                    "traits": {},
-                    "taboos": [],
-                }
+        return self.load_persona(self.get_active_persona_name())
 
     def list_personas(self) -> list[str]:
         """列出所有可用人格名
@@ -493,19 +476,14 @@ class PersonaManager:
         )
 
     def get_persona_fallback_prompt(self) -> str:
-        """获取兜底人设提示词（同步）
+        """获取全局默认人设的 fallback 模板提示词
 
-        当用户人格加载失败时使用全局默认人格的 fallback 模板。
-        供异常分支调用，确保不引入额外异常。
+        供安全过滤重试等场景使用。
 
         返回:
-            str: 兜底人设提示词
+            str: 渲染后的 fallback 提示词
         """
-        try:
-            persona = self.get_default_persona()
-            return get_fallback_prompt(persona)
-        except Exception:
-            return "你是AI助手。"
+        return get_fallback_prompt(self.get_default_persona())
 
     async def get_active_persona_template(
         self, template_name: str, **kwargs: Any

@@ -15,6 +15,7 @@ from liuying.utils.log import logger
 
 from ....core.json_utils import extract_json_payload
 from ....core.llm import llm_helper
+from ....core.llm.model_router import ROLE_CHAT, model_router
 from ....core.persona import persona_manager
 from ..constants import (
     OUTPUT_MODE_CHAT_ANSWER,
@@ -336,8 +337,13 @@ class PersonaResponder:
                     )
         messages.append({"role": "user", "content": prompt})
 
+        # 接入模型按角色路由：使用 ROLE_CHAT 配置的模型/温度/provider
+        role = model_router.resolve(ROLE_CHAT)
         _, response_text = await llm.chat(
-            messages, options={"temperature": 0.7}
+            messages,
+            model=role.model or None,
+            options=role.apply_to_options(),
+            provider_name=role.provider or None,
         )
         return self._parse_response(response_text, plan)
 

@@ -13,6 +13,7 @@ from liuying.utils.log import logger
 from ..agent.runner import AgentResult, AgentRunner
 from ..config import get_config
 from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_CHAT, model_router
 from ..core.persona import persona_manager
 from ..core.safety import SafetyFilter, SafetyRefusalError
 from ..core.vision import summarize_image, vision_router
@@ -184,12 +185,19 @@ class ReplyGenerator:
                     e=e,
                 )
 
+        # 接入模型按角色路由：视觉路由优先，否则使用 ROLE_CHAT 配置
+        chat_role = model_router.resolve(ROLE_CHAT)
+        use_model = vision_model or chat_role.model or None
+        use_provider = vision_provider or chat_role.provider or None
+        chat_options = chat_role.apply_to_options()
+
         if not get_config("SAFETY_FILTER_ENABLED", True):
             try:
                 reply_text = await llm_helper.chat_text(
                     use_messages,
-                    model=vision_model,
-                    provider_name=vision_provider,
+                    model=use_model,
+                    options=chat_options,
+                    provider_name=use_provider,
                 )
                 return reply_text, None
             except Exception as e:
@@ -222,8 +230,9 @@ class ReplyGenerator:
                 """
                 return await llm_helper.chat_text(
                     use_messages,
-                    model=vision_model,
-                    provider_name=vision_provider,
+                    model=use_model,
+                    options=chat_options,
+                    provider_name=use_provider,
                 )
 
             async def _retry_call() -> str:
@@ -234,8 +243,9 @@ class ReplyGenerator:
                 """
                 return await llm_helper.chat_text(
                     retry_messages,
-                    model=vision_model,
-                    provider_name=vision_provider,
+                    model=use_model,
+                    options=chat_options,
+                    provider_name=use_provider,
                 )
 
             reply_text = await SafetyFilter.sanitize_or_retry(

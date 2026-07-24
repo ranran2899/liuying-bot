@@ -31,7 +31,7 @@ from .types import TurnPlan
 __all__ = ["TurnPlan", "TurnPlanner"]
 
 _PLAN_SYSTEM_PROMPT = """你是回合规划器。
-分析用户消息和上下文，决策本回合的最佳行为。
+分析用户消息和上下文，决策本回合的最佳行为，并输出回合语义帧。
 
 可选动作：
 - reply: 直接回复用户
@@ -66,7 +66,21 @@ _PLAN_SYSTEM_PROMPT = """你是回合规划器。
 - need_vision: 是否需要视觉理解
 - need_research: 是否需要多步研究
 - ambiguity_level: 模糊度（0-1，0最清晰）
+- max_steps: 最大工具调用步数（整数）
 - reason: 决策理由（一句话）
+- semantic_frame: 回合语义帧对象，包含以下字段：
+  - chat_intent: 聊天意图（question/small_talk/info_seek/emotional_support/social_protocol/chat_command/meta_question）
+  - recommend_silence: 是否建议静默（true/false）
+  - requires_emotional_care: 是否需要情感关怀（true/false）
+  - sticker_appropriate: 是否适合发贴纸（true/false）
+  - meta_question: 是否元问题（关于bot自身，true/false）
+  - user_attitude: 用户态度（positive/neutral/negative/playful）
+  - bot_emotion: bot应有情绪（happy/sad/neutral/curious/caring/playful）
+  - emotion_intensity: 情绪强度（0-1）
+  - expression_style: 表达风格（casual/formal/playful/gentle）
+  - tts_style_hint: TTS风格提示（空串表示无）
+  - sticker_mood_hint: 贴纸情绪提示（warm/cool/neutral）
+  - conversation_scenario: 对话场景（daily/greeting/farewell/help/conflict/tease）
 
 只返回JSON，不要其他内容。"""
 
@@ -281,6 +295,24 @@ class TurnPlanner:
             )
             return self.plan_fast(user_message, context_summary, has_image)
 
+    @staticmethod
+    def _extract_semantic_frame(data: dict) -> dict | None:
+        """从规划 LLM 响应中提取内嵌语义帧
+
+        规划器单次调用同时输出规划字段与语义帧字段，避免独立
+        语义帧 LLM 调用。字段缺失时返回 None，由调用方降级到规则推断。
+
+        参数:
+            data: 解析后的规划 JSON 字典
+
+        返回:
+            dict | None: 语义帧字典，无 semantic_frame 字段时返回 None
+        """
+        frame = data.get("semantic_frame")
+        if not isinstance(frame, dict):
+            return None
+        return frame
+
     async def _augment_plan_with_semantic_frame(
         self,
         plan: TurnPlan,
@@ -290,7 +322,10 @@ class TurnPlanner:
     ) -> TurnPlan:
         """用语义帧增强规划
 
-        调用 semantic_frame_inferrer 推断当前回合的语义帧，
+        优先复用规划 LLM 调用中已输出的内嵌语义帧（plan.semantic_frame），
+        避免独立语义帧 LLM 调用导致的重复分析。内嵌帧缺失时降级到
+        规则快速推断（infer_fast，无 LLM 调用）。
+
         将 recommend_silence/requires_emotional_care/sticker_appropriate
         等信号应用到规划，并把完整语义帧字典写入 plan.semantic_frame
         供响应器消费 tts_style_hint/sticker_mood_hint/bot_emotion 等字段。
@@ -299,31 +334,32 @@ class TurnPlanner:
             plan: 原始规划
             user_message: 用户消息
             context_summary: 上下文摘要
-            use_llm: 是否使用LLM推断（False时用规则快速推断）
+            use_llm: 是否使用LLM推断（仅影响降级路径选择）
 
         返回:
             TurnPlan: 增强后的规划
         """
         if not get_config("CHAT_INTENT_ENABLED", True):
             return plan
-        try:
-            frame = await semantic_frame_inferrer.infer(
-                user_message=user_message,
-                context_summary=context_summary,
-                use_llm=use_llm,
-            )
-        except Exception as e:
-            logger.debug(
-                f"语义帧推断失败，跳过增强: {e}",
-                command="AI",
-                e=e,
-            )
-            return plan
 
-        plan.semantic_frame = frame.to_dict()
+        # 优先复用规划调用中已输出的内嵌语义帧，消除独立 LLM 调用
+        frame_dict = plan.semantic_frame
+        if frame_dict is None:
+            try:
+                frame = semantic_frame_inferrer.infer_fast(user_message)
+                frame_dict = frame.to_dict()
+            except Exception as e:
+                logger.debug(
+                    f"语义帧规则推断失败，跳过增强: {e}",
+                    command="AI",
+                    e=e,
+                )
+                return plan
+
+        plan.semantic_frame = frame_dict
 
         # 静默建议优先级最高：覆盖规划动作
-        if frame.recommend_silence and plan.action == TURN_ACTION_REPLY:
+        if frame_dict.get("recommend_silence") and plan.action == TURN_ACTION_REPLY:
             plan.action = TURN_ACTION_SILENCE
             plan.output_mode = OUTPUT_MODE_SILENCE
             if plan.reason:
@@ -333,24 +369,25 @@ class TurnPlanner:
             return plan
 
         # 情感关怀：附加意图标签，提示响应器采用温和风格
-        if frame.requires_emotional_care:
+        if frame_dict.get("requires_emotional_care"):
             if "emotional_care" not in plan.intent_tags:
                 plan.intent_tags.append("emotional_care")
 
         # 贴纸适配：附加意图标签，提示响应器可发贴纸
-        if frame.sticker_appropriate:
+        if frame_dict.get("sticker_appropriate"):
             if "sticker" not in plan.intent_tags:
                 plan.intent_tags.append("sticker")
 
         # 元问题：附加意图标签，提示走人格/帮助路径
-        if frame.meta_question:
+        if frame_dict.get("meta_question"):
             if "meta_question" not in plan.intent_tags:
                 plan.intent_tags.append("meta_question")
 
         # 模糊度：语义帧值优先（LLM语义分析比规划器更细粒度）
-        if frame.ambiguity_level > 0:
-            plan.ambiguity_level = frame.ambiguity_level
-            if frame.ambiguity_level >= 0.7 and plan.action == TURN_ACTION_REPLY:
+        frame_ambiguity = float(frame_dict.get("ambiguity_level", 0.0) or 0.0)
+        if frame_ambiguity > 0:
+            plan.ambiguity_level = frame_ambiguity
+            if frame_ambiguity >= 0.7 and plan.action == TURN_ACTION_REPLY:
                 plan.action = TURN_ACTION_ASK_CLARIFY
                 if not plan.reason:
                     plan.reason = "语义帧判断模糊度较高，请求澄清"
@@ -460,6 +497,9 @@ class TurnPlanner:
             max_steps = config_max
         max_steps = max(1, min(max_steps, config_max))
 
+        # 提取内嵌语义帧（与规划在同一轮 LLM 调用中输出，避免独立语义帧调用）
+        semantic_frame = self._extract_semantic_frame(data)
+
         return TurnPlan(
             action=action,
             output_mode=output_mode,
@@ -479,6 +519,7 @@ class TurnPlanner:
             max_steps=max_steps,
             reason=str(data.get("reason", "")),
             user_message=user_message,
+            semantic_frame=semantic_frame,
         )
 
     def select_tool(

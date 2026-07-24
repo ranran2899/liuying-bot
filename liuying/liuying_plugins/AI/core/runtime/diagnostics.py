@@ -116,10 +116,6 @@ class Diagnostics:
         issues: list[str] = []
         if not get_config("CHAT_MODEL", {}).get("provider", None):
             issues.append("未配置CHAT_PROVIDER")
-        strict = get_config("STRICT_MAIN_MODEL", False)
-        lite = get_config("LITE_MODEL", {}).get("enabled", False)
-        if strict and lite:
-            issues.append("严格主模型与轻量模型同时开启")
         return {
             "provider": get_config("CHAT_MODEL", {}).get("provider", None),
             "issues": issues,
