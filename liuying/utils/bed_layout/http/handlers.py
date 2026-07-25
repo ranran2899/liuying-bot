@@ -1,13 +1,14 @@
 """
 请求处理器模块
 
-封装HTTP请求处理和响应构建。
+基于 FastAPI 路由封装HTTP请求处理和响应构建。
+所有处理器通过 APIRouter 注册到 nonebot2 框架统一端口。
 """
 import mimetypes
-from pathlib import Path
 import uuid
 
-from aiohttp import multipart, web
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, Response
 
 from liuying.models._bot import BedLayoutImage
 from liuying.utils.bed_layout.config import get_config
@@ -27,201 +28,152 @@ _SECURITY_HEADERS = {
     "X-XSS-Protection": "1; mode=block",
 }
 
+# 床图HTTP路由器，挂载到 nonebot2 统一端口
+router: APIRouter = APIRouter()
 
-class BedLayoutHandlers:
+
+def _image_response(data: bytes, content_type: str) -> Response:
+    """构建图片响应（带安全头）"""
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers=_SECURITY_HEADERS,
+    )
+
+
+@router.get("/images/{filename:path}", name="bed_layout_serve_image")
+async def serve_image(filename: str) -> Response:
+    """提供图片访问服务（公开只读接口）
+
+    参数:
+        filename: 图片文件名
+
+    返回:
+        Response: 图片响应或错误响应
     """
-    床图HTTP请求处理器
+    if not filename:
+        raise HTTPException(status_code=400, detail="缺少文件名")
 
-    封装所有HTTP接口的处理逻辑和响应构建。
+    image = await BedLayoutImage.get_image_by_filename(filename)
+    if image is None:
+        raise HTTPException(status_code=404, detail="图片不存在")
+
+    content_type = image.content_type or "application/octet-stream"
+    return _image_response(image.file_data, content_type)
+
+
+@router.post("/upload", name="bed_layout_upload_image")
+async def upload_image(
+    request: Request,
+    image: UploadFile = File(..., description="上传的图片文件"),
+) -> JSONResponse:
+    """处理图片上传（需认证的写操作接口）
+
+    参数:
+        request: FastAPI 请求对象
+        image: 上传的图片文件
+
+    返回:
+        JSONResponse: 上传结果响应
     """
+    await SecurityGuard.check_protection(request)
 
-    @staticmethod
-    def _image_response(data: bytes, content_type: str) -> web.Response:
-        """构建图片响应（带安全头）"""
-        return web.Response(
-            body=data,
-            content_type=content_type,
-            headers=_SECURITY_HEADERS,
+    original_filename = image.filename or f"{uuid.uuid4().hex}"
+    ext = (
+        "." + original_filename.rsplit(".", 1)[-1].lower()
+        if "." in original_filename
+        else ""
+    )
+
+    try:
+        validate_extension(ext)
+    except ValueError:
+        client_ip = BedLayoutHttpUtils.get_client_ip(request)
+        logger.warning(
+            f"不支持的文件类型: {ext} | IP={client_ip}",
+            "BedLayoutServer",
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: {ext}",
+        ) from None
+
+    max_size = get_config("MAX_FILE_SIZE", 10485760)
+    file_data = await image.read()
+    size = len(file_data)
+
+    if size > max_size:
+        client_ip = BedLayoutHttpUtils.get_client_ip(request)
+        logger.warning(
+            f"文件大小超限: {size}>{max_size}字节 | IP={client_ip}",
+            "BedLayoutServer",
+        )
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件大小超过限制 ({max_size // 1024 // 1024}MB)",
         )
 
-    @staticmethod
-    def _error_response(status: int, message: str) -> web.Response:
-        """构建错误响应"""
-        return web.Response(status=status, text=message)
+    filename = f"{uuid.uuid4().hex}{ext}"
+    content_type, _ = mimetypes.guess_type(original_filename)
+    provider = LocalStorageProvider()
+    url = await provider.upload(file_data, filename, content_type)
 
-    @staticmethod
-    async def serve_image(request: web.Request) -> web.Response:
-        """提供图片访问服务（公开只读接口）
+    return JSONResponse(
+        {
+            "success": True,
+            "filename": filename,
+            "original_filename": original_filename,
+            "url": url,
+            "size": size,
+            "storage": "local",
+        }
+    )
 
-        参数:
-            request: HTTP请求对象
 
-        返回:
-            web.Response: 图片响应或错误响应
-        """
-        filename = request.match_info.get("filename", "")
-        if not filename:
-            return BedLayoutHandlers._error_response(400, "缺少文件名")
+@router.get("/health", name="bed_layout_health_check")
+async def health_check() -> JSONResponse:
+    """健康检查接口（公开只读）
 
-        image = await BedLayoutImage.get_image_by_filename(filename)
-        if image:
-            content_type = image.content_type or "application/octet-stream"
-            return BedLayoutHandlers._image_response(image.file_data, content_type)
+    返回:
+        JSONResponse: 健康状态响应
+    """
+    return JSONResponse(
+        {
+            "status": "healthy",
+            "service": "bed_layout",
+            "version": "3.0.0",
+            "security_features": {
+                "api_key_enabled": bool(get_config("API_KEY", "")),
+                "rate_limiting": True,
+                "ip_banning": True,
+            },
+            "storage": {
+                "type": "database",
+                "db_name": get_config("DB_NAME", "bed_layout_db"),
+            },
+        }
+    )
 
-        return BedLayoutHandlers._error_response(404, "图片不存在")
 
-    @staticmethod
-    async def upload_image(request: web.Request) -> web.Response:
-        """处理图片上传（需认证的写操作接口）
+@router.get("/stats", name="bed_layout_get_stats")
+async def get_stats(request: Request) -> JSONResponse:
+    """获取统计信息（需认证）
 
-        参数:
-            request: HTTP请求对象
+    参数:
+        request: FastAPI 请求对象
 
-        返回:
-            web.Response: 上传结果响应
-        """
-        allowed, reason, status = await SecurityGuard.check_protection(request)
-        match allowed:
-            case False:
-                return BedLayoutHandlers._error_response(
-                    status, f"访问被拒绝: {reason}"
-                )
+    返回:
+        JSONResponse: 统计信息响应
+    """
+    await SecurityGuard.check_protection(request)
 
-        try:
-            reader = await request.multipart()
-
-            async for field in reader:
-                match field.name:
-                    case "image":
-                        return await BedLayoutHandlers._handle_upload_field(
-                            request, field
-                        )
-
-            return BedLayoutHandlers._error_response(400, "未找到上传的图片")
-
-        except web.HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"图片上传失败: {e}", "BedLayoutServer", e=e)
-            return BedLayoutHandlers._error_response(500, "服务器内部错误")
-
-    @staticmethod
-    async def _handle_upload_field(
-        request: web.Request,
-        field: multipart.BodyPartReader,
-    ) -> web.Response:
-        """处理上传字段
-
-        参数:
-            request: HTTP请求对象
-            field: multipart字段
-
-        返回:
-            web.Response: 上传结果响应
-        """
-        original_filename = field.filename or f"{uuid.uuid4().hex}"
-        ext = Path(original_filename).suffix.lower()
-
-        try:
-            validate_extension(ext)
-        except ValueError:
-            client_ip = BedLayoutHttpUtils.get_client_ip(request)
-            logger.warning(
-                f"不支持的文件类型: {ext} | IP={client_ip}",
-                "BedLayoutServer",
-            )
-            return BedLayoutHandlers._error_response(400, f"不支持的文件类型: {ext}")
-
-        filename = f"{uuid.uuid4().hex}{ext}"
-        chunks: list[bytes] = []
-        size = 0
-        max_size = get_config("MAX_FILE_SIZE", 10485760)
-
-        while True:
-            chunk = await field.read_chunk()
-            if not chunk:
-                break
-            size += len(chunk)
-            if size > max_size:
-                client_ip = BedLayoutHttpUtils.get_client_ip(request)
-                logger.warning(
-                    f"文件大小超限: {size}>{max_size}字节 | IP={client_ip}",
-                    "BedLayoutServer",
-                )
-                return BedLayoutHandlers._error_response(
-                    413,
-                    f"文件大小超过限制 ({max_size // 1024 // 1024}MB)",
-                )
-            chunks.append(chunk)
-
-        file_data = b"".join(chunks)
-        content_type, _ = mimetypes.guess_type(original_filename)
-
-        provider = LocalStorageProvider()
-        url = await provider.upload(file_data, filename, content_type)
-
-        return web.json_response(
-            {
-                "success": True,
-                "filename": filename,
-                "original_filename": original_filename,
-                "url": url,
-                "size": size,
-                "storage": "local",
-            }
-        )
-
-    @staticmethod
-    async def health_check(request: web.Request) -> web.Response:
-        """健康检查接口（公开只读）
-
-        参数:
-            request: HTTP请求对象
-
-        返回:
-            web.Response: 健康状态响应
-        """
-        return web.json_response(
-            {
-                "status": "healthy",
-                "service": "bed_layout",
-                "version": "2.0.0",
-                "security_features": {
-                    "api_key_enabled": bool(get_config("API_KEY", "")),
-                    "rate_limiting": True,
-                    "ip_banning": True,
-                },
-                "storage": {
-                    "type": "database",
-                    "db_name": get_config("DB_NAME", "bed_layout_db"),
-                },
-            }
-        )
-
-    @staticmethod
-    async def get_stats(request: web.Request) -> web.Response:
-        """获取统计信息（需认证）
-
-        参数:
-            request: HTTP请求对象
-
-        返回:
-            web.Response: 统计信息响应
-        """
-        allowed, reason, status = await SecurityGuard.check_protection(request)
-        match allowed:
-            case False:
-                return BedLayoutHandlers._error_response(
-                    status, f"访问被拒绝: {reason}"
-                )
-
-        count = await BedLayoutImage.get_image_count()
-        total_size = await BedLayoutImage.get_total_size()
-        return web.json_response(
-            {
-                "storage_type": "database",
-                "image_count": count,
-                "total_size": total_size,
-                "total_size_mb": round(total_size / 1024 / 1024, 2),
-            }
-        )
+    count = await BedLayoutImage.get_image_count()
+    total_size = await BedLayoutImage.get_total_size()
+    return JSONResponse(
+        {
+            "storage_type": "database",
+            "image_count": count,
+            "total_size": total_size,
+            "total_size_mb": round(total_size / 1024 / 1024, 2),
+        }
+    )

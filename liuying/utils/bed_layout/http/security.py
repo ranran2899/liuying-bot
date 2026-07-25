@@ -2,6 +2,7 @@
 安全模块：频率限制、IP封禁、认证验证
 
 使用本地缓存系统持久化存储IP封禁信息，支持服务重启后恢复封禁状态。
+适配 FastAPI 依赖注入模式，通过 verify_protection 依赖进行安全校验。
 """
 
 from bisect import bisect_right
@@ -10,7 +11,7 @@ from dataclasses import dataclass
 import hashlib
 import time
 
-from aiohttp import web
+from fastapi import HTTPException, Request
 
 from liuying.services.cache import Cache
 from liuying.utils.apscheduler import task_manager
@@ -64,7 +65,6 @@ class _RateLimiter:
 
     def cleanup_stale(self) -> None:
         """清理不再活跃的IP和接口记录，防止内存泄漏"""
-        # 取最大窗口作为过期判断标准
         max_window = max(cfg["window"] for cfg in _RATE_LIMITS.values())
         cutoff = time.time() - max_window
 
@@ -90,8 +90,7 @@ class _RateLimiter:
         endpoint: str = "",
         limit_key: str = "per_ip",
     ) -> tuple[bool, str]:
-        """
-        检查是否触发频率限制
+        """检查是否触发频率限制
 
         参数:
             ip: 客户端IP
@@ -203,8 +202,7 @@ class _BanManager:
         return max(0, int(ban_info.ban_until - time.time()))
 
     async def record_failure(self, ip: str) -> tuple[bool, int]:
-        """
-        记录一次认证失败
+        """记录一次认证失败
 
         返回:
             tuple[bool, int]: (是否被封禁, 当前失败次数)
@@ -239,19 +237,19 @@ class SecurityGuard:
     """
     安全防护类
 
-    封装IP获取、API密钥验证、防暴力破解等安全功能
+    封装IP获取、API密钥验证、防暴力破解等安全功能，
+    通过 verify_protection 作为 FastAPI 依赖进行注入校验
     """
 
     _rate_limiter = _RateLimiter()
     _ban_manager = _BanManager()
 
     @staticmethod
-    def verify_api_key(request: web.Request) -> bool:
-        """
-        验证API密钥
+    def verify_api_key(request: Request) -> bool:
+        """验证API密钥
 
         参数:
-            request: HTTP请求对象
+            request: FastAPI 请求对象
 
         返回:
             bool: 验证通过返回True
@@ -263,9 +261,8 @@ class SecurityGuard:
         return hashlib.compare_digest(client_key, api_key)
 
     @classmethod
-    async def check_protection(cls, request: web.Request) -> tuple[bool, str, int]:
-        """
-        综合检查防暴力破解机制
+    async def check_protection(cls, request: Request) -> None:
+        """综合检查防暴力破解机制（FastAPI 依赖注入入口）
 
         检查顺序：
         1. IP是否被封禁
@@ -273,69 +270,71 @@ class SecurityGuard:
         3. IP白名单 + API密钥验证
 
         参数:
-            request: HTTP请求对象
+            request: FastAPI 请求对象
 
-        返回:
-            tuple[bool, str, int]: (是否允许, 原因说明, HTTP状态码)
+        异常:
+            HTTPException: 任一检查未通过时抛出对应的HTTP异常
         """
         client_ip = BedLayoutHttpUtils.get_client_ip(request)
 
-        match await cls._ban_manager.is_banned(client_ip):
-            case True:
-                remaining = await cls._ban_manager.get_remaining_ban_time(client_ip)
-                logger.warning(
-                    f"被封禁IP访问: {client_ip} | 剩余{remaining}秒",
-                    "BedLayoutServer",
-                )
-                return False, f"IP已被临时封禁，剩余{remaining}秒", 403
+        if await cls._ban_manager.is_banned(client_ip):
+            remaining = await cls._ban_manager.get_remaining_ban_time(client_ip)
+            logger.warning(
+                f"被封禁IP访问: {client_ip} | 剩余{remaining}秒",
+                "BedLayoutServer",
+            )
+            raise HTTPException(
+                status_code=403,
+                detail=f"IP已被临时封禁，剩余{remaining}秒",
+            )
 
-        endpoint = request.path
+        endpoint = request.url.path
         limited, reason = cls._rate_limiter.is_rate_limited(
             ip=client_ip,
             endpoint=endpoint,
         )
-        match limited:
-            case True:
-                logger.warning(
-                    f"触发频率限制: IP={client_ip}, 接口={endpoint}",
-                    "BedLayoutServer",
+        if limited:
+            logger.warning(
+                f"触发频率限制: IP={client_ip}, 接口={endpoint}",
+                "BedLayoutServer",
+            )
+            raise HTTPException(status_code=429, detail=reason)
+
+        if not BedLayoutHttpConfig.is_upload_ip_allowed(client_ip):
+            await cls._ban_manager.record_failure(client_ip)
+            cls._rate_limiter.record_failure(client_ip)
+            logger.warning(f"未授权IP: {client_ip}", "BedLayoutServer")
+            raise HTTPException(
+                status_code=403,
+                detail=f"IP {client_ip} 不在允许列表中",
+            )
+
+        if not cls.verify_api_key(request):
+            banned, fail_count = await cls._ban_manager.record_failure(client_ip)
+            cls._rate_limiter.record_failure(client_ip)
+
+            if banned:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        f"连续{fail_count}次认证失败，"
+                        f"IP已被临时封禁{_BAN_CONFIG['ban_duration']}秒"
+                    ),
                 )
-                return False, reason, 429
 
-        match BedLayoutHttpConfig.is_upload_ip_allowed(client_ip):
-            case False:
-                await cls._ban_manager.record_failure(client_ip)
-                cls._rate_limiter.record_failure(client_ip)
-                logger.warning(f"未授权IP: {client_ip}", "BedLayoutServer")
-                return False, f"IP {client_ip} 不在允许列表中", 403
-
-        match cls.verify_api_key(request):
-            case False:
-                banned, fail_count = await cls._ban_manager.record_failure(client_ip)
-                cls._rate_limiter.record_failure(client_ip)
-
-                match banned:
-                    case True:
-                        return (
-                            False,
-                            f"连续{fail_count}次认证失败，"
-                            f"IP已被临时封禁{_BAN_CONFIG['ban_duration']}秒",
-                            403,
-                        )
-
-                logger.warning(
-                    f"无效API密钥: IP={client_ip}, 失败次数={fail_count}",
-                    "BedLayoutServer",
-                )
-                return (
-                    False,
+            logger.warning(
+                f"无效API密钥: IP={client_ip}, 失败次数={fail_count}",
+                "BedLayoutServer",
+            )
+            raise HTTPException(
+                status_code=401,
+                detail=(
                     f"无效的API密钥"
-                    f"（剩余尝试次数: {_BAN_CONFIG['max_failures'] - fail_count}）",
-                    401,
-                )
-            case True:
-                await cls._ban_manager.reset_failures(client_ip)
-                return True, "", 200
+                    f"（剩余尝试次数: {_BAN_CONFIG['max_failures'] - fail_count}）"
+                ),
+            )
+
+        await cls._ban_manager.reset_failures(client_ip)
 
     @classmethod
     def cleanup(cls) -> None:

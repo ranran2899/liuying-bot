@@ -1,7 +1,7 @@
 """
 床图HTTP服务模块
 
-提供本地HTTP服务器用于图片存储和访问
+通过 nonebot2 框架统一端口提供图片存储和访问HTTP接口
 """
 
 from .server import BedLayoutServer

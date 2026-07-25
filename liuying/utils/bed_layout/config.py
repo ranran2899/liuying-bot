@@ -2,8 +2,7 @@
 床图模块配置
 
 负责床图模块所有配置项的统一注册与动态获取。
-所有上层模块通过 get_config / get_default_storage 等函数访问配置，
-禁止再使用 Pydantic BaseModel 中转层。
+所有上层模块通过 get_config / get_default_storage 等函数访问配置。
 """
 from typing import Any
 
@@ -14,19 +13,8 @@ _CONFIG_GROUP = "bed_layout"
 
 # 床图模块所有配置项注册列表
 # 云存储服务商配置统一以 dict 类型注册，运行时直接以字典方式访问
+# 网络服务已迁移至 nonebot2 框架统一端口，不再需要独立 HOST/PORT/SSL 配置
 BED_LAYOUT_CONFIGS: list[dict[str, Any]] = [
-    {
-        "key": "HOST",
-        "default": "127.0.0.1",
-        "type": str,
-        "help": "床图服务监听地址 | 如: 127.0.0.1(仅本机访问), 0.0.0.0(允许外部访问)",
-    },
-    {
-        "key": "PORT",
-        "default": 8088,
-        "type": int,
-        "help": "床图服务监听端口 | 如: 8088, 需确保端口未被占用",
-    },
     {
         "key": "DB_NAME",
         "default": "bed_layout_db",
@@ -138,24 +126,6 @@ BED_LAYOUT_CONFIGS: list[dict[str, Any]] = [
         "default": False,
         "type": bool,
         "help": "公网地址是否使用HTTPS | True: 使用https://, False: 使用http://",
-    },
-    {
-        "key": "ENABLE_HTTPS",
-        "default": False,
-        "type": bool,
-        "help": "是否启用HTTPS | True: 启用HTTPS服务器, False: 使用HTTP服务器",
-    },
-    {
-        "key": "SSL_CERT_FILE",
-        "default": "",
-        "type": str,
-        "help": "SSL证书文件路径 | 如: cert.pem，留空则自动生成自签名证书",
-    },
-    {
-        "key": "SSL_KEY_FILE",
-        "default": "",
-        "type": str,
-        "help": "SSL私钥文件路径 | 如: key.pem，留空则自动生成自签名证书",
     },
     {
         "key": "API_KEY",
