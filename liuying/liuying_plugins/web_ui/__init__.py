@@ -31,7 +31,7 @@ from .auth import router as auth_router
 from .public import init_public
 
 __plugin_meta__ = PluginMetadata(
-    name="WebUi",
+    name="web_ui",
     description="WebUi API",
     usage="""
     WebUi API

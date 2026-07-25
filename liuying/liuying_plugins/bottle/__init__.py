@@ -26,7 +26,7 @@ from .handler import BottleHandler
 
 __plugin_meta__ = PluginMetadata(
     name="漂流瓶",
-    description="基于NoneBot2的漂流瓶插件，支持多适配器，含Web审核功能",
+    description="漂流瓶插件，支持多适配器，含Web审核功能",
     usage="""
     扔瓶子 [图片/文本]
     捡瓶子
@@ -34,8 +34,6 @@ __plugin_meta__ = PluginMetadata(
     点赞漂流瓶 [编号]
     查看漂流瓶 [编号]
     """.strip(),
-    type="application",
-    homepage="https://github.com/luosheng520qaq/nonebot-plugin-web-bottle",
     extra=PluginExtraData(
         author="liuying",
         version="0.3",

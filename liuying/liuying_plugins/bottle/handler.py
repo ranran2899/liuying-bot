@@ -12,7 +12,6 @@ from liuying.utils.platform import PlatformUtils
 
 from .to_msg import BottleMessageBuilder
 
-CONFIG_MODULE = "bottle"
 BOTTLE_HELP_TEXT = """
 扔瓶子 [图片/文本]
 捡瓶子
@@ -24,19 +23,6 @@ BOTTLE_HELP_TEXT = """
 
 class BottleHandler:
     """漂流瓶命令处理器"""
-
-    @staticmethod
-    def _get_config(key: str, default):
-        """读取漂流瓶配置项
-
-        参数:
-            key: 配置键名
-            default: 默认值
-
-        返回:
-            配置值
-        """
-        return Config.get_config(CONFIG_MODULE, key, default)
 
     @classmethod
     async def _send_bottle_messages(cls, messages: list) -> None:
@@ -85,18 +71,18 @@ class BottleHandler:
         """
         if text_content:
             max_word = int(
-                cls._get_config("MAX_BOTTLE_WORD", 1200) or 1200
+                Config.get_config("bottle", "MAX_BOTTLE_WORD", 1200) or 1200
             )
             if len(text_content) > max_word:
                 return f"丢瓶子失败啦，请不要超过{max_word}字符哦~"
             max_lines = int(
-                cls._get_config("MAX_BOTTLE_LINES", 9) or 9
+                Config.get_config("bottle", "MAX_BOTTLE_LINES", 9) or 9
             )
             newline_count = len(re.findall(r"[\r\n]+", text_content))
             if newline_count > max_lines:
                 return f"丢瓶子失败啦，请不要超过{max_lines}行内容哦~"
 
-        max_pic = int(cls._get_config("MAX_BOTTLE_PIC", 2) or 2)
+        max_pic = int(Config.get_config("bottle", "MAX_BOTTLE_PIC", 2) or 2)
         if image_count > max_pic:
             return f"丢瓶子失败啦，请不要超过{max_pic}张图片哦~"
         return None
@@ -104,7 +90,7 @@ class BottleHandler:
     @classmethod
     async def _reply_empty_content(cls) -> None:
         """回复空内容提示，根据配置决定是否附带帮助文本"""
-        if cls._get_config("EMBEDDED_HELP", True):
+        if Config.get_config("bottle", "EMBEDDED_HELP", True):
             await MessageUtils.build_message(
                 f"您还没有写好瓶子的内容哦~\n"
                 f"漂流瓶食用方法: {BOTTLE_HELP_TEXT}"
