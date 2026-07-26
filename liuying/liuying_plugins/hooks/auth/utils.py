@@ -5,7 +5,7 @@ from nonebot.adapters import Event
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.config import Config
-from liuying.models.extra.limit import FreqLimiter
+from liuying.utils.limiters import FreqLimiter
 from liuying.models.plugin_info import PluginInfo
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger

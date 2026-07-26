@@ -1,8 +1,6 @@
 """初始化任务"""
 
-import nonebot
 from nonebot import get_loaded_plugins
-from nonebot.drivers import Driver
 from nonebot.plugin import Plugin
 from nonebot.utils import is_coroutine_callable
 
@@ -13,8 +11,6 @@ from liuying.utils.apscheduler import task_manager
 from liuying.utils.common_utils import CommonUtils
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
-
-driver: Driver = nonebot.get_driver()
 
 
 async def _handle_setting(
@@ -151,14 +147,11 @@ def _build_trigger_config(scheduler_model) -> dict[str, int]:
     返回:
         触发器配置字典
     """
-    config = {}
-    if scheduler_model.hour is not None:
-        config["hour"] = scheduler_model.hour
-    if scheduler_model.minute is not None:
-        config["minute"] = scheduler_model.minute
-    if scheduler_model.second is not None:
-        config["second"] = scheduler_model.second
-    return config
+    return {
+        key: value
+        for key in ("hour", "minute", "second")
+        if (value := getattr(scheduler_model, key)) is not None
+    }
 
 
 async def create_schedule(task: Task) -> None:
@@ -188,10 +181,7 @@ async def create_schedule(task: Task) -> None:
                 await task_manager.add_cron(**base_kwargs, **trigger_config)
             case "interval":
                 trigger_config = _build_trigger_config(scheduler_model)
-                interval_config = {
-                    k.replace("minute", "minutes").replace("hour", "hours"): v
-                    for k, v in trigger_config.items()
-                }
+                interval_config = {f"{k}s": v for k, v in trigger_config.items()}
                 await task_manager.add_interval(**base_kwargs, **interval_config)
             case "date" if scheduler_model.run_date:
                 await task_manager.add_date(

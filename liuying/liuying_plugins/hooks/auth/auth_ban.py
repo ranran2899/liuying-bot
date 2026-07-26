@@ -33,7 +33,7 @@ def _get_flmt():
     """延迟初始化频率限制器"""
     global _flmt_global
     if _flmt_global is None:
-        from liuying.models.extra.limit import FreqLimiter
+        from liuying.utils.limiters import FreqLimiter
         _flmt_global = FreqLimiter(300)
     return _flmt_global
 

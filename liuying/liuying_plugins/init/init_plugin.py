@@ -1,10 +1,9 @@
 """初始化插件"""
 
-import nonebot
-from nonebot import get_loaded_plugins
-from nonebot.drivers import Driver
-from nonebot.plugin import Plugin, PluginMetadata
+import aiofiles
 import orjson as json
+from nonebot import get_loaded_plugins
+from nonebot.plugin import Plugin, PluginMetadata
 from ruamel.yaml import YAML
 
 from liuying.configs.path_config import DATA_PATH
@@ -13,12 +12,7 @@ from liuying.models._group import GroupConsole
 from liuying.models.plugin_info import PluginInfo
 from liuying.models.plugin_limit import PluginLimit
 from liuying.models.task_info import TaskInfo
-from liuying.utils.enum import (
-    BlockType,
-    LimitCheckType,
-    LimitWatchType,
-    PluginType,
-)
+from liuying.utils.enum import BlockType, PluginType
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 
@@ -27,38 +21,6 @@ from .manager import manager
 _yaml = YAML(pure=True)
 _yaml.allow_unicode = True
 _yaml.indent = 2
-
-driver: Driver = nonebot.get_driver()
-
-
-def _parse_limit_check_type(check_type_str: str | None) -> LimitCheckType:
-    """解析限制检查类型
-
-    参数:
-        check_type_str: 检查类型字符串
-
-    返回:
-        LimitCheckType 枚举值
-    """
-    match check_type_str:
-        case "private":
-            return LimitCheckType.PRIVATE
-        case "group":
-            return LimitCheckType.GROUP
-        case _:
-            return LimitCheckType.ALL
-
-
-def _parse_limit_watch_type(watch_type_str: str | None) -> LimitWatchType:
-    """解析限制监听类型
-
-    参数:
-        watch_type_str: 监听类型字符串
-
-    返回:
-        LimitWatchType 枚举值
-    """
-    return LimitWatchType.GROUP if watch_type_str == "group" else LimitWatchType.USER
 
 
 def _parse_block_type(block_type_str: str | None) -> BlockType | None:
@@ -241,8 +203,6 @@ async def _migrate_plugin_settings(setting_file) -> None:
     参数:
         setting_file: 设置文件路径
     """
-    import aiofiles
-
     async with aiofiles.open(setting_file, encoding="utf8") as f:
         if not (data := _yaml.load(await f.read())):
             return
@@ -268,8 +228,6 @@ async def _migrate_plugin_manager(plugin_file) -> None:
     参数:
         plugin_file: 插件管理器文件路径
     """
-    import aiofiles
-
     async with aiofiles.open(plugin_file, encoding="utf8") as f:
         if not (data := json.loads(await f.read())):
             return
@@ -287,8 +245,6 @@ async def _migrate_plugin_manager(plugin_file) -> None:
 
 async def group_migration() -> None:
     """迁移群组数据"""
-    import aiofiles
-
     data_path = DATA_PATH / "manager" / "group_console.json"
 
     if not data_path.exists():

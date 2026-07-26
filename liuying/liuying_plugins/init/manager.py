@@ -1,9 +1,11 @@
 """初始化管理器"""
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 
 from liuying.configs.path_config import DATA_PATH
 from liuying.configs.utils.models import BaseBlock, PluginCdBlock, PluginCountBlock
@@ -58,23 +60,80 @@ result示例："[uname]你冲的太快了，[nickname]先生，请稍后再冲[a
 result回复："老色批你冲的太快了，欧尼酱先生，请稍后再冲@老色批"
      用户昵称↑     昵称系统的昵称↑          艾特用户↑"""
 
-LIMIT_TYPE_MAP = {
-    PluginLimitType.CD: ("PluginCdLimit", CD_TEST, "cd_data"),
-    PluginLimitType.BLOCK: ("PluginBlockLimit", BLOCK_TEST, "block_data"),
-    PluginLimitType.COUNT: ("PluginCountLimit", COUNT_TEST, "count_data"),
+
+class LimitTypeConfig(NamedTuple):
+    """限制类型配置项"""
+
+    type_name: str
+    """YAML 文件中的类型键名"""
+    comment: str
+    """YAML 文件头部注释"""
+    data_attr: str
+    """Manager 实例上对应数据字典的属性名"""
+    model_class: type[BaseBlock | PluginCdBlock | PluginCountBlock]
+    """该类型对应的 Pydantic 模型类"""
+
+
+_LIMIT_TYPE_CONFIG: Mapping[PluginLimitType, LimitTypeConfig] = {
+    PluginLimitType.CD: LimitTypeConfig(
+        "PluginCdLimit", CD_TEST, "cd_data", PluginCdBlock
+    ),
+    PluginLimitType.BLOCK: LimitTypeConfig(
+        "PluginBlockLimit", BLOCK_TEST, "block_data", BaseBlock
+    ),
+    PluginLimitType.COUNT: LimitTypeConfig(
+        "PluginCountLimit", COUNT_TEST, "count_data", PluginCountBlock
+    ),
 }
 
-LIMIT_MODEL_MAP = {
-    PluginLimitType.CD: PluginCdBlock,
-    PluginLimitType.BLOCK: BaseBlock,
-    PluginLimitType.COUNT: PluginCountBlock,
-}
+_ALL_LIMIT_TYPES: tuple[PluginLimitType, ...] = (
+    PluginLimitType.CD,
+    PluginLimitType.BLOCK,
+    PluginLimitType.COUNT,
+)
+
+
+def _convert_check_type_to_block(check_type: LimitCheckType) -> BlockType:
+    """将限制检查类型转换为阻塞类型
+
+    参数:
+        check_type: 限制检查类型
+
+    返回:
+        阻塞类型
+    """
+    match check_type:
+        case LimitCheckType.GROUP:
+            return BlockType.GROUP
+        case LimitCheckType.PRIVATE:
+            return BlockType.PRIVATE
+        case LimitCheckType.ALL:
+            return BlockType.ALL
+
+
+def _convert_block_to_check_type(check_type: BlockType | None) -> LimitCheckType:
+    """将阻塞类型转换为限制检查类型
+
+    参数:
+        check_type: 阻塞类型
+
+    返回:
+        限制检查类型
+    """
+    match check_type:
+        case BlockType.GROUP:
+            return LimitCheckType.GROUP
+        case BlockType.PRIVATE:
+            return LimitCheckType.PRIVATE
+        case BlockType.ALL | None:
+            return LimitCheckType.ALL
 
 
 class Manager:
     """插件命令限制管理器"""
 
     def __init__(self) -> None:
+        """初始化管理器，配置各限制类型对应的文件路径与数据容器"""
         self.cd_file = DATA_PATH / "configs" / "plugins2cd.yaml"
         self.block_file = DATA_PATH / "configs" / "plugins2block.yaml"
         self.count_file = DATA_PATH / "configs" / "plugins2count.yaml"
@@ -115,56 +174,26 @@ class Manager:
         返回:
             转换后的限制实例
         """
-        check_type = self._convert_check_type(data.check_type)
+        check_type = _convert_check_type_to_block(data.check_type)
+        base_fields = {
+            "status": data.status,
+            "check_type": check_type,
+            "watch_type": data.watch_type,
+            "result": data.result,
+        }
 
         match data.limit_type:
             case PluginLimitType.CD:
-                return PluginCdBlock(
-                    status=data.status,
-                    check_type=check_type,
-                    watch_type=data.watch_type,
-                    result=data.result,
-                    cd=data.cd,
-                )
-            case PluginLimitType.BLOCK:
-                return BaseBlock(
-                    status=data.status,
-                    check_type=check_type,
-                    watch_type=data.watch_type,
-                    result=data.result,
-                )
+                return PluginCdBlock(**base_fields, cd=data.cd or 5)
             case PluginLimitType.COUNT:
                 return PluginCountBlock(
                     status=data.status,
                     watch_type=data.watch_type,
                     result=data.result,
-                    max_count=data.max_count,
+                    max_count=data.max_count or 0,
                 )
-            case _:
-                return BaseBlock(
-                    status=data.status,
-                    check_type=check_type,
-                    watch_type=data.watch_type,
-                    result=data.result,
-                )
-
-    @staticmethod
-    def _convert_check_type(check_type: LimitCheckType) -> BlockType:
-        """转换检查类型
-
-        参数:
-            check_type: 限制检查类型
-
-        返回:
-            阻塞类型
-        """
-        match check_type:
-            case LimitCheckType.GROUP:
-                return BlockType.GROUP
-            case LimitCheckType.PRIVATE:
-                return BlockType.PRIVATE
-            case _:
-                return BlockType.ALL
+            case PluginLimitType.BLOCK:
+                return BaseBlock(**base_fields)
 
     def exists(self, module: str, limit_type: PluginLimitType) -> bool:
         """检查限制是否存在
@@ -176,23 +205,12 @@ class Manager:
         返回:
             是否存在
         """
-        match limit_type:
-            case PluginLimitType.CD:
-                return module in self.cd_data
-            case PluginLimitType.BLOCK:
-                return module in self.block_data
-            case PluginLimitType.COUNT:
-                return module in self.count_data
-            case _:
-                return False
+        data = self._get_file_data(limit_type)
+        return module in data
 
     def init(self) -> None:
-        """初始化管理器"""
-        for limit_type in (
-            PluginLimitType.CD,
-            PluginLimitType.BLOCK,
-            PluginLimitType.COUNT,
-        ):
+        """初始化管理器，确保文件存在并加载所有数据"""
+        for limit_type in _ALL_LIMIT_TYPES:
             file_path = self._get_file_path(limit_type)
             if not file_path.exists():
                 self._save_limit_file(limit_type)
@@ -215,16 +233,10 @@ class Manager:
                 return self.block_file
             case PluginLimitType.COUNT:
                 return self.count_file
-            case _:
-                return self.block_file
 
     def _load_all_files(self) -> None:
         """加载所有限制文件"""
-        for limit_type in (
-            PluginLimitType.CD,
-            PluginLimitType.BLOCK,
-            PluginLimitType.COUNT,
-        ):
+        for limit_type in _ALL_LIMIT_TYPES:
             self._load_limit_file(limit_type)
 
     def _load_limit_file(self, limit_type: PluginLimitType) -> None:
@@ -234,27 +246,22 @@ class Manager:
             limit_type: 限制类型
         """
         file_path = self._get_file_path(limit_type)
-        type_name, _, data_attr = LIMIT_TYPE_MAP[limit_type]
-        model_class = LIMIT_MODEL_MAP[limit_type]
+        config = _LIMIT_TYPE_CONFIG[limit_type]
 
         data_dict: dict[str, Any] = {}
         if file_path.exists():
-            with open(file_path, encoding="utf8") as f:
+            with file_path.open(encoding="utf8") as f:
                 temp = _yaml.load(f) or {}
-                if type_name in temp:
-                    for k, v in temp[type_name].items():
+                if config.type_name in temp:
+                    for k, v in temp[config.type_name].items():
                         key = k.split(".")[-1] if "." in k else k
-                        data_dict[key] = model_class.parse_obj(v)
+                        data_dict[key] = config.model_class.model_validate(v)
 
-        setattr(self, data_attr, data_dict)
+        setattr(self, config.data_attr, data_dict)
 
     def save_file(self) -> None:
         """保存所有限制文件"""
-        for limit_type in (
-            PluginLimitType.CD,
-            PluginLimitType.BLOCK,
-            PluginLimitType.COUNT,
-        ):
+        for limit_type in _ALL_LIMIT_TYPES:
             self._save_limit_file(limit_type)
 
     def _save_limit_file(self, limit_type: PluginLimitType) -> None:
@@ -263,21 +270,17 @@ class Manager:
         参数:
             limit_type: 限制类型
         """
-        type_name, comment, data_attr = LIMIT_TYPE_MAP[limit_type]
-        data: dict = getattr(self, data_attr)
-
+        config = _LIMIT_TYPE_CONFIG[limit_type]
+        data: dict = getattr(self, config.data_attr)
         temp_data = self._prepare_save_data(data, limit_type)
         file_path = self._get_file_path(limit_type)
 
-        with open(file_path, "w", encoding="utf8") as f:
-            _yaml.dump({type_name: temp_data}, f)
+        commented_data = CommentedMap()
+        commented_data[config.type_name] = temp_data
+        commented_data.yaml_set_comment_before_after_key(after=config.comment, key=config.type_name)
 
-        with open(file_path, encoding="utf8") as rf:
-            _data = _yaml.load(rf)
-
-        _data.yaml_set_comment_before_after_key(after=comment, key=type_name)
-        with open(file_path, "w", encoding="utf8") as wf:
-            _yaml.dump(_data, wf)
+        with file_path.open("w", encoding="utf8") as f:
+            _yaml.dump(commented_data, f)
 
     def _prepare_save_data(
         self, data: dict, limit_type: PluginLimitType
@@ -294,15 +297,12 @@ class Manager:
         if not data:
             return self._create_default_data(limit_type)
 
-        temp_data = {}
+        temp_data: dict[str, Any] = {}
         for k, v in data.items():
-            temp_data[k] = v.to_dict()
-            if check_type := temp_data[k].get("check_type"):
-                temp_data[k]["check_type"] = str(check_type)
-            if watch_type := temp_data[k].get("watch_type"):
-                temp_data[k]["watch_type"] = str(watch_type)
+            item = v.model_dump(mode="json")
             if limit_type == PluginLimitType.COUNT:
-                temp_data[k].pop("check_type", None)
+                item.pop("check_type", None)
+            temp_data[k] = item
 
         return temp_data
 
@@ -316,7 +316,7 @@ class Manager:
         返回:
             默认数据字典
         """
-        default_data = {
+        default_data: dict[str, Any] = {
             "test": {
                 "status": False,
                 "check_type": "ALL",
@@ -331,6 +331,8 @@ class Manager:
             case PluginLimitType.COUNT:
                 default_data["test"]["max_count"] = 5
                 default_data["test"].pop("check_type")
+            case PluginLimitType.BLOCK:
+                pass
 
         return default_data
 
@@ -339,7 +341,7 @@ class Manager:
         db_data: PluginLimit | None,
         limit: BaseBlock | PluginCdBlock | PluginCountBlock,
     ) -> PluginLimit:
-        """替换数据
+        """用文件数据替换数据库记录的通用字段
 
         参数:
             db_data: 数据库数据
@@ -352,29 +354,11 @@ class Manager:
             db_data = PluginLimit()
 
         db_data.status = limit.status
-        db_data.check_type = self._convert_block_to_check_type(limit.check_type)
+        db_data.check_type = _convert_block_to_check_type(limit.check_type)
         db_data.watch_type = limit.watch_type
         db_data.result = limit.result or ""
 
         return db_data
-
-    @staticmethod
-    def _convert_block_to_check_type(check_type: BlockType | None) -> LimitCheckType:
-        """转换阻塞类型为检查类型
-
-        参数:
-            check_type: 阻塞类型
-
-        返回:
-            限制检查类型
-        """
-        match check_type:
-            case BlockType.GROUP:
-                return LimitCheckType.GROUP
-            case BlockType.PRIVATE:
-                return LimitCheckType.PRIVATE
-            case _:
-                return LimitCheckType.ALL
 
     def _set_data(
         self,
@@ -384,7 +368,7 @@ class Manager:
         limit_type: PluginLimitType,
         module2plugin: dict[str, PluginInfo],
     ) -> tuple[PluginLimit, bool]:
-        """设置数据
+        """设置数据，返回创建或更新后的 PluginLimit
 
         参数:
             k: 模块名
@@ -397,16 +381,21 @@ class Manager:
             tuple[PluginLimit, bool]: PluginLimit，是否创建
         """
         if not db_data:
+            check_type = _convert_block_to_check_type(limit.check_type)
             return (
                 PluginLimit(
                     module=k,
                     module_path=module2plugin[k].module_path,
                     limit_type=limit_type,
                     plugin=module2plugin[k],
-                    cd=getattr(limit, "cd", None),
-                    max_count=getattr(limit, "max_count", None),
+                    cd=limit.cd if isinstance(limit, PluginCdBlock) else None,
+                    max_count=(
+                        limit.max_count
+                        if isinstance(limit, PluginCountBlock)
+                        else None
+                    ),
                     status=limit.status,
-                    check_type=limit.check_type,
+                    check_type=check_type,
                     watch_type=limit.watch_type,
                     result=limit.result,
                 ),
@@ -415,15 +404,17 @@ class Manager:
 
         db_data = self._replace_data(db_data, limit)
 
-        match limit_type:
-            case PluginLimitType.CD:
-                db_data.cd = limit.cd  # type: ignore
-            case PluginLimitType.COUNT:
-                db_data.max_count = limit.max_count  # type: ignore
+        match limit:
+            case PluginCdBlock():
+                db_data.cd = limit.cd
+            case PluginCountBlock():
+                db_data.max_count = limit.max_count
 
         return db_data, False
 
-    def _get_file_data(self, limit_type: PluginLimitType) -> dict:
+    def _get_file_data(
+        self, limit_type: PluginLimitType
+    ) -> dict[str, BaseBlock | PluginCdBlock | PluginCountBlock]:
         """获取文件数据
 
         参数:
@@ -437,7 +428,7 @@ class Manager:
                 return self.cd_data
             case PluginLimitType.COUNT:
                 return self.count_data
-            case _:
+            case PluginLimitType.BLOCK:
                 return self.block_data
 
     def _set_db_limits(
@@ -523,11 +514,7 @@ class Manager:
         all_update: list[PluginLimit] = []
         all_delete: list[int] = []
 
-        for limit_type in (
-            PluginLimitType.CD,
-            PluginLimitType.COUNT,
-            PluginLimitType.BLOCK,
-        ):
+        for limit_type in _ALL_LIMIT_TYPES:
             create, update, delete = self._set_db_limits(
                 db_limits, module2plugin, limit_type
             )
@@ -541,22 +528,18 @@ class Manager:
         """读取配置文件并加载到数据库"""
         create_list, update_list, delete_list = await self._set_all_limit()
 
-        try:
-            for limit in create_list:
-                await limit.save()
+        for limit in create_list:
+            await limit.save()
 
-            for limit in update_list:
-                await limit.save()
+        for limit in update_list:
+            await limit.save()
 
-            for limit_id in delete_list:
-                if limit := await PluginLimit.safe_get_or_none(id=limit_id):
-                    await limit.delete()
+        for limit_id in delete_list:
+            if limit := await PluginLimit.safe_get_or_none(id=limit_id):
+                await limit.delete()
 
-            cnt = len(await PluginLimit.filter(status=True).all())
-            logger.info(f"已经加载 {cnt} 个插件限制.")
-        except Exception as e:
-            logger.error(f"加载插件限制到数据库失败: {e}")
-            raise
+        cnt = len(await PluginLimit.filter(status=True).all())
+        logger.info(f"已经加载 {cnt} 个插件限制.")
 
 
 manager = Manager()

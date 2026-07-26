@@ -7,7 +7,7 @@ import nonebot
 from nonebot_plugin_uninfo import Uninfo
 from pydantic import BaseModel
 
-from liuying.models.extra.limit import CountLimiter, FreqLimiter, UserBlockLimiter
+from liuying.utils.limiters import CountLimiter, FreqLimiter, UserBlockLimiter
 from liuying.models.plugin_info import PluginInfo
 from liuying.models.plugin_limit import PluginLimit
 from liuying.utils.enum import LimitWatchType, PluginLimitType

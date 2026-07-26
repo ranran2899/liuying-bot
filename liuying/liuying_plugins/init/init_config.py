@@ -19,10 +19,6 @@ _yaml.indent = 2
 
 SIMPLE_CONFIG_FILE = DATA_PATH / "config.yaml"
 
-old_config_file = Path() / "liuying" / "configs" / "config.yaml"
-if old_config_file.exists():
-    old_config_file.rename(SIMPLE_CONFIG_FILE)
-
 
 def _handle_config(plugin: Plugin, exists_module: list[str]) -> None:
     """处理配置项
@@ -49,7 +45,7 @@ def _handle_config(plugin: Plugin, exists_module: list[str]) -> None:
         Config.add_plugin_config(
             module,
             config.key,
-            config.value if hasattr(config, "value") else config.default_value,
+            config.value,
             help=config.help,
             default_value=config.default_value,
             type=config.type,
@@ -65,16 +61,13 @@ def _load_yaml_data(file_path: Path) -> dict:
         file_path: 文件路径
 
     返回:
-        解析后的数据字典
+        解析后的数据字典，文件不存在或为空时返回空字典
     """
     if not file_path.exists():
         return {}
 
-    try:
-        with file_path.open(encoding="utf8") as f:
-            return _yaml.load(f) or {}
-    except Exception:
-        return {}
+    with file_path.open(encoding="utf8") as f:
+        return _yaml.load(f) or {}
 
 
 def _generate_simple_config(exists_module: list[str]) -> None:
@@ -93,16 +86,13 @@ def _generate_simple_config(exists_module: list[str]) -> None:
     for module in Config.keys():
         _tmp_data[module] = {}
         for k in Config[module].configs.keys():
-            try:
-                if _data.get(module) and k in _data[module]:
-                    Config.set_config(module, k, _data[module][k])
+            if _data.get(module) and k in _data[module]:
+                Config.set_config(module, k, _data[module][k])
 
-                if f"{module}:{k}".lower() in exists_module:
-                    _tmp_data[module][k] = Config.get_config(
-                        module, k, build_model=False
-                    )
-            except AttributeError as e:
-                raise AttributeError(f"{e}\n可能为config.yaml配置文件填写不规范") from e
+            if f"{module}:{k}".lower() in exists_module:
+                _tmp_data[module][k] = Config.get_config(
+                    module, k, build_model=False
+                )
 
         if not _tmp_data[module]:
             _tmp_data.pop(module)

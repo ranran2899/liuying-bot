@@ -1,11 +1,10 @@
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field
 
 from liuying.utils.enum import BlockType, LimitWatchType, PluginLimitType, PluginType
-from liuying.utils.pydantic_compat import model_dump
 
 __all__ = [
     "AICallableParam",
@@ -81,7 +80,7 @@ class ConfigModel(BaseModel):
     """参数解析"""
 
     def to_dict(self, **kwargs):
-        return model_dump(self, **kwargs)
+        return self.model_dump(**kwargs)
 
 
 class BaseBlock(BaseModel):
@@ -95,11 +94,11 @@ class BaseBlock(BaseModel):
     """监听对象"""
     result: str | None = None
     """阻断时回复内容"""
-    _type: PluginLimitType = PluginLimitType.BLOCK
+    _type: ClassVar[PluginLimitType] = PluginLimitType.BLOCK
     """类型"""
 
     def to_dict(self, **kwargs):
-        return model_dump(self, **kwargs)
+        return self.model_dump(**kwargs)
 
 
 class PluginCdBlock(BaseBlock):
@@ -107,7 +106,7 @@ class PluginCdBlock(BaseBlock):
 
     cd: int = 5
     """cd"""
-    _type: PluginLimitType = PluginLimitType.CD
+    _type: ClassVar[PluginLimitType] = PluginLimitType.CD
     """类型"""
 
 
@@ -116,7 +115,7 @@ class PluginCountBlock(BaseBlock):
 
     max_count: int
     """最大调用次数"""
-    _type: PluginLimitType = PluginLimitType.COUNT
+    _type: ClassVar[PluginLimitType] = PluginLimitType.COUNT
     """类型"""
 
 
@@ -162,7 +161,7 @@ class AICallableTag(BaseModel):
     """工具函数"""
 
     def to_dict(self, **kwargs):
-        return model_dump(self, exclude={"func"}, **kwargs)
+        return self.model_dump(exclude={"func"}, **kwargs)
 
 
 class SchedulerModel(BaseModel):
@@ -246,4 +245,4 @@ class PluginExtraData(BaseModel):
     """智能模式函数工具集"""
 
     def to_dict(self, **kwargs):
-        return model_dump(self, **kwargs)
+        return self.model_dump(**kwargs)

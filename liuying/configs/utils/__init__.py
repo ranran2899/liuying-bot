@@ -1,21 +1,15 @@
 from collections.abc import Callable
 import copy
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
-import cattrs
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 from ruamel.yaml import YAML
 from ruamel.yaml.scanner import ScannerError
 
 from liuying.configs.path_config import DATA_PATH
 from liuying.utils.log import logger
-from liuying.utils.pydantic_compat import (
-    _dump_pydantic_obj,
-    _is_pydantic_type,
-    model_dump,
-    parse_as,
-)
+from liuying.utils.pydantic_compat import _dump_pydantic_obj
 
 from .models import (
     AICallableParam,
@@ -33,14 +27,9 @@ from .models import (
     Task,
 )
 
-for _bt in (int, float, str, bool, list, dict, tuple, set, type(None)):
-    cattrs.register_structure_hook(_bt, lambda v, _: v)
-
 _yaml = YAML(pure=True)
 _yaml.indent = 2
 _yaml.allow_unicode = True
-
-T = TypeVar("T")
 
 
 def _try_type_convert(
@@ -53,7 +42,8 @@ def _try_type_convert(
 ) -> Any:
     """尝试将配置值通过类型转换为目标类型
 
-    优先使用Pydantic原生方式解析，回退到cattrs结构化。
+    使用 Pydantic V2 TypeAdapter 进行统一的类型转换，
+    支持 Pydantic 模型、dataclass、基础类型及泛型类型。
 
     参数:
         value: 待转换的值
@@ -71,28 +61,16 @@ def _try_type_convert(
     if isinstance(cfg_type, type) and isinstance(value, cfg_type):
         return value
 
-    if _is_pydantic_type(cfg_type):
-        try:
-            return parse_as(cfg_type, value)
-        except Exception as e:
-            logger.warning(
-                f"pydantic类型转换失败 MODULE: "
-                f"[<u><y>{module}</y></u>] | "
-                f"KEY: [<u><y>{key}</y></u>].",
-                e=e,
-            )
-    else:
-        try:
-            return cattrs.structure(value, cfg_type)
-        except Exception as e:
-            logger.warning(
-                f"cattrs类型转换失败 MODULE: "
-                f"[<u><y>{module}</y></u>] | "
-                f"KEY: [<u><y>{key}</y></u>].",
-                e=e,
-            )
-
-    return value
+    try:
+        return TypeAdapter(cfg_type).validate_python(value)
+    except Exception as e:
+        logger.warning(
+            f"类型转换失败 MODULE: "
+            f"[<u><y>{module}</y></u>] | "
+            f"KEY: [<u><y>{key}</y></u>].",
+            e=e,
+        )
+        return value
 
 
 class ConfigGroup(BaseModel):
@@ -146,7 +124,7 @@ class ConfigGroup(BaseModel):
         )
 
     def to_dict(self, **kwargs):
-        return model_dump(self, **kwargs)
+        return self.model_dump(**kwargs)
 
 
 class ConfigsManager:
@@ -361,7 +339,7 @@ class ConfigsManager:
         save_path = Path(path or self.file)
         save_data = {
             module: {
-                config_key: model_dump(config_model, exclude={"type", "arg_parser"})
+                config_key: config_model.model_dump(exclude={"type", "arg_parser"})
                 for config_key, config_model in config_group.configs.items()
             }
             for module, config_group in self._data.items()
