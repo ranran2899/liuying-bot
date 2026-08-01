@@ -17,6 +17,7 @@ from liuying.models._log.behavior_log import BehaviorLog
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
+from liuying.utils.manager import PriorityLifecycle
 
 from .auth.utils import get_group_channel_ids
 
@@ -130,6 +131,15 @@ class BehaviorLogQueue:
             with suppress(Exception):
                 await BehaviorLog.add_log(**log_data)
 
+@PriorityLifecycle.on_startup(priority=10)
+async def _start_behavior_log_queue():
+    """启动行为日志队列"""
+    await BehaviorLogQueue.start()
+
+@PriorityLifecycle.on_shutdown(priority=10)
+async def _stop_behavior_log_queue():
+    """停止行为日志队列"""
+    await BehaviorLogQueue.stop()
 
 @run_preprocessor
 async def _(

@@ -3,10 +3,12 @@
 from datetime import datetime, timedelta
 from typing import ClassVar
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
+
+_MESSAGE_MAX_LENGTH = 5000
 
 
 class ChatHistory(Model):
@@ -55,34 +57,45 @@ class ChatHistory(Model):
         return today - timedelta(days=days - 1)
 
     @classmethod
-    def _build_query(
+    async def add_record(
         cls,
         user_id: str | None = None,
         group_id: str | None = None,
         bot_id: str | None = None,
-        days: int | None = None,
-    ):
-        """构建聊天记录查询条件。
+        message: str | None = None,
+    ) -> "ChatHistory":
+        """写入一条聊天记录。
 
         参数:
-            user_id: 用户ID，为None时不限制
-            group_id: 群组ID，为None时不限制
-            bot_id: 机器人ID，为None时不限制
-            days: 时间范围（天），近N天数据，为None时不限制
+            user_id: 用户ID
+            group_id: 群组ID
+            bot_id: 机器人ID
+            message: 消息内容
 
         返回:
-            QueryWrapper: 查询包装器
+            ChatHistory: 创建的记录实例
         """
-        query = cls.filter()
-        if user_id:
-            query = query.filter(user_id=user_id)
-        if group_id:
-            query = query.filter(group_id=group_id)
-        if bot_id:
-            query = query.filter(bot_id=bot_id)
-        if days:
-            query = query.where_gte("create_time", cls._calc_start_time(days))
-        return query
+        return await cls.create(
+            user_id=user_id,
+            group_id=group_id,
+            bot_id=bot_id,
+            message=message[:_MESSAGE_MAX_LENGTH] if message else None,
+        )
+
+    @classmethod
+    async def bulk_add(cls, records: list["ChatHistory"]) -> int:
+        """批量写入聊天记录。
+
+        参数:
+            records: 聊天记录实例列表
+
+        返回:
+            int: 成功写入的记录数量
+        """
+        if not records:
+            return 0
+        await cls.filter().bulk_create(records)
+        return len(records)
 
     @classmethod
     async def count_records(
@@ -103,7 +116,13 @@ class ChatHistory(Model):
         返回:
             int: 记录数量
         """
-        return await cls._build_query(user_id, group_id, bot_id, days).count()
+        return await cls.filter(
+            skip_none=True,
+            user_id=user_id,
+            group_id=group_id,
+            bot_id=bot_id,
+            create_time__gte=cls._calc_start_time(days) if days else None,
+        ).count()
 
     @classmethod
     async def get_active_groups(
@@ -122,15 +141,18 @@ class ChatHistory(Model):
         返回:
             list[tuple[str, int]]: [(群组ID, 消息数), ...] 按消息数降序
         """
-        count_col = func.count(cls.id).label("count")
-        query = (
-            cls._build_query(bot_id=bot_id, days=days)
-            .filter(group_id__isnull=False)
-            .annotate(count=count_col)
-            .group_by(cls.group_id)
-            .order_by(count_col.desc())
-        )
-        if limit:
-            query = query.limit(limit)
-        rows = await query.values(cls.group_id, count_col).all()
-        return [(row[0], row[1]) for row in rows]
+        return await cls.filter(
+            skip_none=True,
+            bot_id=bot_id,
+            group_id__isnull=False,
+            create_time__gte=cls._calc_start_time(days) if days else None,
+        ).group_count(group_column="group_id", count_column="id", limit=limit)
+
+    @classmethod
+    def _run_script(cls):
+        """数据库迁移脚本
+
+        返回:
+            list: SQL语句列表，用于数据库表结构更新
+        """
+        return ["ALTER TABLE chat_history ADD message TEXT;"]

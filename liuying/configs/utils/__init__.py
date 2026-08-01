@@ -3,13 +3,13 @@ import copy
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field
 from ruamel.yaml import YAML
 from ruamel.yaml.scanner import ScannerError
 
 from liuying.configs.path_config import DATA_PATH
 from liuying.utils.log import logger
-from liuying.utils.pydantic_compat import _dump_pydantic_obj
+from liuying.utils.pydantic_compat import _dump_pydantic_obj, parse_as
 
 from .models import (
     AICallableParam,
@@ -42,7 +42,7 @@ def _try_type_convert(
 ) -> Any:
     """尝试将配置值通过类型转换为目标类型
 
-    使用 Pydantic V2 TypeAdapter 进行统一的类型转换，
+    通过 parse_as（兼容 Pydantic V1/V2 lax 行为）进行类型转换，
     支持 Pydantic 模型、dataclass、基础类型及泛型类型。
 
     参数:
@@ -62,7 +62,7 @@ def _try_type_convert(
         return value
 
     try:
-        return TypeAdapter(cfg_type).validate_python(value)
+        return parse_as(cfg_type, value)
     except Exception as e:
         logger.warning(
             f"类型转换失败 MODULE: "
