@@ -1,7 +1,6 @@
 """HTTP响应缓存模块，基于统一缓存服务实现TTL过期和击穿防护。
 
 通过 liuying.services.cache 提供底层存储、TTL管理、雪崩防护和击穿防护，
-符合项目"所有缓存操作必须使用统一缓存接口"的硬约束。
 """
 
 from collections.abc import Awaitable, Callable
