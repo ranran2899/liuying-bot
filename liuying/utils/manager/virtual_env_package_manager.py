@@ -15,7 +15,7 @@ Config.add_plugin_config(
     "virtualenv",
     "python_path",
     None,
-    help="虚拟环境python路径，为空时使用系统环境的poetry",
+    help="虚拟环境python路径，为空时使用系统环境的uv",
 )
 
 
@@ -24,7 +24,7 @@ class VirtualEnvPackageManager:
 
     提供虚拟环境下的依赖包安装、卸载、列表等功能。
     """
-    DEFAULT_COMMAND: ClassVar[list[str]] = ["poetry", "run", "pip"]
+    DEFAULT_COMMAND: ClassVar[list[str]] = ["uv", "pip"]
 
     @classmethod
     def __get_command(cls) -> list[str]:

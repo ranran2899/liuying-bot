@@ -78,23 +78,23 @@
 ### 环境要求
 
 - Python >= 3.11
-- Poetry 包管理器
+- uv 包管理器
 
 ### 安装步骤
 
 ```bash
-# 1. 安装 Poetry
-pip install poetry
+# 1. 安装 uv
+pip install uv
 
 # 2. 克隆项目
 git clone https://gitee.com/shiranranran/liuying-bot.git
 cd liuying-bot/
 
 # 3. 安装依赖（默认使用阿里云 PyPI 镜像）
-poetry install
+uv sync
 
 # 4. 启用 Redis 缓存（可选）
-poetry install --extras redis
+uv sync --extra redis
 ```
 
 ### 配置
@@ -118,10 +118,10 @@ NICKNAME = ["流萤", "流萤酱"]
 
 ```bash
 # 普通启动
-poetry run python bot.py
+uv run python bot.py
 
 # 开发模式（热重载）
-poetry run nb run --reload
+uv run nb run --reload
 
 # Windows 双击启动
 win启动.bat
@@ -144,7 +144,7 @@ win启动.bat
 ```
 liuying-bot/
 ├── bot.py                    # 入口文件
-├── pyproject.toml            # Poetry 配置
+├── pyproject.toml            # uv 配置
 ├── .env                      # 环境变量配置
 └── liuying/
     ├── configs/              # 全局配置
@@ -202,9 +202,9 @@ liuying-bot/
 ### 常用命令
 
 ```bash
-poetry run ruff check
-poetry run ruff format
-poetry run nb run --reload
+uv run ruff check
+uv run ruff format
+uv run nb run --reload
 ```
 
 ### 添加新插件
@@ -239,7 +239,7 @@ register_external_tool(MyTool())
 
 - 启动前确认 `.env` 配置完整
 - SQLite 默认启用 WAL 模式
-- Redis 需先执行 `poetry install --extras redis`
+- Redis 需先执行 `uv sync --extra redis`
 - AI 插件依赖外部 LLM Provider，需配置 API Key
 - 协议端与机器人不同服务器时，将 `IMAGE_TO_BYTES` 设为 `True`
 - AI 插件优先级为 2，需在数据库 / LLM / 缓存就绪后加载

@@ -72,9 +72,8 @@ dist/
 *.bak
 *.old
 
-# Poetry相关
-poetry.lock
-poetry.toml
+# uv相关：uv.lock 应提交到版本库（用于锁定依赖版本），不忽略
+# .python-version 已在下方"版本管理"部分忽略
 
 # 其他证书和密钥文件
 *.pem
