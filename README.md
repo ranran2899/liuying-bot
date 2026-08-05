@@ -263,6 +263,7 @@ register_external_tool(MyTool())
 - [OneBot](https://github.com/howmanybots/onebot)：超棒的机器人协议
 - [nonebot-plugin-alconna](https://github.com/noneplugin/nonebot-plugin-alconna)：命令解析插件
 - [nonebot-plugin-uninfo](https://github.com/NoneStudio/nonebot-plugin-uninfo)：会话信息插件
+- [真寻 bot (zhenxun_bot)](https://github.com/zhenxun-org/zhenxun_bot)：流萤机器人的许多功能灵感与实现参考均来自真寻机器人，在此特别致谢
 
 ---
 
