@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
-from liuying.services.cache import Cache
+from liuying.services.cache import Cache, CacheRoot
 from liuying.services.cache.config import COMPOSITE_KEY_SEPARATOR
 from liuying.utils.enum import DbLockType
 from liuying.utils.log import logger
@@ -53,6 +53,31 @@ class Model(Base):
             db_model.models.append(cls.__module__)
         if func := getattr(cls, "_run_script", None):
             db_model.script_methods.append((cls.__module__, func))
+        cls._register_cache_type()
+
+    @classmethod
+    def _register_cache_type(cls) -> None:
+        """自动注册缓存类型到 CacheRoot
+
+        仅处理两类需要显式元信息的模型：
+        1. 复合键模型（cache_key_field 为 tuple）：按字段顺序自动生成 key_format 注册
+        2. cache_key_field 为 "all" 的整表缓存模型：以 list[cls] 作为结果类型注册
+
+        单键模型无需注册（由 Cache.__init__ 懒注册兜底）。
+        已注册的 cache_type 跳过，避免子类覆盖既有配置。
+        """
+        cache_type = getattr(cls, "cache_type", None)
+        if cache_type is None or CacheRoot.is_valid(cache_type):
+            return
+        key_field = getattr(cls, "cache_key_field", "id")
+        match key_field:
+            case "all":
+                CacheRoot.register(cache_type, list[cls])
+            case tuple(fields):
+                key_format = COMPOSITE_KEY_SEPARATOR.join(
+                    f"{{{f}}}" for f in fields
+                )
+                CacheRoot.register(cache_type, cls, key_format=key_format)
 
     @classmethod
     def filter(cls, *args, skip_none: bool = False, **kwargs) -> QueryWrapper:

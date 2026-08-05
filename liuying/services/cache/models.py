@@ -6,7 +6,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict
 
-from .config import DEFAULT_EXPIRE, SPECIAL_KEY_FORMATS
+from .config import DEFAULT_EXPIRE
 
 
 class CacheModel(BaseModel):
@@ -43,8 +43,6 @@ class CacheModel(BaseModel):
             Self: 缓存模型实例
         """
         name = name.upper()
-        if not key_format and name in SPECIAL_KEY_FORMATS:
-            key_format = SPECIAL_KEY_FORMATS[name]
         return cls(
             name=name,
             expire=expire,

@@ -93,11 +93,13 @@ plugins = [
     "nonebot_plugin_session",
     "nonebot_plugin_htmlrender",
     "nonebot_plugin_alconna",
+    "nonebot_plugin_uninfo",
 ]
 plugin_dirs = ["liuying/liuying_plugins",  "liuying/plugins"]
 adapters = [
     { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" },
     { name = "QQ", module_name = "nonebot.adapters.qq" },
+    { name = "Minecraft", module_name = "nonebot.adapters.minecraft" },
 ]
 
 [tool.ruff]

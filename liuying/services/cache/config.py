@@ -62,14 +62,6 @@ class CacheMode(StrEnum):
     """不使用缓存 - 将使用ttl=0的内存缓存，相当于直接从数据库获取数据"""
 
 
-SPECIAL_KEY_FORMATS: dict[str, str] = {
-    "LEVEL": "{user_id}" + COMPOSITE_KEY_SEPARATOR + "{group_id}",
-    "BAN": "{user_id}" + COMPOSITE_KEY_SEPARATOR + "{group_id}",
-    "GROUPS": "{group_id}" + COMPOSITE_KEY_SEPARATOR + "{channel_id}",
-}
-"""历史遗留的业务键格式映射，新代码应在 register 时显式指定 key_format 覆盖"""
-
-
 class Config(BaseModel):
     """缓存配置"""
 
