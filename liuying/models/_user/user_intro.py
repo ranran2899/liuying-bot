@@ -6,7 +6,6 @@ from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
-from liuying.utils.enum import CacheType
 
 
 class UserIntroInfo(Model):
@@ -45,11 +44,6 @@ class UserIntroInfo(Model):
         String(255), default="", comment="用户所在平台"
     )
     """用户所在平台"""
-
-    cache_type = CacheType.USERS
-    """缓存类型"""
-    cache_key_field = ("user_id", "nickname", "avatar")
-    """缓存键字段"""
 
     @classmethod
     async def get_nickname(cls, user_id: str) -> str:

@@ -59,12 +59,13 @@ class Model(Base):
     def _register_cache_type(cls) -> None:
         """自动注册缓存类型到 CacheRoot
 
-        仅处理两类需要显式元信息的模型：
-        1. 复合键模型（cache_key_field 为 tuple）：按字段顺序自动生成 key_format 注册
-        2. cache_key_field 为 "all" 的整表缓存模型：以 list[cls] 作为结果类型注册
+        根据 cache_key_field 类型决定注册方式：
+        1. "all"：整表缓存，以 list[cls] 作为结果类型注册
+        2. tuple：复合键，按字段顺序自动生成 key_format 注册
+        3. str：单键，直接注册（DataAccess 不经 Cache.__init__，必须主动注册）
 
-        单键模型无需注册（由 Cache.__init__ 懒注册兜底）。
         已注册的 cache_type 跳过，避免子类覆盖既有配置。
+        共享 cache_type 的非主模型不应声明 cache_type，以免抢占注册。
         """
         cache_type = getattr(cls, "cache_type", None)
         if cache_type is None or CacheRoot.is_valid(cache_type):
@@ -78,6 +79,8 @@ class Model(Base):
                     f"{{{f}}}" for f in fields
                 )
                 CacheRoot.register(cache_type, cls, key_format=key_format)
+            case str():
+                CacheRoot.register(cache_type, cls)
 
     @classmethod
     def filter(cls, *args, skip_none: bool = False, **kwargs) -> QueryWrapper:

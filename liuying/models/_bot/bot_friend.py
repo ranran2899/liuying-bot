@@ -7,7 +7,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.configs.config import Config
 from liuying.services.liuying_db import Model
-from liuying.utils.enum import CacheType
 
 
 class BotFriend(Model):
@@ -46,11 +45,6 @@ class BotFriend(Model):
         String(255), nullable=True, comment="平台"
     )
     """平台"""
-
-    cache_type = CacheType.BOT
-    """缓存类型"""
-    cache_key_field = ("bot_id", "user_id")
-    """缓存键字段 - 复合键"""
 
     @classmethod
     async def get_user_name(cls, bot_id: str, user_id: str) -> str:
