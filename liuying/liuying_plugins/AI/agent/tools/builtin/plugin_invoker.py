@@ -67,12 +67,18 @@ async def _resolve_plugin_commands(
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     """解析插件命令格式
 
+    先按模块名精确匹配；失败则用语义召回兜底，
+    取最相关插件再查，避免 LLM 传入显示名或中文
+    关键词（如「商店」）时查不到命令清单。
+
     参数:
-        plugin_name: 插件模块名
+        plugin_name: 插件模块名或用户描述
 
     返回:
         tuple: (插件简要信息, 命令列表)
     """
+    if not plugin_name:
+        return None, []
     try:
         view = await knowledge_store.get_by_name(plugin_name)
     except Exception as e:
@@ -81,8 +87,22 @@ async def _resolve_plugin_commands(
             command="AI",
             e=e,
         )
-        return None, []
-    if not view:
+        view = None
+    if view is None:
+        try:
+            results = await knowledge_store.recall(
+                plugin_name, top_k=1, log_query=False
+            )
+        except Exception as e:
+            logger.debug(
+                f"召回插件失败: {plugin_name} -> {e}",
+                command="AI",
+                e=e,
+            )
+            results = []
+        if results:
+            view = results[0].plugin
+    if view is None:
         return None, []
     brief = view.to_brief()
     commands = view.get_commands()
@@ -102,7 +122,8 @@ async def _resolve_plugin_commands(
             "plugin_name": {
                 "type": "string",
                 "description": (
-                    "目标插件模块名（如 wife/fortune/sign）"
+                    "目标插件模块名或显示名关键词"
+                    "（如 shop/wife/fortune/商店/签到）"
                 ),
             },
             "user_intent": {
@@ -178,7 +199,10 @@ async def invoke_plugin_command(
         "properties": {
             "plugin_name": {
                 "type": "string",
-                "description": "插件模块名（如 wife/fortune）",
+                "description": (
+                    "插件模块名或显示名关键词"
+                    "（如 shop/wife/fortune/商店/签到）"
+                ),
             },
         },
         "required": ["plugin_name"],

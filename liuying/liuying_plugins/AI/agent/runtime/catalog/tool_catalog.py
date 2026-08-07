@@ -238,8 +238,14 @@ class ToolCatalog:
             self._categories.values(), key=lambda x: x.priority
         )
 
-    def build_catalog_prompt(self) -> str:
+    def build_catalog_prompt(self, registry=None) -> str:
         """构建工具目录提示文本（供规划器使用）
+
+        当传入 registry 时，展示每个工具的描述与必填参数，
+        供 LLM 正确生成 tool_args，避免漏传必填项。
+
+        参数:
+            registry: 工具注册表，传入时展示工具详情
 
         返回:
             str: 目录提示文本
@@ -248,10 +254,31 @@ class ToolCatalog:
         for cat in self.list_categories():
             if not cat.tool_names:
                 continue
-            tools_str = ", ".join(cat.tool_names)
-            lines.append(
-                f"- [{cat.name}] {cat.description}: {tools_str}"
-            )
+            lines.append(f"- [{cat.name}] {cat.description}:")
+            for tool_name in cat.tool_names:
+                if registry is None:
+                    lines.append(f"  - {tool_name}")
+                    continue
+                tool = registry.get(tool_name)
+                if tool is None or tool.is_disabled:
+                    continue
+                desc = tool.description or ""
+                schema = tool.parameters or {}
+                required = schema.get("required", []) or []
+                props = schema.get("properties", {}) or {}
+                if required:
+                    params = []
+                    for r in required:
+                        pdesc = props.get(r, {}).get(
+                            "description", ""
+                        )
+                        params.append(
+                            f"{r}({pdesc})" if pdesc else r
+                        )
+                    req_str = f" | 必填: {', '.join(params)}"
+                else:
+                    req_str = " | 无必填参数"
+                lines.append(f"  - {tool_name}: {desc}{req_str}")
         return "\n".join(lines)
 
 

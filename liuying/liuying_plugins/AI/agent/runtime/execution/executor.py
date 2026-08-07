@@ -402,65 +402,6 @@ class ToolExecutor:
             return 0.7
         return 0.8
 
-    def _fill_context_args(
-        self,
-        tool_name: str,
-        args: dict[str, Any],
-        plan,
-    ) -> dict[str, Any]:
-        """根据回合规划填充上下文参数
-
-        对需要 user_id / group_id 的工具自动注入当前会话上下文，
-        并对检索类工具的 query、find_group_member 的 name 等必填
-        参数做兜底填充，避免 LLM 漏传必填项导致工具校验失败。
-
-        参数:
-            tool_name: 工具名
-            args: LLM 给出的原始参数
-            plan: 回合规划（含上下文）
-
-        返回:
-            dict[str, Any]: 填充后的参数
-        """
-        filled = dict(args)
-        tool = self._registry.get(tool_name)
-        if tool is None:
-            return filled
-
-        schema = tool.parameters or {}
-        properties = schema.get("properties", {}) or {}
-
-        if "user_id" in properties and not filled.get("user_id"):
-            filled["user_id"] = plan.user_id or ""
-
-        if "group_id" in properties and not filled.get("group_id"):
-            filled["group_id"] = plan.group_id or ""
-
-        # persona_name 自动注入：确保工具调用使用当前用户的人格上下文
-        if "persona_name" in properties and not filled.get("persona_name"):
-            filled["persona_name"] = plan.persona_name or "default"
-
-        # 检索类工具的 query 参数兜底：LLM 漏传时用用户消息填充
-        if (
-            tool_name in ("recall_memory", "search_plugin_knowledge", "web_search")
-            and "query" in properties
-            and not filled.get("query")
-        ):
-            filled["query"] = (
-                plan.user_message or plan.memory_query or ""
-            )
-
-        # find_group_member 的 name 参数兜底：LLM 漏传时用用户消息填充
-        # 用户消息中通常包含被查找的成员名称关键词
-        if (
-            tool_name == "find_group_member"
-            and "name" in properties
-            and not filled.get("name")
-        ):
-            filled["name"] = plan.user_message or ""
-
-        return filled
-
     async def execute_chain(
         self,
         plan,
@@ -502,12 +443,10 @@ class ToolExecutor:
             if not tool_name:
                 break
 
-            # 仅首步使用 LLM 给出的 tool_args；
-            # 后续研究步骤使用空参数，依赖 _fill_context_args 注入
-            # 上下文（user_id/group_id/query 兜底），避免不同工具
-            # 共用同一份参数导致校验失败或参数错传。
-            raw_args = plan.tool_args if step_index == 0 else {}
-            args = self._fill_context_args(tool_name, raw_args, plan)
+            # 仅首步使用 LLM 给出的 tool_args；后续研究步骤使用空参数。
+            # 会话上下文（user_id/group_id/persona_name）由工具通过
+            # contextvar 自行读取，执行器不再注入。
+            args = plan.tool_args if step_index == 0 else {}
             record = await self.execute(
                 tool_name=tool_name,
                 args=args,

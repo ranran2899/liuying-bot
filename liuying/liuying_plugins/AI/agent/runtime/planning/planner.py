@@ -60,7 +60,7 @@ _PLAN_SYSTEM_PROMPT = """你是回合规划器。
 - intent_tags: 意图标签数组
 - need_tool: 是否需要工具调用
 - tool_candidates: 候选工具名数组（need_tool为true时填写）
-- tool_args: 工具参数对象（单工具调用时填写）
+- tool_args: 工具参数对象（单工具调用时填写，必须包含工具目录标注的必填参数）
 - need_memory: 是否需要记忆召回
 - memory_query: 记忆查询文本
 - need_vision: 是否需要视觉理解
@@ -110,6 +110,7 @@ class TurnPlanner:
         """
         self._llm = llm
         self._catalog = catalog
+        self._registry = None
         self._rule_manager = IntentRuleManager()
 
     def _get_llm(self):
@@ -124,6 +125,18 @@ class TurnPlanner:
             return self._catalog
         self._catalog = tool_catalog
         return self._catalog
+
+    def _get_registry(self):
+        """获取工具注册表单例
+
+        延迟导入避免 tools 包与 runtime 的循环依赖
+        （tools.builtin 在导入时引用 runtime.session_context）。
+        """
+        if self._registry is None:
+            from ...tools import tool_registry
+
+            self._registry = tool_registry
+        return self._registry
 
     def plan_fast(
         self,
@@ -258,7 +271,8 @@ class TurnPlanner:
             TurnPlan: 规划结果
         """
         catalog = self._get_catalog()
-        catalog_prompt = catalog.build_catalog_prompt()
+        registry = self._get_registry()
+        catalog_prompt = catalog.build_catalog_prompt(registry)
         if not catalog_prompt:
             catalog_prompt = "（无注册工具）"
 

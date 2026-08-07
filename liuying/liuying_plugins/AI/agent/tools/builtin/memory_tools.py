@@ -9,6 +9,10 @@ from ...runtime.constants import (
     INTENT_TAG_MEMORY,
     LATENCY_CLASS_FAST,
 )
+from ...runtime.session_context import (
+    get_current_persona_name,
+    get_current_user_id,
+)
 from ..decorators import register_tool
 
 
@@ -18,10 +22,6 @@ from ..decorators import register_tool
     parameters={
         "type": "object",
         "properties": {
-            "user_id": {
-                "type": "string",
-                "description": "用户ID",
-            },
             "query": {
                 "type": "string",
                 "description": "查询文本",
@@ -31,39 +31,33 @@ from ..decorators import register_tool
                 "description": "召回数量，默认5",
                 "default": 5,
             },
-            "persona_name": {
-                "type": "string",
-                "description": "bot人格名（用于人设间记忆隔离）",
-                "default": "default",
-            },
         },
-        "required": ["user_id", "query"],
+        "required": ["query"],
     },
     intent_tags=[INTENT_TAG_MEMORY],
     latency_class=LATENCY_CLASS_FAST,
     evidence_kind=EVIDENCE_KIND_CONTEXT,
     metadata={"tier_filter": ["working", "episodic", "semantic"]},
 )
-async def recall_memory(
-    user_id: str,
-    query: str,
-    top_k: int = 5,
-    persona_name: str = "default",
-) -> str:
+async def recall_memory(query: str, top_k: int = 5) -> str:
     """召回历史记忆
 
     参数:
-        user_id: 用户ID
         query: 查询文本
         top_k: 返回数量
-        persona_name: bot人格名（用于人设间记忆隔离）
 
     返回:
         str: 记忆摘要文本
     """
+    user_id = get_current_user_id()
+    if not user_id:
+        return "缺少用户上下文，无法召回记忆"
     try:
         memories = await memory_manager.recall(
-            user_id, query, top_k=top_k, persona_name=persona_name
+            user_id,
+            query,
+            top_k=top_k,
+            persona_name=get_current_persona_name(),
         )
     except Exception as e:
         return f"记忆召回失败: {e}"

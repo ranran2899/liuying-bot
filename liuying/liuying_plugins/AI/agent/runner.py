@@ -20,6 +20,7 @@ from .runtime.execution.executor import ToolExecutor
 from .runtime.planning.planner import TurnPlanner
 from .runtime.planning.types import TurnPlan
 from .runtime.response.responder import PersonaResponder, PersonaResponse
+from .runtime.session_context import bind_session_context
 from .tools import ToolRegistry, tool_registry
 
 
@@ -142,10 +143,6 @@ class AgentRunner:
             )
             plan = planner.plan_fast(user_message, context_summary, has_image)
 
-        # 将会话上下文回填到规划中，供执行器自动注入工具参数
-        plan.user_id = user_id
-        plan.group_id = group_id
-        plan.persona_name = persona_name
         if not plan.user_message:
             plan.user_message = user_message
 
@@ -175,74 +172,75 @@ class AgentRunner:
             )
 
         # ===== 第2层：执行 =====
-        executor = ToolExecutor(registry=use_registry)
-        if plan.need_tool:
+        with bind_session_context(user_id, group_id, persona_name):
+            executor = ToolExecutor(registry=use_registry)
+            if plan.need_tool:
+                try:
+                    records = await executor.execute_chain(
+                        plan, time_budget=use_budget
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"工具链执行失败: {e}",
+                        command="AI",
+                        e=e,
+                    )
+                    records = []
+            else:
+                records = []
+
+            # 检查时间预算
+            elapsed = time.time() - start_time
+            if elapsed > use_budget:
+                logger.warning(
+                    f"Agent循环超时({elapsed:.1f}s)，跳过响应生成",
+                    command="AI",
+                )
+                return AgentRunner._build_timeout_result(
+                    records, plan, executor, start_time
+                )
+
+            # ===== 第3层：响应 =====
+            responder = PersonaResponder(
+                llm=llm_helper,
+            )
             try:
-                records = await executor.execute_chain(
-                    plan, time_budget=use_budget
+                response = await responder.respond(
+                    plan=plan,
+                    evidence=executor.evidence,
+                    user_message=user_message,
+                    messages=messages,
+                    user_id=user_id,
+                    group_id=group_id,
                 )
             except Exception as e:
-                logger.warning(
-                    f"工具链执行失败: {e}",
+                logger.error(
+                    f"响应生成失败: {e}",
                     command="AI",
                     e=e,
                 )
-                records = []
-        else:
-            records = []
+                response = PersonaResponse(
+                    reply_text="出了点小问题，待会再试试~",
+                    elapsed=time.time() - start_time,
+                )
 
-        # 检查时间预算
-        elapsed = time.time() - start_time
-        if elapsed > use_budget:
-            logger.warning(
-                f"Agent循环超时({elapsed:.1f}s)，跳过响应生成",
-                command="AI",
-            )
-            return AgentRunner._build_timeout_result(
-                records, plan, executor, start_time
-            )
+            elapsed = time.time() - start_time
+            tool_calls = [r.to_dict() for r in records]
+            image_url = AgentRunner._extract_image_url(records)
 
-        # ===== 第3层：响应 =====
-        responder = PersonaResponder(
-            llm=llm_helper,
-        )
-        try:
-            response = await responder.respond(
+            return AgentResult(
+                text=response.reply_text,
+                tool_calls=tool_calls,
+                steps=len(records),
+                elapsed=elapsed,
                 plan=plan,
-                evidence=executor.evidence,
-                user_message=user_message,
-                messages=messages,
-                user_id=user_id,
-                group_id=group_id,
+                response=response,
+                metrics={
+                    "execution": executor.metrics.to_dict(),
+                    "tool_count": len(records),
+                },
+                image_url=image_url,
             )
-        except Exception as e:
-            logger.error(
-                f"响应生成失败: {e}",
-                command="AI",
-                e=e,
-            )
-            response = PersonaResponse(
-                reply_text="出了点小问题，待会再试试~",
-                elapsed=time.time() - start_time,
-            )
-
-        elapsed = time.time() - start_time
-        tool_calls = [r.to_dict() for r in records]
-        image_url = AgentRunner._extract_image_url(records)
-
-        return AgentResult(
-            text=response.reply_text,
-            tool_calls=tool_calls,
-            steps=len(records),
-            elapsed=elapsed,
-            plan=plan,
-            response=response,
-            metrics={
-                "execution": executor.metrics.to_dict(),
-                "tool_count": len(records),
-            },
-            image_url=image_url,
-        )
 
     @staticmethod
     def _build_context_summary(messages: list[dict[str, str]]) -> str:
