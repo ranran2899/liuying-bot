@@ -9,9 +9,8 @@ from liuying.utils.log import logger
 
 from ....config import get_config
 from ....core.chat_intent import semantic_frame_inferrer
-from ....core.json_utils import extract_json_payload
 from ....core.llm import llm_helper
-from ....core.llm.model_router import ROLE_AGENT, model_router
+from ....core.llm.model_router import ROLE_INTENT, model_router
 from ....core.vision import vision_router
 from ..catalog.tool_catalog import ToolCatalog, tool_catalog
 from ..constants import (
@@ -19,14 +18,17 @@ from ..constants import (
     OUTPUT_MODE_CHAT_ANSWER,
     OUTPUT_MODE_CHAT_SHORT,
     OUTPUT_MODE_SILENCE,
-    OUTPUT_MODE_SOURCE_SUMMARY,
-    OUTPUT_MODE_STRUCTURED_HELP,
     TURN_ACTION_ASK_CLARIFY,
     TURN_ACTION_REPLY,
     TURN_ACTION_SILENCE,
 )
-from .intent_rules import IntentRuleManager, _get_agent_max_steps
-from .types import TurnPlan
+from .intent_rules import IntentRuleManager
+from .types import (
+    TurnPlan,
+    extract_json_payload,
+    metadata_fallback_turn_plan,
+    parse_turn_plan_payload,
+)
 
 __all__ = ["TurnPlan", "TurnPlanner"]
 
@@ -132,7 +134,7 @@ class TurnPlanner:
             output_mode=OUTPUT_MODE_CHAT_SHORT,
             intent_tags=[],
             need_memory=False,
-            ambiguity_level=0.2,
+            ambiguity_level="low",
             reason="默认聊天回复",
             user_message=user_message,
         )
@@ -187,7 +189,7 @@ class TurnPlanner:
 
         # 语义帧增强（独立于LLM规划路径，覆盖规则与LLM两种模式）
         plan = await self._augment_plan_with_semantic_frame(
-            plan, user_message, context_summary, use_llm
+            plan, user_message, context_summary
         )
         return plan
 
@@ -199,6 +201,11 @@ class TurnPlanner:
     ) -> TurnPlan:
         """LLM精细规划
 
+        先用元数据兜底生成 fallback，LLM 调用失败或解析失败时
+        返回 fallback。LLM 成功时用 parse_turn_plan_payload 解析。
+        保留 max_tokens=800 与 reasoning_enabled=False 的token优化，
+        以及 has_image 的视觉路由增强。
+
         参数:
             user_message: 用户消息
             context_summary: 上下文摘要
@@ -207,82 +214,78 @@ class TurnPlanner:
         返回:
             TurnPlan: 规划结果
         """
-        catalog = self._get_catalog()
+        fallback = metadata_fallback_turn_plan(has_images=has_image)
+        fallback.user_message = user_message
+
         registry = self._get_registry()
-        catalog_prompt = catalog.build_catalog_prompt(registry)
-        if not catalog_prompt:
-            catalog_prompt = "（无注册工具）"
+        tool_metadata_text = self._render_tool_metadata(registry)
 
         system_prompt = (
-            "你是回合规划器。"
-            "分析用户消息和上下文，决策本回合的最佳行为，并输出回合语义帧。\n\n"
-            "可选动作：\n"
-            "- reply: 直接回复用户\n"
-            "- silence: 保持沉默（不相关或无需回应）\n"
-            "- ask_clarify: 请求澄清（信息不足）\n\n"
-            "可选输出模式：\n"
-            "- chat_short: 短聊天回复（闲聊、问候）\n"
-            "- chat_answer: 完整答案回复（问答、解释）\n"
-            "- structured_help: 结构化帮助（求助、命令查询）\n"
-            "- source_summary: 来源摘要（带工具证据的回答）\n"
-            "- silence: 静默\n\n"
-            "意图标签集合：\n"
-            "- realtime: 实时信息查询（新闻、天气、股价）\n"
-            "- memory: 记忆召回（过往互动、用户偏好）\n"
-            "- image: 图片相关（看图、生成图）\n"
-            "- network: 网络请求（搜索、抓取）\n"
-            "- admin: 管理操作（开关、配置）\n"
-            "- local: 本地操作（时间、计算）\n"
-            "- plugin: 插件调用（特定功能）\n\n"
-            "请用JSON格式返回决策，字段如下：\n"
-            "- action: 动作（reply/silence/ask_clarify）\n"
-            "- output_mode: 输出模式\n"
-            "- intent_tags: 意图标签数组\n"
-            "- need_tool: 是否需要工具调用\n"
-            "- tool_candidates: 候选工具名数组（need_tool为true时填写）\n"
-            "- tool_args: 工具参数对象（单工具调用时填写，必须包含工具目录标注的必填参数）\n"
-            "- need_memory: 是否需要记忆召回\n"
-            "- memory_query: 记忆查询文本\n"
-            "- need_vision: 是否需要视觉理解\n"
-            "- need_research: 是否需要多步研究\n"
-            "- ambiguity_level: 模糊度（0-1，0最清晰）\n"
-            "- max_steps: 最大工具调用步数（整数）\n"
-            "- reason: 决策理由（一句话）\n"
-            "- semantic_frame: 回合语义帧对象，包含以下字段：\n"
-            "  - chat_intent: 聊天意图（question/small_talk/info_seek/emotional_support/social_protocol/chat_command/meta_question）\n"
-            "  - recommend_silence: 是否建议静默（true/false）\n"
-            "  - requires_emotional_care: 是否需要情感关怀（true/false）\n"
-            "  - sticker_appropriate: 是否适合发贴纸（true/false）\n"
-            "  - meta_question: 是否元问题（关于bot自身，true/false）\n"
-            "  - user_attitude: 用户态度（positive/neutral/negative/playful）\n"
-            "  - bot_emotion: bot应有情绪（happy/sad/neutral/curious/caring/playful）\n"
-            "  - emotion_intensity: 情绪强度（0-1）\n"
-            "  - expression_style: 表达风格（casual/formal/playful/gentle）\n"
-            "  - tts_style_hint: TTS风格提示（空串表示无）\n"
-            "  - sticker_mood_hint: 贴纸情绪提示（warm/cool/neutral）\n"
-            "  - conversation_scenario: 对话场景（daily/greeting/farewell/help/conflict/tease）\n\n"
-            "只返回JSON，不要其他内容。"
+            "你是群聊/私聊的回合规划器，只判断本轮应该做什么，"
+            "不写最终回复。"
+            "输出严格JSON，不要markdown，不要解释。\n"
+            "JSON结构："
+            '{"action":"reply|silence|ask_clarify",'
+            '"output_mode":"chat_short|chat_answer|'
+            'structured_help|source_summary|silence",'
+            '"intent_tags":["realtime|memory|image|network|admin|local|plugin"],'
+            '"need_tool":false,'
+            '"tool_candidates":[],'
+            '"tool_args":{},'
+            '"need_memory":false,'
+            '"memory_query":"",'
+            '"need_vision":false,'
+            '"need_research":false,'
+            '"ambiguity_level":"low|medium|high",'
+            '"confidence":0.0,'
+            '"message_target":"bot|someone_else|broadcast|uncertain",'
+            '"session_goal":"一句短中文目标",'
+            '"reason":"极短中文原因"}\n'
+            "判别要求：\n"
+            "1. action只决定回不回复；群聊不确定是否cue bot时用silence\n"
+            "2. message_target由@、引用、称呼、上下文共同判断；"
+            "uncertain时通常silence\n"
+            "3. 风格、用户态度、bot情绪、TTS和表情不要在这里决定\n"
+            "4. 工具意图只给候选方向，不要因为工具存在就强行使用\n"
+            "5. need_research=true只给明显需要多源查证、时效或争议的问题\n"
+            "6. output_mode控制最终回复长度：chat_short接梗(8-40字)，"
+            "chat_answer普通答(30-120字)，structured_help教程(80-300字)，"
+            "source_summary检索摘要(80-240字)\n"
+            "7. ambiguity_level用low/medium/high，high时建议ask_clarify"
         )
-        user_prompt = (
-            f"用户消息: {user_message[:500]}\n\n"
-            f"上下文摘要: {context_summary[:300] or '（无）'}\n\n"
-            f"可用工具目录:\n{catalog_prompt}\n\n"
-            "请输出回合规划JSON。"
-        )
+
+        user_content_parts = [
+            f"最新消息：{user_message[:500]}",
+            f"最近上下文：{context_summary[:900] or '无'}",
+            f"是否有图片：{'是' if has_image else '否'}",
+            f"可用工具元数据：\n{tool_metadata_text}",
+            f"metadata fallback：action={fallback.action}, "
+            f"output_mode={fallback.output_mode}, "
+            f"target={fallback.message_target}",
+            "请输出回合规划JSON。",
+        ]
+        user_prompt = "\n".join(user_content_parts)
 
         try:
             llm = self._get_llm()
-            role = model_router.resolve(ROLE_AGENT)
+            role = model_router.resolve(ROLE_INTENT)
+            # 限制输出token：规划JSON约400-600 tokens，
+            # 禁用思考模式避免消耗思考token
+            plan_options = role.apply_to_options(
+                {"max_tokens": 800, "reasoning_enabled": False}
+            )
             _, response = await llm.chat(
                 [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 model=role.model or None,
-                options=role.apply_to_options(),
+                options=plan_options,
                 provider_name=role.provider or None,
             )
-            plan = self._parse_plan_response(response, user_message)
+            plan = self._parse_plan_response(
+                response, user_message, fallback
+            )
             if has_image:
                 plan.need_vision = True
                 if not plan.vision_hint:
@@ -291,43 +294,59 @@ class TurnPlanner:
             return plan
         except Exception as e:
             logger.warning(
-                f"LLM规划失败，降级到快速规则: {e}",
+                f"LLM规划失败，降级到兜底规划: {e}",
                 command="AI",
                 e=e,
             )
-            return self.plan_fast(user_message, context_summary, has_image)
+            return fallback
 
-    @staticmethod
-    def _extract_semantic_frame(data: dict) -> dict | None:
-        """从规划 LLM 响应中提取内嵌语义帧
+    def _render_tool_metadata(self, registry) -> str:
+        """渲染工具元数据供规划prompt使用
 
-        规划器单次调用同时输出规划字段与语义帧字段，避免独立
-        语义帧 LLM 调用。字段缺失时返回 None，由调用方降级到规则推断。
+        参考参考插件 tool_catalog.build_catalog_prompt：
+        渲染工具名、描述、必填参数和意图标签，让LLM能正确
+        生成 tool_args（含必填参数），而非仅知道工具候选方向。
 
         参数:
-            data: 解析后的规划 JSON 字典
+            registry: 工具注册表
 
         返回:
-            dict | None: 语义帧字典，无 semantic_frame 字段时返回 None
+            str: 工具元数据文本，无工具时返回"无"
         """
-        frame = data.get("semantic_frame")
-        if not isinstance(frame, dict):
-            return None
-        return frame
+        lines = []
+        for tool in registry.active_tools()[:24]:
+            tags = (
+                ",".join(tool.intent_tags[:5])
+                if tool.intent_tags
+                else "none"
+            )
+            # 渲染工具描述（截断到80字，避免prompt过长）
+            desc = (tool.description or "").strip()[:80]
+            # 渲染必填参数，帮助LLM生成合法tool_args
+            schema = tool.parameters or {}
+            required = schema.get("required", []) or []
+            props = schema.get("properties", {}) or {}
+            req_str = ""
+            if required:
+                req_parts = []
+                for r in required:
+                    rprop = props.get(r, {})
+                    rdesc = str(rprop.get("description", ""))[:40]
+                    req_parts.append(f"{r}({rdesc})" if rdesc else r)
+                req_str = " required=[" + ",".join(req_parts) + "]"
+            lines.append(f"- {tool.name}: {desc}{req_str} tags={tags}")
+        return "\n".join(lines) if lines else "无"
 
     async def _augment_plan_with_semantic_frame(
         self,
         plan: TurnPlan,
         user_message: str,
         context_summary: str,
-        use_llm: bool,
     ) -> TurnPlan:
         """用语义帧增强规划
 
-        优先复用规划 LLM 调用中已输出的内嵌语义帧（plan.semantic_frame），
-        避免独立语义帧 LLM 调用导致的重复分析。内嵌帧缺失时降级到
-        规则快速推断（infer_fast，无 LLM 调用）。
-
+        直接用 semantic_frame_inferrer.infer_fast 规则推断语义帧
+        （新prompt为扁平结构，LLM不再输出内嵌semantic_frame），
         将 recommend_silence/requires_emotional_care/sticker_appropriate
         等信号应用到规划，并把完整语义帧字典写入 plan.semantic_frame
         供响应器消费 tts_style_hint/sticker_mood_hint/bot_emotion 等字段。
@@ -336,7 +355,6 @@ class TurnPlanner:
             plan: 原始规划
             user_message: 用户消息
             context_summary: 上下文摘要
-            use_llm: 是否使用LLM推断（仅影响降级路径选择）
 
         返回:
             TurnPlan: 增强后的规划
@@ -344,19 +362,17 @@ class TurnPlanner:
         if not get_config("CHAT_INTENT_ENABLED", True):
             return plan
 
-        # 优先复用规划调用中已输出的内嵌语义帧，消除独立 LLM 调用
-        frame_dict = plan.semantic_frame
-        if frame_dict is None:
-            try:
-                frame = semantic_frame_inferrer.infer_fast(user_message)
-                frame_dict = frame.to_dict()
-            except Exception as e:
-                logger.debug(
-                    f"语义帧规则推断失败，跳过增强: {e}",
-                    command="AI",
-                    e=e,
-                )
-                return plan
+        # 规则快速推断语义帧（无LLM调用）
+        try:
+            frame = semantic_frame_inferrer.infer_fast(user_message)
+            frame_dict = frame.to_dict()
+        except Exception as e:
+            logger.debug(
+                f"语义帧规则推断失败，跳过增强: {e}",
+                command="AI",
+                e=e,
+            )
+            return plan
 
         plan.semantic_frame = frame_dict
 
@@ -385,14 +401,21 @@ class TurnPlanner:
             if "meta_question" not in plan.intent_tags:
                 plan.intent_tags.append("meta_question")
 
-        # 模糊度：语义帧值优先（LLM语义分析比规划器更细粒度）
-        frame_ambiguity = float(frame_dict.get("ambiguity_level", 0.0) or 0.0)
+        # 模糊度：语义帧float(0-1)映射到low/medium/high字符串
+        frame_ambiguity = float(
+            frame_dict.get("ambiguity_level", 0.0) or 0.0
+        )
         if frame_ambiguity > 0:
-            plan.ambiguity_level = frame_ambiguity
-            if frame_ambiguity >= 0.7 and plan.action == TURN_ACTION_REPLY:
-                plan.action = TURN_ACTION_ASK_CLARIFY
-                if not plan.reason:
-                    plan.reason = "语义帧判断模糊度较高，请求澄清"
+            if frame_ambiguity >= 0.7:
+                plan.ambiguity_level = "high"
+                if plan.action == TURN_ACTION_REPLY:
+                    plan.action = TURN_ACTION_ASK_CLARIFY
+                    if not plan.reason:
+                        plan.reason = "语义帧判断模糊度较高，请求澄清"
+            elif frame_ambiguity >= 0.3:
+                plan.ambiguity_level = "medium"
+            else:
+                plan.ambiguity_level = "low"
 
         return plan
 
@@ -438,126 +461,38 @@ class TurnPlanner:
         return plan
 
     def _parse_plan_response(
-        self, response: str, user_message: str
+        self,
+        response: str,
+        user_message: str,
+        fallback: TurnPlan,
     ) -> TurnPlan:
         """解析LLM规划响应
 
-        使用 extract_json_payload 三重兜底提取JSON，
-        失败时降级到快速规则决策。
+        使用 extract_json_payload 提取JSON，parse_turn_plan_payload
+        解析为TurnPlan（含枚举白名单校验）。提取或解析失败时返回
+        fallback 兜底规划。
 
         参数:
             response: LLM响应文本
-            user_message: 原始用户消息（兜底用）
+            user_message: 原始用户消息（写入plan.user_message）
+            fallback: 解析失败时的兜底规划
 
         返回:
-            TurnPlan: 解析后的规划
+            TurnPlan: 解析后的规划，失败返回fallback
         """
         data = extract_json_payload(response)
         if data is None:
             logger.debug(
-                "解析规划JSON失败，降级到快速规则",
+                "解析规划JSON失败，降级到兜底规划",
                 command="AI",
             )
-            return self.plan_fast(user_message)
-
-        action = str(data.get("action", TURN_ACTION_REPLY))
-        if action not in (
-            TURN_ACTION_REPLY,
-            TURN_ACTION_SILENCE,
-            TURN_ACTION_ASK_CLARIFY,
-        ):
-            action = TURN_ACTION_REPLY
-
-        output_mode = str(data.get("output_mode", OUTPUT_MODE_CHAT_SHORT))
-        if output_mode not in (
-            OUTPUT_MODE_CHAT_SHORT,
-            OUTPUT_MODE_CHAT_ANSWER,
-            OUTPUT_MODE_STRUCTURED_HELP,
-            OUTPUT_MODE_SOURCE_SUMMARY,
-            OUTPUT_MODE_SILENCE,
-        ):
-            output_mode = OUTPUT_MODE_CHAT_SHORT
-
-        intent_tags = [
-            str(t) for t in data.get("intent_tags", []) if t
-        ]
-
-        tool_args_raw = data.get("tool_args", {})
-        tool_args = (
-            tool_args_raw if isinstance(tool_args_raw, dict) else {}
-        )
-
-        ambiguity = float(data.get("ambiguity_level", 0.0))
-        ambiguity = max(0.0, min(1.0, ambiguity))
-
-        # 从配置读取上限，允许运行时调整Agent最大步数
-        config_max = _get_agent_max_steps()
-        raw_steps = data.get("max_steps", config_max)
-        if isinstance(raw_steps, int | float) and not isinstance(raw_steps, bool):
-            max_steps = int(raw_steps)
-        else:
-            max_steps = config_max
-        max_steps = max(1, min(max_steps, config_max))
-
-        # 提取内嵌语义帧（与规划在同一轮 LLM 调用中输出，避免独立语义帧调用）
-        semantic_frame = self._extract_semantic_frame(data)
-
-        return TurnPlan(
-            action=action,
-            output_mode=output_mode,
-            intent_tags=intent_tags,
-            need_tool=bool(data.get("need_tool", False)),
-            tool_candidates=[
-                str(t) for t in data.get("tool_candidates", []) if t
-            ],
-            tool_name=str(data.get("tool_name", "")),
-            tool_args=tool_args,
-            need_memory=bool(data.get("need_memory", False)),
-            memory_query=str(data.get("memory_query", "")),
-            need_vision=bool(data.get("need_vision", False)),
-            vision_hint=str(data.get("vision_hint", "")),
-            need_research=bool(data.get("need_research", False)),
-            ambiguity_level=ambiguity,
-            max_steps=max_steps,
-            reason=str(data.get("reason", "")),
-            user_message=user_message,
-            semantic_frame=semantic_frame,
-        )
-
-    def select_tool(
-        self,
-        plan: TurnPlan,
-        registry,
-        exclude: set[str] | None = None,
-    ) -> str:
-        """根据规划选择具体工具
-
-        参数:
-            plan: 回合规划
-            registry: 工具注册表
-            exclude: 需排除的工具名集合
-
-        返回:
-            str: 工具名（未找到返回空串）
-        """
-        if plan.tool_name:
-            tool = registry.get(plan.tool_name)
-            if tool and not tool.is_disabled:
-                if not exclude or plan.tool_name not in exclude:
-                    return plan.tool_name
-
-        candidates = list(plan.tool_candidates)
-        if not candidates and plan.intent_tags:
-            catalog = self._get_catalog()
-            candidates = catalog.recommend_tools(
-                plan.intent_tags, exclude=exclude
+            return fallback
+        plan = parse_turn_plan_payload(data)
+        if plan is None:
+            logger.debug(
+                "规划payload校验失败，降级到兜底规划",
+                command="AI",
             )
-
-        active_names = {
-            t.name for t in registry.active_tools()
-        }
-        exclude_set = exclude or set()
-        for name in candidates:
-            if name in active_names and name not in exclude_set:
-                return name
-        return ""
+            return fallback
+        plan.user_message = user_message
+        return plan

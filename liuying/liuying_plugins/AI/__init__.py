@@ -174,9 +174,38 @@ async def _init_ai_plugin() -> None:
 
     # 延迟导入以避免循环依赖：skill_runtime 导入 agent 工具模块，
     # 而 AI 插件 __init__ 在初始化阶段调用 register_all
-    from .agent.skill_runtime import skill_loader
+    # 参考参考插件 __init__.py 的 SkillRuntime 构建方式，
+    # 显式注入主插件服务给技能包
+    from datetime import datetime
 
-    skill_loader.register_all()
+    import nonebot
+
+    from liuying.configs.path_config import DATA_PATH
+    from liuying.utils.apscheduler import task_manager
+
+    from .agent.skill_runtime import skill_loader
+    from .agent.skill_runtime_api import SkillRuntime
+    from .core.knowledge_db import knowledge_base as kb
+    from .core.llm import llm_helper
+    from .core.memory import memory_manager
+    from .core.persona import persona_manager
+
+    ai_data_dir = DATA_PATH / "ai"
+    ai_data_dir.mkdir(parents=True, exist_ok=True)
+
+    runtime = SkillRuntime(
+        plugin_config=get_config,
+        logger=logger,
+        get_now=datetime.now,
+        llm_helper=llm_helper,
+        memory_manager=memory_manager,
+        knowledge_base=kb,
+        persona_manager=persona_manager,
+        data_dir=ai_data_dir,
+        scheduler=task_manager,
+        get_bots=nonebot.get_bots,
+    )
+    skill_loader.register_all(runtime=runtime)
     logger.debug("AI技能包已加载", command="AI")
 
 

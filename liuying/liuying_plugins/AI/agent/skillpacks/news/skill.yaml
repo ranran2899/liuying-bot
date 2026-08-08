@@ -1,0 +1,13 @@
+name: news
+enabled: true
+category: query
+entrypoint: scripts/main.py
+description: 查询最新新闻，支持分类general/tech/finance/sports/entertainment/world
+parameters:
+  type: object
+  properties:
+    category:
+      type: string
+      description: 新闻分类，默认general
+      default: general
+  required: []

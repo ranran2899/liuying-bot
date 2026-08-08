@@ -1,0 +1,13 @@
+name: weather
+enabled: true
+category: query
+entrypoint: scripts/main.py
+description: 查询指定城市的天气预报
+parameters:
+  type: object
+  properties:
+    city:
+      type: string
+      description: 城市名
+  required:
+    - city

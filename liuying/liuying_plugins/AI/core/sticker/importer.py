@@ -348,7 +348,9 @@ class StickerImporter:
                 "- description: 简洁描述（不超过30字）\n"
                 "- mood_tags: 情绪标签数组（从 happy/sad/excited/angry/shy/calm/warm/\n"
                 "  playful/greet/bye/thanks/apology/ridicule/encourage/love 中选择）\n"
-                "- semantic_tags: 语义标签数组（greet/bye/thanks/apology/ridicule/encourage/love等）\n"
+                "- semantic_tags: 语义标签数组"
+                "（greet/bye/thanks/apology/ridicule/"
+                "encourage/love等）\n"
                 "\n"
                 "只返回JSON。"
             )

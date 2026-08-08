@@ -10,18 +10,45 @@
 
 import asyncio
 from dataclasses import dataclass, field
+from datetime import datetime
 import time
 from typing import Any
 
 from liuying.utils.log import logger
 
+from ..catalog.tool_catalog import tool_catalog
 from ..constants import (
     DEFAULT_RETRY_COUNT,
     DEFAULT_TOOL_TIMEOUT,
     EVIDENCE_KIND_CONTEXT,
 )
-from ..planning.planner import TurnPlanner
-from .evidence import EvidenceComposer
+from .evidence import RETRYABLE_LOOKUP_TOOLS, EvidenceComposer
+
+# 时效性搜索工具白名单（注入当前日期提升结果新鲜度）
+_TIMESENSITIVE_SEARCH_TOOLS: set[str] = {
+    "web_search",
+    "fetch_webpage",
+    "search_plugin_by_capability",
+}
+"""时效性搜索工具，query含时间词时注入当前日期"""
+
+# 时效性关键词，命中时触发日期注入
+_TIMESENSITIVE_KEYWORDS: tuple[str, ...] = (
+    "最新",
+    "近期",
+    "现在",
+    "今年",
+    "今天",
+    "当前",
+    "最近",
+    "latest",
+    "recent",
+    "now",
+)
+"""时效性关键词"""
+
+_MAX_QUERY_VARIANTS = 3
+"""单工具最多尝试的查询变体数"""
 
 
 @dataclass(slots=True)
@@ -163,7 +190,6 @@ class ToolExecutor:
         self._default_timeout = default_timeout
         self._default_retries = default_retries
         self._metrics = ExecutionMetrics()
-        self._planner = TurnPlanner()
 
     @property
     def evidence(self) -> EvidenceComposer:
@@ -317,6 +343,8 @@ class ToolExecutor:
         # 过滤掉 schema 未声明的多余参数，避免 LLM 误传未知键
         # 导致函数签名不匹配（如 get_group_members 误收 query）
         args = self._filter_args(tool, args)
+        # 时效性搜索工具注入当前日期，提升结果新鲜度
+        args = self._maybe_inject_date(tool_name, args)
         record.args = dict(args)
 
         start = time.time()
@@ -382,6 +410,34 @@ class ToolExecutor:
         self._metrics.record(record)
         return record
 
+    def _maybe_inject_date(
+        self, tool_name: str, args: dict[str, Any]
+    ) -> dict[str, Any]:
+        """对时效性搜索工具注入当前日期
+
+        当工具是时效性搜索工具且query含时间关键词时，
+        在query前注入当前日期，提升搜索结果新鲜度。
+
+        参数:
+            tool_name: 工具名
+            args: 参数字典
+
+        返回:
+            dict[str, Any]: 可能注入日期后的参数字典
+        """
+        if tool_name not in _TIMESENSITIVE_SEARCH_TOOLS:
+            return args
+        query = str(args.get("query", "") or "").strip()
+        if not query:
+            return args
+        lowered = query.lower()
+        if not any(kw in lowered for kw in _TIMESENSITIVE_KEYWORDS):
+            return args
+        date_str = datetime.now().strftime("%Y年%m月")
+        args = dict(args)
+        args["query"] = f"{date_str} {query}"
+        return args
+
     def _estimate_relevance(self, text: str) -> float:
         """粗略估计工具结果的相关性
 
@@ -402,6 +458,40 @@ class ToolExecutor:
             return 0.7
         return 0.8
 
+    def _select_tool(
+        self, plan, exclude: set[str] | None = None
+    ) -> str:
+        """根据规划选择具体工具
+
+        内联工具选择逻辑，避免对 TurnPlanner 的冗余依赖。
+        优先使用规划指定的 tool_name，其次按候选/意图标签推荐。
+
+        参数:
+            plan: 回合规划
+            exclude: 需排除的工具名集合
+
+        返回:
+            str: 工具名（未找到返回空串）
+        """
+        if plan.tool_name:
+            tool = self._registry.get(plan.tool_name)
+            if tool and not tool.is_disabled:
+                if not exclude or plan.tool_name not in exclude:
+                    return plan.tool_name
+
+        candidates = list(plan.tool_candidates)
+        if not candidates and plan.intent_tags:
+            candidates = tool_catalog.recommend_tools(
+                plan.intent_tags, exclude=exclude
+            )
+
+        active_names = {t.name for t in self._registry.active_tools()}
+        exclude_set = exclude or set()
+        for name in candidates:
+            if name in active_names and name not in exclude_set:
+                return name
+        return ""
+
     async def execute_chain(
         self,
         plan,
@@ -411,7 +501,8 @@ class ToolExecutor:
 
         当 plan.need_tool 为 True 时执行；
         当 plan.need_research 为 True 时允许多步调用，
-        否则只调用一次。
+        否则只调用一次。支持查询变体重试：可重试工具返回空结果时
+        换用变体query重试，最多 _MAX_QUERY_VARIANTS 次。
 
         参数:
             plan: 回合规划
@@ -431,25 +522,28 @@ class ToolExecutor:
         max_steps = plan.max_steps if plan.need_research else 1
 
         for step_index in range(max_steps):
-            if time.time() - start >= budget:
+            # 时间预算检查
+            remaining = budget - (time.time() - start)
+            if remaining <= 0:
                 logger.warning(
                     f"工具链执行超时（{budget}s），停止",
                     command="AI",
                 )
                 break
 
-            planner = self._planner
-            tool_name = planner.select_tool(plan, self._registry, exclude)
+            tool_name = self._select_tool(plan, exclude)
             if not tool_name:
                 break
 
-            # 仅首步使用 LLM 给出的 tool_args；后续研究步骤使用空参数。
-            # 会话上下文（user_id/group_id/persona_name）由工具通过
-            # contextvar 自行读取，执行器不再注入。
-            args = plan.tool_args if step_index == 0 else {}
-            record = await self.execute(
+            # 首步用LLM给出的tool_args；后续研究步骤用空参数
+            base_args = plan.tool_args if step_index == 0 else {}
+
+            # 查询变体重试：可重试工具空结果时换变体
+            record = await self._execute_with_variants(
                 tool_name=tool_name,
-                args=args,
+                base_args=base_args,
+                plan=plan,
+                remaining_budget=remaining,
             )
             records.append(record)
             exclude.add(tool_name)
@@ -460,6 +554,141 @@ class ToolExecutor:
                 break
 
         return records
+
+    async def _execute_with_variants(
+        self,
+        tool_name: str,
+        base_args: dict[str, Any],
+        plan,
+        remaining_budget: float,
+    ) -> ToolCallRecord:
+        """带查询变体重试的工具执行
+
+        可重试工具（RETRYABLE_LOOKUP_TOOLS）返回空结果时，
+        生成查询变体重试，最多 _MAX_QUERY_VARIANTS 次。
+        非可重试工具直接执行一次。
+
+        参数:
+            tool_name: 工具名
+            base_args: 基础参数
+            plan: 回合规划
+            remaining_budget: 剩余时间预算（秒）
+
+        返回:
+            ToolCallRecord: 调用记录
+        """
+        # 非可重试工具直接执行
+        if tool_name not in RETRYABLE_LOOKUP_TOOLS:
+            return await self.execute(
+                tool_name=tool_name,
+                args=base_args,
+                timeout=min(self._default_timeout, remaining_budget),
+            )
+
+        # 生成查询变体
+        variants = self._generate_query_variants(base_args, plan)
+        last_record = ToolCallRecord(
+            tool_name=tool_name,
+            args=dict(base_args),
+            timestamp=time.time(),
+        )
+
+        for variant_args in variants[:_MAX_QUERY_VARIANTS]:
+            remaining = remaining_budget - (
+                time.time() - last_record.timestamp
+            )
+            if remaining <= 0:
+                last_record.error = (
+                    f"工具 '{tool_name}' 查询变体超时"
+                )
+                break
+            record = await self.execute(
+                tool_name=tool_name,
+                args=variant_args,
+                timeout=min(self._default_timeout, remaining),
+            )
+            last_record = record
+            # 成功且非空结果，直接返回
+            if record.success and record.result.strip():
+                if not self._is_empty_tool_result(record.result):
+                    return record
+            logger.debug(
+                f"工具 '{tool_name}' 查询变体返回空结果，"
+                f"尝试下一个变体",
+                command="AI",
+            )
+
+        return last_record
+
+    def _generate_query_variants(
+        self, base_args: dict[str, Any], plan
+    ) -> list[dict[str, Any]]:
+        """生成查询变体列表
+
+        优先使用查询改写器生成的高质量候选查询（plan.query_candidates），
+        不足时补充规则变体（用户原始消息、截取前半部分）。
+        参考参考插件 _query_variants_for_tool 的多候选词重试策略。
+
+        参数:
+            base_args: 基础参数
+            plan: 回合规划
+
+        返回:
+            list[dict[str, Any]]: 变体参数列表
+        """
+        variants: list[dict[str, Any]] = [dict(base_args)]
+        query = str(base_args.get("query", "") or "").strip()
+        existing: set[str] = {query}
+        # 优先使用查询改写器生成的候选查询（高质量，已去口语化）
+        candidates = list(getattr(plan, "query_candidates", []) or [])
+        for candidate in candidates[:_MAX_QUERY_VARIANTS]:
+            cand = str(candidate or "").strip()[:200]
+            if cand and cand not in existing:
+                variant = dict(base_args)
+                variant["query"] = cand
+                variants.append(variant)
+                existing.add(cand)
+                if len(variants) >= _MAX_QUERY_VARIANTS:
+                    return variants
+        # 补充规则变体：用用户原始消息作为query
+        user_msg = str(getattr(plan, "user_message", "") or "").strip()
+        if user_msg and user_msg not in existing:
+            variant = dict(base_args)
+            variant["query"] = user_msg[:200]
+            variants.append(variant)
+            existing.add(user_msg)
+        # 补充规则变体：截取query前半部分（简化查询）
+        if len(query) > 20 and len(variants) < _MAX_QUERY_VARIANTS:
+            short_query = query[:20]
+            if short_query not in existing:
+                variant = dict(base_args)
+                variant["query"] = short_query
+                variants.append(variant)
+        return variants
+
+    @staticmethod
+    def _is_empty_tool_result(text: str) -> bool:
+        """判断工具结果是否为空
+
+        参数:
+            text: 工具结果文本
+
+        返回:
+            bool: 是否为空结果
+        """
+        if not text or not text.strip():
+            return True
+        lowered = text.strip().lower()
+        markers = (
+            "未找到",
+            "没有找到",
+            "无结果",
+            "no_results",
+            "暂无",
+            "搜索失败",
+            "未检索到",
+        )
+        return any(marker in lowered for marker in markers)
 
     def reset(self) -> None:
         """重置执行器状态（清空指标与证据）"""

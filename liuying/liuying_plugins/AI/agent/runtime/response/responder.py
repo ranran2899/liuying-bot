@@ -25,7 +25,7 @@ from ..constants import (
     OUTPUT_MODE_STRUCTURED_HELP,
 )
 from ..execution.evidence import EvidenceComposer
-from ..planning.types import TurnPlan
+from ..planning.types import OUTPUT_MODE_LENGTHS, TurnPlan
 
 _CLARIFY_TEMPLATES = (
     "嗯……能再说得详细一点吗？",
@@ -240,17 +240,22 @@ class PersonaResponder:
         plan: TurnPlan,
         evidence: EvidenceComposer,
         user_message: str,
-        history: list[dict[str, str]] | None,
+        messages: list[dict[str, str]] | None,
         user_id: str,
         group_id: str | None,
     ) -> PersonaResponse:
         """通过LLM生成响应
 
+        修复双轨割裂：使用PromptBuilder构建的完整系统提示词（从messages
+        的system消息中提取），而非自行重建仅含人格的不完整版本。
+        采用query_rewriter风格：system为角色+任务+JSON schema直接拼接，
+        user content为自然语言上下文拼接。
+
         参数:
             plan: 回合规划
             evidence: 证据合成器
             user_message: 用户消息
-            history: 对话历史（不含本轮 user_message）
+            messages: 完整消息列表（含system提示词与对话历史）
             user_id: 用户ID
             group_id: 群组ID
 
@@ -259,115 +264,186 @@ class PersonaResponder:
         """
         llm = self._get_llm()
 
+        # 证据文本与结构化指导（build_evidence_guidance 内部会调 synthesize）
         evidence_text = evidence.compose(max_items=5)
         if not evidence_text:
             evidence_text = "（无工具证据）"
 
-        evidence_guidance = evidence.build_evidence_guidance()
-        if not evidence_guidance:
-            evidence_guidance = "（无证据指导）"
+        intent_tags_str = "、".join(plan.intent_tags) if plan.intent_tags else "无"
+        ambiguity_str = str(plan.ambiguity_level)
 
-        intent_tags_str = ", ".join(plan.intent_tags) or "（无）"
-        ambiguity_str = round(plan.ambiguity_level, 2)
-        user_prompt = (
-            f"回合规划:\n"
-            f"- 动作: {plan.action}\n"
-            f"- 输出模式: {plan.output_mode}\n"
-            f"- 意图标签: {intent_tags_str}\n"
-            f"- 模糊度: {ambiguity_str}\n\n"
-            f"证据合成:\n{evidence_text}\n\n"
-            f"证据指导:\n{evidence_guidance}\n\n"
-            f"用户消息: {user_message[:500]}\n\n"
-            "请输出角色化响应JSON。"
+        # 字数硬约束：根据输出模式查OUTPUT_MODE_LENGTHS表得到字数范围
+        min_chars, max_chars = OUTPUT_MODE_LENGTHS.get(
+            plan.output_mode, OUTPUT_MODE_LENGTHS["chat_short"]
         )
 
-        # 构建系统提示词（含人格与用户画像）
-        system_prompt = await self._build_system_prompt(
-            user_id, group_id, plan.output_mode
-        )
+        # 响应器指令（query_rewriter风格：角色+任务+JSON schema+约束）
+        constraints = [
+            "1. 回复风格符合人格设定和用户好感度",
+            "2. 不暴露工具调用细节和证据合成过程",
+            "3. 不提及自己是AI助手",
+            "4. 回复简洁自然，符合对话场景",
+            "5. 不编造具体数字、链接、日期",
+            "6. 未调用工具且不确定时，reply_text设为简短模糊回应，"
+            "info_added设为false，禁止编造",
+        ]
+        if not plan.need_tool:
+            constraints.append(
+                "7. 涉及具体事实/数字/时间/人名/新闻/产品参数/专有名词/"
+                "梗，未调用工具且不确定时必须简短含糊回应，禁止编造"
+            )
 
         responder_instruction = (
-            "你是响应器。"
-            "基于回合规划和收集到的证据，生成符合人格设定的回复。\n\n"
-            "输出要求：\n"
-            "1. 严格按JSON格式返回，字段如下：\n"
-            "   - reply_text: 回复正文\n"
-            "   - info_added: 是否补充了新信息（true/false）\n"
-            "   - user_attitude: 推测的用户态度（friendly/neutral/curious/upset/playful）\n"
-            "   - bot_emotion: 本回合AI情绪（happy/calm/excited/shy/sad/angry/neutral）\n"
-            "   - expression_style: 表达风格（casual/formal/playful/serious/gentle）\n"
-            "   - tts_style_hint: TTS风格提示（如温柔/活泼/严肃，留空表示不需要TTS）\n"
-            "   - sticker_mood_hint: 表情包情绪提示（如开心/害羞/无奈，留空表示不需要表情包）\n"
-            "   - ambiguity_level: 回复模糊度（0-1）\n"
-            "   - recommend_silence: 是否建议静默（true/false，仅当回复内容明显不需要发送时为true）\n\n"
-            "2. 回复风格要符合人格设定和用户好感度\n"
-            "3. 不要暴露工具调用细节和证据合成过程\n"
-            "4. 不要在回复中提及自己是AI助手\n"
-            "5. 回复要简洁自然，符合对话场景\n\n"
-            "只返回JSON，不要其他内容。"
+            "你是角色化响应器。"
+            "基于回合规划、证据和人格设定，生成符合角色的回复。"
+            "只输出JSON，不要解释、markdown或代码块。\n\n"
+            "JSON字段：\n"
+            "{\n"
+            '  "reply_text": "回复正文",\n'
+            '  "info_added": false,\n'
+            '  "user_attitude": "friendly|neutral|curious|upset|playful",\n'
+            '  "bot_emotion": "happy|calm|excited|shy|sad|angry|neutral",\n'
+            '  "expression_style": "casual|formal|playful|serious|gentle",\n'
+            '  "tts_style_hint": "TTS风格提示",\n'
+            '  "sticker_mood_hint": "表情包情绪提示",\n'
+            '  "ambiguity_level": 0.0,\n'
+            '  "recommend_silence": false\n'
+            "}\n\n"
+            f"字数约束：reply_text必须在{min_chars}-{max_chars}字之间。\n\n"
+            "约束：\n"
+            + "\n".join(constraints)
         )
 
-        # 构建消息列表：系统提示 + 规划指令 + 对话历史 + 当前回合请求
-        messages: list[dict[str, str]] = [
-            {"role": "system", "content": system_prompt},
-            {"role": "system", "content": responder_instruction},
+        # 用户内容（query_rewriter风格：自然语言上下文拼接，非xxx=xxx赋值）
+        mode_hint = self._get_mode_hint(plan.output_mode)
+        user_content_parts = [
+            f"回合动作：{plan.action}",
+            f"输出模式：{plan.output_mode}",
+            f"意图标签：{intent_tags_str}",
+            f"模糊度：{ambiguity_str}",
         ]
-        if history:
-            # 仅保留最近 6 条历史，避免 token 膨胀
-            recent = history[-6:]
-            for msg in recent:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                if role in ("user", "assistant") and content:
-                    messages.append(
-                        {"role": role, "content": content[:500]}
-                    )
-        messages.append({"role": "user", "content": user_prompt})
+        if mode_hint:
+            user_content_parts.append(f"模式提示：{mode_hint}")
+        user_content_parts.extend([
+            "",
+            f"证据摘要：\n{evidence_text}",
+            "",
+            f"用户消息：{user_message[:500]}",
+            "",
+        ])
+        # 注入证据合成器的完整证据使用指导（参考插件 render_evidence_guidance）：
+        # 包含证据条数、摘要、不确定性标注、是否需更多研究、使用原则
+        evidence_guidance = evidence.build_evidence_guidance()
+        if evidence_guidance:
+            user_content_parts.append(f"证据指导：\n{evidence_guidance}")
+            user_content_parts.append("")
+        # 未调用工具时追加硬约束，禁止凭印象编造具体事实
+        if not plan.need_tool:
+            user_content_parts.append(
+                "不确定性提示：本轮未调用工具，涉及具体事实/数字/时间/"
+                "人名/新闻/产品参数/专有名词/梗时禁止编造"
+            )
+        user_content_parts.append("")
+        user_content_parts.append("请输出角色化响应JSON。")
+        user_content = "\n".join(user_content_parts)
+
+        # 构建消息列表：合并系统提示词 + 历史 + 当前请求
+        llm_messages: list[dict[str, str]] = []
+
+        # 合并PromptBuilder系统提示词与响应器指令为单条system消息，
+        # 减少消息数量和token冗余（两条system消息在多数provider下等价于
+        # 拼接，合并后避免重复role标记开销）
+        system_prompt = self._extract_system_prompt(messages, user_id, group_id)
+        combined_system = f"{system_prompt}\n\n{responder_instruction}"
+        llm_messages.append({"role": "system", "content": combined_system})
+
+        # 追加对话历史（跳过system消息，保留最近4条，排除当前用户消息）
+        # 裁剪到200字符/条，平衡上下文质量与token消耗
+        chat_history = self._extract_chat_history(messages)
+        for msg in chat_history[-4:]:
+            content = msg.get("content", "")
+            if content:
+                llm_messages.append({
+                    "role": msg["role"],
+                    "content": content[:200],
+                })
+
+        llm_messages.append({"role": "user", "content": user_content})
 
         # 接入模型按角色路由：使用 ROLE_CHAT 配置的模型/温度/provider
+        # 根据字数约束动态计算max_tokens，中文字符约1.5 tokens，
+        # 加上JSON结构开销约200 tokens，上限800避免过长输出
+        # 禁用思考模式避免消耗思考token
         role = model_router.resolve(ROLE_CHAT)
+        dynamic_max_tokens = min(800, int(max_chars * 2) + 200)
+        chat_options = role.apply_to_options(
+            {"max_tokens": dynamic_max_tokens, "reasoning_enabled": False}
+        )
         _, response_text = await llm.chat(
-            messages,
+            llm_messages,
             model=role.model or None,
-            options=role.apply_to_options(),
+            options=chat_options,
             provider_name=role.provider or None,
         )
         return self._parse_response(response_text, plan)
 
-    async def _build_system_prompt(
+    def _extract_system_prompt(
         self,
+        messages: list[dict[str, str]] | None,
         user_id: str,
         group_id: str | None,
-        output_mode: str,
     ) -> str:
-        """构建系统提示词
+        """从消息列表中提取系统提示词
+
+        优先使用PromptBuilder构建的完整系统提示词（messages中的首个system
+        消息），缺失时降级到persona_manager的兜底提示词。
 
         参数:
-            user_id: 用户ID
-            group_id: 群组ID
-            output_mode: 输出模式
+            messages: 消息列表
+            user_id: 用户ID（保留参数，降级时可用）
+            group_id: 群组ID（保留参数，降级时可用）
 
         返回:
             str: 系统提示词
         """
+        if messages:
+            for msg in messages:
+                if msg.get("role") == "system" and msg.get("content"):
+                    return msg["content"]
+
+        # 降级：messages无system消息时使用人格兜底提示词
         persona_mgr = self._get_persona_manager()
-        try:
-            persona = await persona_mgr.get_user_persona_config(
-                user_id
-            )
-            persona_prompt = await persona_mgr.build_system_prompt(
-                persona, user_id, group_id
-            )
-        except Exception as e:
-            logger.debug(
-                f"加载人格失败，使用默认: {e}", command="AI"
-            )
-            persona_prompt = persona_mgr.get_persona_fallback_prompt()
+        return persona_mgr.get_persona_fallback_prompt()
 
-        mode_hint = self._get_mode_hint(output_mode)
-        return f"{persona_prompt}\n\n{mode_hint}"
+    @staticmethod
+    def _extract_chat_history(
+        messages: list[dict[str, str]] | None,
+    ) -> list[dict[str, str]]:
+        """从消息列表中提取对话历史
 
-    def _get_mode_hint(self, output_mode: str) -> str:
+        跳过system消息，仅保留user/assistant消息，排除最后一条
+        （当前用户消息，已在user_content中重新构建）。
+
+        参数:
+            messages: 消息列表
+
+        返回:
+            list[dict]: 对话历史（按时间正序）
+        """
+        if not messages:
+            return []
+        history = [
+            msg
+            for msg in messages
+            if msg.get("role") in ("user", "assistant")
+        ]
+        # 移除最后一条（当前用户消息）
+        if history:
+            history.pop()
+        return history
+
+    @staticmethod
+    def _get_mode_hint(output_mode: str) -> str:
         """根据输出模式获取提示
 
         参数:
@@ -377,13 +453,13 @@ class PersonaResponder:
             str: 模式提示
         """
         hints = {
-            OUTPUT_MODE_CHAT_SHORT: "本回合是短聊天回复，保持简洁自然。",
-            OUTPUT_MODE_CHAT_ANSWER: "本回合是完整答案回复，需详细但有条理。",
+            OUTPUT_MODE_CHAT_SHORT: "短聊天回复，保持简洁自然",
+            OUTPUT_MODE_CHAT_ANSWER: "完整答案回复，需详细但有条理",
             OUTPUT_MODE_SOURCE_SUMMARY: (
-                "本回合带工具证据，请自然地融入证据信息，"
-                "不要直接说'根据搜索结果'等。"
+                "带工具证据，自然融入证据信息，"
+                "不要直接说'根据搜索结果'"
             ),
-            OUTPUT_MODE_SILENCE: "本回合建议静默。",
+            OUTPUT_MODE_SILENCE: "建议静默",
         }
         return hints.get(output_mode, "")
 

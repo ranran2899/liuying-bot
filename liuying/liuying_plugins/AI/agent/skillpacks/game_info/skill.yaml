@@ -1,0 +1,13 @@
+name: game_info
+enabled: true
+category: query
+entrypoint: scripts/main.py
+description: 查询游戏信息（攻略/介绍）
+parameters:
+  type: object
+  properties:
+    game:
+      type: string
+      description: 游戏名
+  required:
+    - game

@@ -16,12 +16,26 @@ from liuying.utils.log import logger
 
 from ..config import get_config
 from ..core.llm import LLMHelper
+from .query_rewriter import contextual_query_rewriter
+from .runtime.catalog.tool_catalog import semantic_tool_guidance
 from .runtime.execution.executor import ToolExecutor
 from .runtime.planning.planner import TurnPlanner
 from .runtime.planning.types import TurnPlan
 from .runtime.response.responder import PersonaResponder, PersonaResponse
 from .runtime.session_context import bind_session_context
 from .tools import ToolRegistry, tool_registry
+
+# 多话题防串扰硬约束（参考参考插件 runner.py 的防串话 system 消息）
+_ANTI_CROSSTALK_PROMPT = (
+    "群聊里通常多个话题并行：A 群友讨论地震、B 群友讨论自己的近况、"
+    "C 群友在闲扯，时间相近不代表语义相关。\n"
+    "硬性规则：\n"
+    "1. 你回复的是上下文中标记为当前消息的那一条；其它发言只是背景，"
+    "不要把它们的内容拿来回答当前问题。\n"
+    "2. 不要把不同人说的关键词（地名、人名、状态）跨话题拼接。"
+    "拿不准时宁可简短、含糊或承认不知道，也不要把无关上下文糊上去。"
+)
+"""多话题防串扰硬约束提示"""
 
 
 @dataclass(slots=True)
@@ -127,13 +141,21 @@ class AgentRunner:
         context_summary = AgentRunner._build_context_summary(messages)
 
         # ===== 第1层：规划 =====
+        # 规则快速路径：极短消息（≤10字符）且无图片时跳过LLM规划，
+        # 直接用规则决策，省去规划层LLM调用的token消耗
+        use_llm_for_plan = use_llm_planning
+        if use_llm_for_plan and not has_image:
+            stripped = user_message.strip()
+            if len(stripped) <= 10 and "?" not in stripped and "？" not in stripped:
+                use_llm_for_plan = False
+
         planner = TurnPlanner(llm=llm_helper)
         try:
             plan = await planner.plan(
                 user_message=user_message,
                 context_summary=context_summary,
                 has_image=has_image,
-                use_llm=use_llm_planning,
+                use_llm=use_llm_for_plan,
             )
         except Exception as e:
             logger.warning(
@@ -155,6 +177,17 @@ class AgentRunner:
             f"need_tool={plan.need_tool} reason={plan.reason}",
             command="AI",
         )
+
+        # 注入多话题防串扰硬约束 + 语义工具指导到 system 消息，
+        # 供响应器消费（参考参考插件 runner.py 的 system 消息注入）
+        AgentRunner._inject_guidance_to_messages(messages)
+
+        # 需要工具时调用查询改写器，生成高质量检索计划，
+        # 避免 LLM 规划器直接拿用户口语当 query（参考参考插件核心创新）
+        if plan.need_tool:
+            await AgentRunner._apply_query_rewrite(
+                plan, user_message, context_summary, llm_helper, has_image
+            )
 
         # 静默场景直接返回
         if plan.is_silence:
@@ -241,6 +274,72 @@ class AgentRunner:
                 },
                 image_url=image_url,
             )
+
+    @staticmethod
+    def _inject_guidance_to_messages(
+        messages: list[dict[str, str]],
+    ) -> None:
+        """注入多话题防串扰和语义工具指导到 system 消息
+
+        将防串扰硬约束和语义工具指导追加到 messages 的首个 system
+        消息内容末尾，供响应器消费。无 system 消息时新建一条。
+
+        参数:
+            messages: 消息列表（原地修改）
+        """
+        guidance = semantic_tool_guidance()
+        extra = f"\n\n{guidance}\n\n{_ANTI_CROSSTALK_PROMPT}"
+        for msg in messages:
+            if msg.get("role") == "system" and msg.get("content"):
+                msg["content"] = f"{msg['content']}{extra}"
+                return
+        messages.insert(0, {"role": "system", "content": extra.strip()})
+
+    @staticmethod
+    async def _apply_query_rewrite(
+        plan: TurnPlan,
+        user_message: str,
+        context_summary: str,
+        llm: LLMHelper,
+        has_image: bool,
+    ) -> None:
+        """调用查询改写器，将改写结果注入 plan
+
+        需要工具调用时，先用查询改写器生成高质量检索计划，
+        将 primary_query 注入 plan.tool_args 的 query 字段（如果存在），
+        将 query_candidates 存入 plan.query_candidates 供执行器变体重试。
+
+        参数:
+            plan: 回合规划（原地修改）
+            user_message: 用户消息
+            context_summary: 上下文摘要
+            llm: LLM助手
+            has_image: 是否有图片
+        """
+        try:
+            rewrite = await contextual_query_rewriter(
+                llm=llm,
+                history_new=context_summary,
+                history_last=user_message,
+                images=["image"] if has_image else None,
+                quoted_message="",
+                topic_hint="",
+            )
+        except Exception as e:
+            logger.debug(
+                f"查询改写失败，用原始消息: {e}", command="AI"
+            )
+            return
+
+        if rewrite.primary_query and "query" in plan.tool_args:
+            plan.tool_args["query"] = rewrite.primary_query
+        if rewrite.query_candidates:
+            plan.query_candidates = list(rewrite.query_candidates)
+        logger.debug(
+            f"查询改写: primary={rewrite.primary_query[:60]} "
+            f"candidates={len(rewrite.query_candidates)}",
+            command="AI",
+        )
 
     @staticmethod
     def _build_context_summary(messages: list[dict[str, str]]) -> str:

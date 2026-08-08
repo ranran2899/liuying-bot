@@ -4,13 +4,21 @@
 - skill.yaml 元数据
 - scripts/main.py 入口
 - 三种入口模式：register / build_tools / run
+- SkillRuntime 依赖注入（参考参考插件 loader.py 设计）
+
+参考 nonebot_plugin_personification 的 skill_runtime/loader.py：
+1. build_tools(runtime) 接收 SkillRuntime 参数
+2. 动态加载模块时构造合成包，让相对导入可用
+3. 注册完成后调用 apply_tool_metadata_defaults 补全默认元数据
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 import importlib.util
 from pathlib import Path
 import re
 import sys
+from types import ModuleType
 from typing import Any
 
 import yaml
@@ -19,8 +27,9 @@ from liuying.utils.log import logger
 
 from ..config import get_config
 from .mcp_bridge import mcp_bridge
+from .runtime.catalog.tool_catalog import apply_tool_metadata_defaults
 from .skill_isolation import skill_isolation_runner
-from .skillpacks import BuiltinSkillpackRegistrar
+from .skill_runtime_api import SkillRuntime
 from .tools import AgentTool, ToolRegistry, tool_registry
 
 __all__ = [
@@ -67,10 +76,37 @@ class SkillSpec:
     isolation: dict[str, Any] = field(default_factory=dict)
 
 
+def _build_default_runtime() -> SkillRuntime:
+    """构造默认SkillRuntime
+
+    在未显式传入runtime时，从全局单例构建。
+    延迟导入避免循环依赖。
+
+    返回:
+        SkillRuntime: 默认运行时实例
+    """
+    # 循环依赖：core.llm 模块在初始化时可能间接引用 AI 插件配置
+    from ..core.knowledge_db import knowledge_base
+    from ..core.llm import llm_helper
+    from ..core.memory import memory_manager
+    from ..core.persona import persona_manager
+
+    return SkillRuntime(
+        plugin_config=get_config,
+        logger=logger,
+        get_now=datetime.now,
+        llm_helper=llm_helper,
+        memory_manager=memory_manager,
+        knowledge_base=knowledge_base,
+        persona_manager=persona_manager,
+    )
+
+
 class SkillpackLoader:
     """技能包加载器
 
     扫描skillpacks目录，加载所有技能并注册到工具注册表。
+    通过SkillRuntime依赖注入，让技能包访问主插件服务。
     """
 
     def __init__(self, base_dir: Path | None = None) -> None:
@@ -176,16 +212,23 @@ class SkillpackLoader:
         )
 
     def register_all(
-        self, registry: ToolRegistry = tool_registry
+        self,
+        registry: ToolRegistry = tool_registry,
+        runtime: SkillRuntime | None = None,
     ) -> int:
         """注册所有技能到工具注册表
 
+        参考参考插件 load_builtin_skillpacks_sync 设计：
+        通过 SkillRuntime 依赖注入，将主插件服务传递给技能包。
+
         参数:
             registry: 工具注册表
+            runtime: 技能运行时（依赖注入载体），None时构造默认实例
 
         返回:
             int: 注册成功的工具数
         """
+        use_runtime = runtime or _build_default_runtime()
         specs = self.discover_skills()
         registered = 0
 
@@ -198,59 +241,96 @@ class SkillpackLoader:
                     spec, registry
                 )
                 continue
-            module = self._load_skill_module(spec.entrypoint)
-
-            if hasattr(module, "register"):
-                module.register(registry)
-                registered += 1
-            elif hasattr(module, "build_tools"):
-                tools = module.build_tools()
-                for tool in tools:
-                    registry.register(tool)
-                registered += len(tools)
-            elif hasattr(module, "run"):
-
-                async def _run(
-                    _module: Any = module, **kwargs: Any
-                ) -> str:
-                    """执行技能
-
-                    参数:
-                        _module: 绑定的技能模块（默认参数避免闭包捕获循环变量）
-                        **kwargs: 参数
-
-                    返回:
-                        str: 执行结果
-                    """
-                    result = await _module.run(**kwargs)
-                    return (
-                        result
-                        if isinstance(result, str)
-                        else str(result)
-                    )
-
-                registry.register(
-                    AgentTool(
-                        name=spec.name,
-                        description=spec.description,
-                        parameters=spec.parameters,
-                        func=_run,
-                    )
-                )
-                registered += 1
-
-        # 注册内置单文件技能包（news/weather/datetime/wiki/game_info）
-        registered += (
-            BuiltinSkillpackRegistrar.register_builtin_skillpacks(
-                registry
+            module = self._load_skill_module(
+                spec.entrypoint, spec
             )
-        )
+            registered += self._register_module(
+                module, spec, registry, use_runtime
+            )
+
+        # 补全默认元数据（参考参考插件 apply_tool_metadata_defaults）
+        apply_tool_metadata_defaults(registry)
 
         logger.info(
             f"技能包注册完成，共{registered}个工具",
             command="AI",
         )
         return registered
+
+    def _register_module(
+        self,
+        module: Any,
+        spec: SkillSpec,
+        registry: ToolRegistry,
+        runtime: SkillRuntime,
+    ) -> int:
+        """按三段式接口注册技能模块
+
+        参考参考插件 loader.py 的三段式注册接口：
+        register > build_tools > run
+
+        参数:
+            module: 技能模块
+            spec: 技能规格
+            registry: 工具注册表
+            runtime: 技能运行时
+
+        返回:
+            int: 注册的工具数
+        """
+        if hasattr(module, "register"):
+            # register(runtime, registry) 模式
+            try:
+                module.register(runtime, registry)
+            except TypeError:
+                module.register(registry)
+            return 1
+        if hasattr(module, "build_tools"):
+            # build_tools(runtime) 模式
+            try:
+                tools = module.build_tools(runtime)
+            except TypeError:
+                tools = module.build_tools()
+            if not tools:
+                return 0
+            count = 0
+            for tool in tools:
+                if tool is None:
+                    continue
+                registry.register(tool)
+                count += 1
+            return count
+        if hasattr(module, "run"):
+            # run(**kwargs) 模式
+            async def _run(
+                _module: Any = module, **kwargs: Any
+            ) -> str:
+                """执行技能
+
+                参数:
+                    _module: 绑定的技能模块
+                    **kwargs: 参数
+
+                返回:
+                    str: 执行结果
+                """
+                result = await _module.run(**kwargs)
+                return (
+                    result
+                    if isinstance(result, str)
+                    else str(result)
+                )
+
+            registry.register(
+                AgentTool(
+                    name=spec.name,
+                    description=spec.description,
+                    parameters=spec.parameters,
+                    func=_run,
+                )
+            )
+            return 1
+        return 0
 
     def _register_isolated_skill(
         self, spec: SkillSpec, registry: ToolRegistry
@@ -405,11 +485,17 @@ class SkillpackLoader:
     def _load_skill_module(
         self,
         script_path: Path,
+        spec: SkillSpec | None = None,
     ) -> Any:
         """加载技能模块
 
+        参考参考插件 module_loader.py 设计：
+        构造合成包让相对导入（from . import impl）可用，
+        注入sys.path让绝对导入可用。
+
         参数:
             script_path: 脚本路径
+            spec: 技能规格（用于日志）
 
         返回:
             Any: 模块对象
@@ -417,17 +503,44 @@ class SkillpackLoader:
         异常:
             ImportError: 加载失败
         """
-        module_name = (
-            f"_skill_{script_path.stem}_{hash(str(script_path))}"
-        )
-        spec = importlib.util.spec_from_file_location(
+        # scripts/main.py → scripts/ → skill_dir/
+        scripts_dir = script_path.parent
+        skill_dir = scripts_dir.parent
+
+        # 构造合成包让相对导入可用
+        package_name = f"_skillpack_{skill_dir.name}"
+        if package_name not in sys.modules:
+            pkg = ModuleType(package_name)
+            pkg.__path__ = [str(scripts_dir)]
+            sys.modules[package_name] = pkg
+
+        # 注入sys.path让绝对导入可用
+        added_paths: list[str] = []
+        for p in [
+            str(scripts_dir),
+            str(skill_dir),
+            str(self._base_dir),
+        ]:
+            if p not in sys.path:
+                sys.path.insert(0, p)
+                added_paths.append(p)
+
+        module_name = f"{package_name}.{script_path.stem}"
+        spec_obj = importlib.util.spec_from_file_location(
             module_name, script_path
         )
-        if spec is None or spec.loader is None:
+        if spec_obj is None or spec_obj.loader is None:
             raise ImportError(f"无法加载技能模块: {script_path}")
-        module = importlib.util.module_from_spec(spec)
+        module = importlib.util.module_from_spec(spec_obj)
+        module.__package__ = package_name
         sys.modules[module_name] = module
-        spec.loader.exec_module(module)
+        try:
+            spec_obj.loader.exec_module(module)
+        finally:
+            # 还原sys.path，防止污染
+            for p in added_paths:
+                if p in sys.path:
+                    sys.path.remove(p)
         return module
 
 

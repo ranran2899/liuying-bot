@@ -1,21 +1,12 @@
 """聊天意图语义帧
 
-通过LLM推断回合级语义帧，提供比关键词匹配更细粒度的决策信号。
-包含15+维度的语义字段，覆盖意图/情绪/态度/场景/表达风格等。
-
-语义帧作为规划器的增强信号，与现有 intent_rules 关键词规则协同：
-- 关键词规则：低延迟快速决策路径
-- LLM语义帧：精细决策路径，补充情绪/态度/贴纸适配等维度
+提供基于关键词规则的回合级语义帧快速推断，作为规划器的
+降级路径。LLM精细语义帧已内嵌到规划器的单次LLM调用中，
+本模块仅保留规则快速推断（infer_fast），消除冗余LLM调用。
 """
 
 from dataclasses import dataclass
 from typing import Any
-
-from liuying.utils.log import logger
-
-from .json_utils import extract_json_payload
-from .llm import LLMHelper, llm_helper
-from .llm.model_router import ROLE_INTENT, model_router
 
 __all__ = [
     "SemanticFrameInferrer",
@@ -28,7 +19,7 @@ __all__ = [
 class TurnSemanticFrame:
     """回合语义帧
 
-    描述当前回合的多维度语义信息，由LLM推断或规则快速生成。
+    描述当前回合的多维度语义信息，由规则快速生成。
 
     Attributes:
         chat_intent: 聊天意图
@@ -90,95 +81,12 @@ class TurnSemanticFrame:
 
 
 class SemanticFrameInferrer:
-    """语义帧推断器
+    """语义帧规则推断器
 
-    封装LLM语义帧推断与规则快速推断两种模式。
-    LLM模式提供15+维度精细分析，规则模式提供基础降级。
+    基于关键词匹配推断基础语义字段，作为规划器LLM降级路径。
+    LLM精细语义帧已内嵌到规划器的单次调用中，本模块不再
+    发起独立LLM调用。
     """
-
-    def __init__(self, llm: LLMHelper | None = None) -> None:
-        """初始化语义帧推断器
-
-        参数:
-            llm: LLM助手，None时使用模块单例
-        """
-        self._llm = llm
-
-    def _get_llm(self) -> LLMHelper:
-        """获取LLM助手，None时回退到模块单例"""
-        if self._llm is None:
-            self._llm = llm_helper
-        return self._llm
-
-    async def infer(
-        self,
-        user_message: str,
-        context_summary: str = "",
-        use_llm: bool = True,
-    ) -> TurnSemanticFrame:
-        """推断语义帧
-
-        参数:
-            user_message: 用户消息
-            context_summary: 上下文摘要
-            use_llm: 是否使用LLM精细推断，False时用规则快速推断
-
-        返回:
-            TurnSemanticFrame: 语义帧
-        """
-        if not use_llm:
-            return self.infer_fast(user_message)
-        system_prompt = (
-            "你是聊天意图语义分析器。\n"
-            "分析用户消息和上下文，输出回合级语义帧JSON。\n\n"
-            "字段说明：\n"
-            "- chat_intent: 聊天意图\n"
-            "  （question/small_talk/info_seek/emotional_support/\n"
-            "  social_protocol/chat_command/meta_question）\n"
-            "- plugin_question_intent: 插件相关意图（空串表示无）\n"
-            "- ambiguity_level: 模糊度（0-1，0最清晰）\n"
-            "- recommend_silence: 是否建议静默（true/false）\n"
-            "- requires_emotional_care: 是否需要情感关怀（true/false）\n"
-            "- sticker_appropriate: 是否适合发贴纸（true/false）\n"
-            "- meta_question: 是否元问题（关于bot自身，true/false）\n"
-            "- domain_focus: 领域焦点（空串表示无）\n"
-            "- user_attitude: 用户态度（positive/neutral/negative/playful）\n"
-            "- bot_emotion: bot应有情绪\n"
-            "  （happy/sad/neutral/curious/caring/playful）\n"
-            "- emotion_intensity: 情绪强度（0-1）\n"
-            "- expression_style: 表达风格（casual/formal/playful/gentle）\n"
-            "- tts_style_hint: TTS风格提示（空串表示无）\n"
-            "- sticker_mood_hint: 贴纸情绪提示（warm/cool/neutral）\n"
-            "- conversation_scenario: 对话场景\n"
-            "  （daily/greeting/farewell/help/conflict/tease）\n\n"
-            "只返回JSON，不要其他内容。"
-        )
-        prompt = (
-            f"用户消息: {user_message[:500]}\n\n"
-            f"上下文摘要: {context_summary[:300] or '（无）'}\n\n"
-            "请输出语义帧JSON。"
-        )
-        try:
-            llm = self._get_llm()
-            role = model_router.resolve(ROLE_INTENT)
-            _, response = await llm.chat(
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-                model=role.model or None,
-                options=role.apply_to_options(),
-                provider_name=role.provider or None,
-            )
-            frame = self._parse_frame_response(response)
-            return frame
-        except Exception as e:
-            logger.warning(
-                f"LLM语义帧推断失败，降级到规则: {e}",
-                command="AI",
-                e=e,
-            )
-            return self.infer_fast(user_message)
 
     def infer_fast(self, user_message: str) -> TurnSemanticFrame:
         """规则快速推断语义帧（无LLM调用）
@@ -256,69 +164,6 @@ class SemanticFrameInferrer:
             chat_intent="small_talk",
             conversation_scenario="daily",
             sticker_appropriate=True,
-        )
-
-    def _parse_frame_response(
-        self, response: str
-    ) -> TurnSemanticFrame:
-        """解析LLM语义帧响应
-
-        参数:
-            response: LLM响应文本
-
-        返回:
-            TurnSemanticFrame: 解析后的语义帧
-        """
-        data = extract_json_payload(response)
-        if data is None:
-            logger.debug(
-                "解析语义帧JSON失败，降级到规则",
-                command="AI",
-            )
-            return self.infer_fast("")
-
-        def _clamp01(value: Any) -> float:
-            """将值限制在0-1范围"""
-            if isinstance(value, int | float) and not isinstance(
-                value, bool
-            ):
-                return max(0.0, min(1.0, float(value)))
-            return 0.0
-
-        return TurnSemanticFrame(
-            chat_intent=str(data.get("chat_intent", "small_talk")),
-            plugin_question_intent=str(
-                data.get("plugin_question_intent", "")
-            ),
-            ambiguity_level=_clamp01(
-                data.get("ambiguity_level", 0.0)
-            ),
-            recommend_silence=bool(
-                data.get("recommend_silence", False)
-            ),
-            requires_emotional_care=bool(
-                data.get("requires_emotional_care", False)
-            ),
-            sticker_appropriate=bool(
-                data.get("sticker_appropriate", False)
-            ),
-            meta_question=bool(data.get("meta_question", False)),
-            domain_focus=str(data.get("domain_focus", "")),
-            user_attitude=str(data.get("user_attitude", "neutral")),
-            bot_emotion=str(data.get("bot_emotion", "neutral")),
-            emotion_intensity=_clamp01(
-                data.get("emotion_intensity", 0.0)
-            ),
-            expression_style=str(
-                data.get("expression_style", "casual")
-            ),
-            tts_style_hint=str(data.get("tts_style_hint", "")),
-            sticker_mood_hint=str(
-                data.get("sticker_mood_hint", "neutral")
-            ),
-            conversation_scenario=str(
-                data.get("conversation_scenario", "daily")
-            ),
         )
 
 

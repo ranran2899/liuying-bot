@@ -14,7 +14,6 @@ from ...models.memory_item import MemoryItem
 from ..llm import llm_helper
 from ._common import _DEFAULT_PERSONA
 
-
 _BATCH_SIZE = 8
 """单批摘要的记忆数量"""
 

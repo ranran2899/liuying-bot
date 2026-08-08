@@ -19,6 +19,8 @@ from ..runtime.constants import (
 class AgentTool:
     """工具定义
 
+    参考参考插件 AgentTool 设计，增加 per_session_quota 字段。
+
     Attributes:
         name: 工具名（唯一键）
         description: 工具描述（供LLM决策使用）
@@ -31,6 +33,7 @@ class AgentTool:
         requires_image: 是否需要图片输入
         evidence_kind: 证据类型（tool/context）
         metadata: 附加元信息
+        per_session_quota: 每会话调用配额上限，0表示无上限
     """
 
     name: str
@@ -44,6 +47,7 @@ class AgentTool:
     requires_image: bool = False
     evidence_kind: str = EVIDENCE_KIND_TOOL
     metadata: dict[str, Any] = field(default_factory=dict)
+    per_session_quota: int = 0
 
     def to_metadata(self) -> dict[str, Any]:
         """导出元数据字典

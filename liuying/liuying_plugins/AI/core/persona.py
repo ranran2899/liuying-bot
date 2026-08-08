@@ -126,7 +126,9 @@ class PersonaManager:
         return await UserPersonaSelection.clear_persona_name(user_id)
 
     def _persona_exists(self, name: str) -> bool:
-        """检查人格文件是否存在
+        """检查人格是否存在
+
+        通过YAML配置文件是否存在判断人格是否有效。
 
         参数:
             name: 人格名称（YAML文件名，不含扩展名）
@@ -207,16 +209,19 @@ class PersonaManager:
     def list_personas(self) -> list[str]:
         """列出所有可用人格名
 
+        扫描personas目录下的YAML文件，文件名（不含扩展名）即人格名。
+
         返回:
             list[str]: 人格名称列表
         """
         if not self.personas_dir.exists():
             return []
-        return [
+        names = [
             f.stem
             for f in self.personas_dir.glob("*.yaml")
             if f.is_file()
         ]
+        return sorted(names)
 
     def list_personas_with_desc(self) -> list[dict]:
         """列出所有可用人格及其描述
@@ -461,14 +466,27 @@ class PersonaManager:
         """获取全局默认人设的兜底提示词
 
         供安全过滤重试、人格加载失败等场景使用。
-        提示词直接内联，不再从 YAML 模板渲染。
+        从当前激活人格的YAML读取system_prompt，加载失败时
+        回退到liuying.yaml，再失败返回空串。
 
         返回:
             str: 兜底人设提示词
         """
-        persona = self.get_default_persona()
-        name = persona.get("name") or "AI"
-        return f"你是{name}，一个温柔、有活力的AI伙伴。"
+        for name in (self.get_active_persona_name(), "liuying", "default"):
+            persona_path = self.personas_dir / f"{name}.yaml"
+            if not persona_path.exists():
+                continue
+            try:
+                with open(persona_path, encoding="utf-8") as f:
+                    persona = self._yaml.load(f) or {}
+                prompt = str(persona.get("system_prompt", "") or "").strip()
+                if prompt:
+                    return prompt
+            except Exception as e:
+                logger.warning(
+                    f"加载兜底人格 {name} 失败: {e}", command="AI"
+                )
+        return ""
 
     def _load_meme_seeds(self) -> dict:
         """加载网络梗词典

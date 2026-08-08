@@ -282,6 +282,306 @@ class ToolCatalog:
         return "\n".join(lines)
 
 
+# 轻量查证工具：闲聊场景也放行，让模型"想查就能查"
+_LIGHTWEIGHT_LOOKUP_TOOL_NAMES: set[str] = {
+    "web_search",
+    "fetch_webpage",
+    "recall_memory",
+    "get_favor",
+    "get_datetime",
+    "search_plugin_knowledge",
+}
+"""闲聊场景放行的轻量查证工具名白名单"""
+
+# 管理类工具，非管理场景一律过滤
+_ADMIN_TOOL_NAMES: set[str] = set()
+"""管理工具名集合（动态填充）"""
+
+
+def _tool_intent_tags(tool) -> set[str]:
+    """获取工具的意图标签集合"""
+    return {str(t).strip() for t in (tool.intent_tags or []) if str(t).strip()}
+
+
+def _is_admin_tool(tool) -> bool:
+    """判断是否为管理类工具"""
+    tags = _tool_intent_tags(tool)
+    return INTENT_TAG_ADMIN in tags
+
+
+def select_tool_schemas(
+    registry,
+    *,
+    has_images: bool,
+    intent_tags: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """按意图过滤可见工具schema
+
+    参考参考插件 tool_catalog.select_tool_schemas 设计：
+    按当前意图标签和是否有图片，过滤暴露给模型的工具schema，
+    减少每次模型调用的schema token开销。
+
+    过滤规则：
+    - 管理类工具非管理场景一律过滤
+    - 纯闲聊（无realtime/network/plugin/image）：只放行轻量查证工具
+    - 有image标签：放行图片相关工具
+    - 有realtime/network标签：放行网络工具
+    - 有plugin标签：放行插件工具
+    - 有memory标签：放行记忆工具
+
+    参数:
+        registry: 工具注册表
+        has_images: 是否有图片输入
+        intent_tags: 意图标签列表
+
+    返回:
+        list[dict]: 过滤后的OpenAI schema列表
+    """
+    schemas = registry.to_openai_schemas()
+    if not schemas:
+        return []
+
+    tags = {str(t).strip() for t in (intent_tags or []) if str(t).strip()}
+    is_chat_only = not tags or not (
+        tags & {
+            INTENT_TAG_REALTIME,
+            INTENT_TAG_NETWORK,
+            INTENT_TAG_PLUGIN,
+            INTENT_TAG_IMAGE,
+            INTENT_TAG_ADMIN,
+        }
+    )
+
+    result: list[dict[str, Any]] = []
+    for schema in schemas:
+        func = schema.get("function", {}) if isinstance(schema, dict) else {}
+        name = str(func.get("name", "") or "").strip()
+        tool = registry.get(name)
+        if tool is None or tool.is_disabled:
+            continue
+        # 管理工具非管理场景过滤
+        if _is_admin_tool(tool) and INTENT_TAG_ADMIN not in tags:
+            continue
+        tool_tags = _tool_intent_tags(tool)
+
+        # 纯闲聊：只放行轻量查证工具
+        if is_chat_only:
+            if name in _LIGHTWEIGHT_LOOKUP_TOOL_NAMES:
+                result.append(schema)
+            elif has_images and tool.requires_image:
+                result.append(schema)
+            continue
+
+        # 有意图标签：按标签放行
+        should_include = False
+        if INTENT_TAG_IMAGE in tags and (
+            tool.requires_image or INTENT_TAG_IMAGE in tool_tags
+        ):
+            should_include = True
+        if (INTENT_TAG_REALTIME in tags or INTENT_TAG_NETWORK in tags) and (
+            tool.requires_network
+            or INTENT_TAG_REALTIME in tool_tags
+            or INTENT_TAG_NETWORK in tool_tags
+        ):
+            should_include = True
+        if INTENT_TAG_PLUGIN in tags and INTENT_TAG_PLUGIN in tool_tags:
+            should_include = True
+        if INTENT_TAG_MEMORY in tags and INTENT_TAG_MEMORY in tool_tags:
+            should_include = True
+        if INTENT_TAG_LOCAL in tags and INTENT_TAG_LOCAL in tool_tags:
+            should_include = True
+        # 轻量查证工具始终放行（想查就能查）
+        if name in _LIGHTWEIGHT_LOOKUP_TOOL_NAMES:
+            should_include = True
+        if should_include:
+            result.append(schema)
+    return result
+
+
+def semantic_tool_guidance() -> str:
+    """工具使用总原则指导文本
+
+    参考参考插件 semantic_tool_guidance 设计，返回自然语言指导，
+    注入到system消息，指导模型正确使用工具。
+
+    返回:
+        str: 工具使用指导文本
+    """
+    return (
+        "工具使用总原则：能直接回答就别起工具；不确定、高风险、时效性强、"
+        "明显需要查证时再调用工具。"
+        "当当前消息包含你不认识、无法确定指代或可能有圈内含义的专有名词、"
+        "角色名、作品名、游戏/动漫术语、外号、别称、缩写、谐音、梗或活动名时，"
+        "如果可用工具里有联网搜索，必须先调用查证；不要凭记忆猜，"
+        "也不要直接在群里问这是什么梗/什么意思。"
+        "用户明确要求生成图片时，必须调用图片生成工具，不要只给提示词。"
+        "最终回复只输出纯文本，不要markdown、项目符号列表、编号列表，"
+        "也不要说正在查询、根据搜索结果或我需要确认一下。"
+        "群聊接梗场景优先像群友接话，不要为了显得聪明而滥用工具。"
+    )
+
+
+# 工具默认元数据表：按工具名补全 intent_tags/evidence_kind/latency_class 等。
+# 参考参考插件 tool_catalog._default_tool_metadata 设计，
+# 技能包显式声明的元数据会覆盖默认值。
+_TOOL_METADATA_DEFAULTS: dict[str, dict[str, Any]] = {
+    # 网络搜索类
+    "web_search": {
+        "intent_tags": [INTENT_TAG_REALTIME, INTENT_TAG_NETWORK],
+        "evidence_kind": "web",
+        "requires_network": True,
+        "latency_class": "network",
+    },
+    "fetch_webpage": {
+        "intent_tags": [INTENT_TAG_NETWORK],
+        "evidence_kind": "web",
+        "requires_network": True,
+        "latency_class": "network",
+    },
+    # 插件知识类
+    "search_plugin_knowledge": {
+        "intent_tags": [INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
+        "evidence_kind": "plugin",
+        "latency_class": "fast",
+    },
+    "get_plugin_detail": {
+        "intent_tags": [INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
+        "evidence_kind": "plugin",
+        "latency_class": "fast",
+    },
+    "list_available_plugins": {
+        "intent_tags": [INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
+        "evidence_kind": "plugin",
+        "latency_class": "fast",
+    },
+    # 记忆类
+    "recall_memory": {
+        "intent_tags": [INTENT_TAG_MEMORY],
+        "evidence_kind": "memory",
+        "latency_class": "fast",
+    },
+    # 插件调用类
+    "invoke_plugin_command": {
+        "intent_tags": [INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
+        "evidence_kind": "plugin",
+        "latency_class": "slow",
+    },
+    "get_plugin_command_help": {
+        "intent_tags": [INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
+        "evidence_kind": "plugin",
+        "latency_class": "fast",
+    },
+    "search_plugin_by_capability": {
+        "intent_tags": [INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
+        "evidence_kind": "plugin",
+        "latency_class": "fast",
+    },
+    # 图片生成类
+    "image_generate": {
+        "intent_tags": [INTENT_TAG_IMAGE],
+        "evidence_kind": "media",
+        "latency_class": "slow",
+        "requires_network": True,
+    },
+    # 内置技能包
+    "get_news": {
+        "intent_tags": [INTENT_TAG_REALTIME, INTENT_TAG_NETWORK],
+        "evidence_kind": "web",
+        "requires_network": True,
+        "latency_class": "network",
+    },
+    "get_weather": {
+        "intent_tags": [INTENT_TAG_REALTIME, INTENT_TAG_NETWORK],
+        "evidence_kind": "web",
+        "requires_network": True,
+        "latency_class": "network",
+    },
+    "get_current_time": {
+        "intent_tags": [INTENT_TAG_LOCAL],
+        "evidence_kind": "context",
+        "latency_class": "fast",
+    },
+    "search_wiki": {
+        "intent_tags": [INTENT_TAG_NETWORK],
+        "evidence_kind": "web",
+        "requires_network": True,
+        "latency_class": "network",
+    },
+    "get_game_info": {
+        "intent_tags": [INTENT_TAG_NETWORK],
+        "evidence_kind": "web",
+        "requires_network": True,
+        "latency_class": "network",
+    },
+    # 群组查询类
+    "get_group_members": {
+        "intent_tags": [INTENT_TAG_LOCAL],
+        "evidence_kind": "context",
+        "latency_class": "fast",
+    },
+    "get_group_member_info": {
+        "intent_tags": [INTENT_TAG_LOCAL],
+        "evidence_kind": "context",
+        "latency_class": "fast",
+    },
+    "find_group_member": {
+        "intent_tags": [INTENT_TAG_LOCAL],
+        "evidence_kind": "context",
+        "latency_class": "fast",
+    },
+    # 上下文查询类
+    "get_favor": {
+        "intent_tags": [INTENT_TAG_LOCAL],
+        "evidence_kind": "context",
+        "latency_class": "fast",
+    },
+    "get_datetime": {
+        "intent_tags": [INTENT_TAG_LOCAL],
+        "evidence_kind": "context",
+        "latency_class": "fast",
+    },
+}
+"""工具默认元数据表"""
+
+
+def apply_tool_metadata_defaults(registry) -> None:
+    """为注册表中所有工具补全默认元数据
+
+    参考参考插件 tool_catalog.apply_tool_metadata_defaults 设计：
+    按 _TOOL_METADATA_DEFAULTS 表补全缺失的元数据字段，
+    工具显式声明的值优先于默认值。
+
+    参数:
+        registry: ToolRegistry 实例
+    """
+    for tool in registry.active_tools():
+        defaults = _TOOL_METADATA_DEFAULTS.get(tool.name, {})
+        if not defaults:
+            continue
+        # intent_tags: 默认值仅在工具未声明时填充
+        if not tool.intent_tags:
+            tool.intent_tags = list(defaults.get("intent_tags", []))
+        # evidence_kind: 默认值仅在工具仍为默认值时填充
+        if tool.evidence_kind == "tool":
+            tool.evidence_kind = defaults.get("evidence_kind", "tool")
+        # latency_class: 默认值仅在工具仍为默认值时填充
+        if tool.latency_class == "fast":
+            tool.latency_class = defaults.get("latency_class", "fast")
+        # requires_network: 默认值仅在工具为 False 时填充
+        if not tool.requires_network:
+            tool.requires_network = defaults.get(
+                "requires_network", False
+            )
+        # requires_image: 默认值仅在工具为 False 时填充
+        if not tool.requires_image:
+            tool.requires_image = defaults.get("requires_image", False)
+        # 重新分类以反映更新后的元数据
+        # categorize_by_metadata 内部已调用 register_tool，无需重复注册
+        tool_catalog.categorize_by_metadata(
+            tool.name, tool.to_metadata()
+        )
+
+
 # 全局单例
 tool_catalog = ToolCatalog()
 """工具目录单例"""
