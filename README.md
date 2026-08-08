@@ -35,15 +35,15 @@
 
 本项目符合 [OneBot](https://github.com/howmanybots/onebot) 标准，可基于以下项目与机器人框架/平台进行交互。
 
-| 项目地址 | 平台 | 备注 |
-| --- | --- | --- |
-| [LLOneBot](https://github.com/LLOneBot/LLOneBot) | NTQQ | 可用 |
-| [Napcat](https://github.com/NapNeko/NapCatQQ) | NTQQ | 可用 |
-| [Lagrange.Core](https://github.com/LagrangeDev/Lagrange.Core) | NTQQ | 可用 |
-| [QQ 官方适配器](https://github.com/nonebot/adapter-qq) | QQ 官方 | 内置支持 |
+| 项目地址                                                          | 平台        | 备注   |
+| ------------------------------------------------------------- | --------- | ---- |
+| [LLOneBot](https://github.com/LLOneBot/LLOneBot)              | NTQQ      | 可用   |
+| [Napcat](https://github.com/NapNeko/NapCatQQ)                 | NTQQ      | 可用   |
+| [Lagrange.Core](https://github.com/LagrangeDev/Lagrange.Core) | NTQQ      | 可用   |
+| [QQ 官方适配器](https://github.com/nonebot/adapter-qq)             | QQ 官方     | 内置支持 |
 | [Minecraft 适配器](https://github.com/nonebot/adapter-minecraft) | Minecraft | 内置支持 |
 
----
+***
 
 ## 📦 功能特性
 
@@ -63,11 +63,8 @@
 
 ### 经济系统
 
-- 银行：存取款、兑换、转账、贷款、定期存款
+- 银行
 - 商店系统
-- 拍卖行
-- 典当行
-- 黑市
 - 签到与每日 wife
 
 ### 娱乐互动
@@ -93,7 +90,7 @@
 - APScheduler 调度
 - 行为 / 性能 / 调度 / 银行日志
 
----
+***
 
 ## 🛠️ 安装与部署
 
@@ -153,13 +150,13 @@ win启动.bat
 
 机器人默认监听 `http://0.0.0.0:8080`，根据适配器选择对应连接方式：
 
-| 适配器 | 连接地址 |
-| --- | --- |
+| 适配器        | 连接地址                                |
+| ---------- | ----------------------------------- |
 | OneBot V11 | `ws://127.0.0.1:8080/onebot/v11/ws` |
 | OneBot V12 | `ws://127.0.0.1:8080/onebot/v12/ws` |
-| QQ 官方 | 由 `QQ_BOTS` 配置决定 |
+| QQ 官方      | 由 `QQ_BOTS` 配置决定                    |
 
----
+***
 
 ## 📋 项目结构
 
@@ -190,7 +187,7 @@ liuying-bot/
         ├── qq_bot_config/ qzone/ web_search/ zan/
 ```
 
----
+***
 
 ## 🧩 插件清单
 
@@ -214,7 +211,7 @@ liuying-bot/
 - Bot 重启、SQL 执行、数据清理
 - WebUI 控制台（仪表盘 / 插件 / 数据库 / 系统）
 
----
+***
 
 ## 📝 开发说明
 
@@ -256,7 +253,7 @@ class MyTool(AgentTool):
 register_external_tool(MyTool())
 ```
 
----
+***
 
 ## ❔ 注意事项
 
@@ -271,7 +268,7 @@ register_external_tool(MyTool())
 - 协议端与机器人不同服务器时，将 `IMAGE_TO_BYTES` 设为 `True`
 - AI 插件优先级为 2，需在数据库 / LLM / 缓存就绪后加载
 
----
+***
 
 ## 📜 贡献指南
 
@@ -282,7 +279,7 @@ register_external_tool(MyTool())
 3. 提交更改（遵循 PEP 8 与项目代码规范）
 4. 发起 Pull Request
 
----
+***
 
 ## 🌟 特别感谢
 
@@ -290,19 +287,20 @@ register_external_tool(MyTool())
 - [OneBot](https://github.com/howmanybots/onebot)：超棒的机器人协议
 - [nonebot-plugin-alconna](https://github.com/noneplugin/nonebot-plugin-alconna)：命令解析插件
 - [nonebot-plugin-uninfo](https://github.com/NoneStudio/nonebot-plugin-uninfo)：会话信息插件
-- [真寻 bot (zhenxun_bot)](https://github.com/zhenxun-org/zhenxun_bot)：流萤机器人的许多功能灵感与实现参考均来自真寻机器人，在此特别致谢
+- [真寻 bot (zhenxun\_bot)](https://github.com/zhenxun-org/zhenxun_bot)：流萤机器人的许多功能灵感与实现参考均来自真寻机器人，在此特别致谢
 
----
+***
 
 ## 📄 许可证
 
 本项目基于 [AGPL-3.0](./LICENSE) 协议开源。
 
----
+***
 
 ## 📞 反馈与联系
 
-- 仓库地址：https://gitee.com/shiranranran/liuying-bot
-- 问题反馈：https://gitee.com/shiranranran/liuying-bot/issues
+- 仓库地址：<https://gitee.com/shiranranran/liuying-bot>
+- 问题反馈：<https://gitee.com/shiranranran/liuying-bot/issues>
 
 > 发起 issue 前，希望您能了解 [提问的智慧](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way/blob/main/README-zh_CN.md)。
+
