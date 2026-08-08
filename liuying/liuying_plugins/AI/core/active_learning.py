@@ -17,36 +17,6 @@ from .json_utils import extract_json_payload
 from .llm import llm_helper
 from .memory import memory_manager
 
-_UNCERTAINTY_PROMPT = """请分析以下AI回复中是否包含不确定或可能不准确的信息。
-
-用户问题：{user_question}
-AI回复：{ai_reply}
-
-请输出JSON格式（只输出JSON，不要其他内容）：
-{{
-  "has_uncertainty": true/false,
-  "uncertain_points": ["不确定点1", "不确定点2"],
-  "confidence": 0.0-1.0,
-  "worth_researching": true/false
-}}
-
-判定标准：
-- has_uncertainty: 是否包含不确定信息
-- uncertain_points: 具体的不确定点列表
-- confidence: 整体置信度（0-1）
-- worth_researching: 是否值得深入查证（高价值问题为true）"""
-
-_RESEARCH_PROMPT = """请对以下问题进行深度查证，给出准确的事实和来源说明。
-
-查证问题：{question}
-背景信息：{context}
-
-要求：
-1. 给出准确的事实陈述
-2. 说明信息来源（如已知）
-3. 标注置信度（0-1）
-4. 只返回查证结果，不要其他内容"""
-
 _DAILY_QUOTA = 10
 """每日主动学习配额"""
 
@@ -122,9 +92,22 @@ class ActiveLearning:
             return None
         if not ai_reply or not ai_reply.strip():
             return None
-        prompt = _UNCERTAINTY_PROMPT.format(
-            user_question=user_question[:200],
-            ai_reply=ai_reply[:500],
+        prompt = (
+            "请分析以下AI回复中是否包含不确定或可能不准确的信息。\n\n"
+            f"用户问题：{user_question[:200]}\n"
+            f"AI回复：{ai_reply[:500]}\n\n"
+            "请输出JSON格式（只输出JSON，不要其他内容）：\n"
+            "{\n"
+            '  "has_uncertainty": true/false,\n'
+            '  "uncertain_points": ["不确定点1", "不确定点2"],\n'
+            '  "confidence": 0.0-1.0,\n'
+            '  "worth_researching": true/false\n'
+            "}\n\n"
+            "判定标准：\n"
+            "- has_uncertainty: 是否包含不确定信息\n"
+            "- uncertain_points: 具体的不确定点列表\n"
+            "- confidence: 整体置信度（0-1）\n"
+            "- worth_researching: 是否值得深入查证（高价值问题为true）"
         )
         try:
             _, content = await llm_helper.chat(
@@ -162,9 +145,15 @@ class ActiveLearning:
             return None
         if not self._check_quota():
             return None
-        prompt = _RESEARCH_PROMPT.format(
-            question=question,
-            context=context[:300],
+        prompt = (
+            "请对以下问题进行深度查证，给出准确的事实和来源说明。\n\n"
+            f"查证问题：{question}\n"
+            f"背景信息：{context[:300]}\n\n"
+            "要求：\n"
+            "1. 给出准确的事实陈述\n"
+            "2. 说明信息来源（如已知）\n"
+            "3. 标注置信度（0-1）\n"
+            "4. 只返回查证结果，不要其他内容"
         )
         try:
             finding = await llm_helper.chat_text(

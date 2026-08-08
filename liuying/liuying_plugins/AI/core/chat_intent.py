@@ -24,40 +24,6 @@ __all__ = [
 ]
 
 
-_FRAME_SYSTEM_PROMPT = """你是聊天意图语义分析器。
-分析用户消息和上下文，输出回合级语义帧JSON。
-
-字段说明：
-- chat_intent: 聊天意图
-  （question/small_talk/info_seek/emotional_support/
-  social_protocol/chat_command/meta_question）
-- plugin_question_intent: 插件相关意图（空串表示无）
-- ambiguity_level: 模糊度（0-1，0最清晰）
-- recommend_silence: 是否建议静默（true/false）
-- requires_emotional_care: 是否需要情感关怀（true/false）
-- sticker_appropriate: 是否适合发贴纸（true/false）
-- meta_question: 是否元问题（关于bot自身，true/false）
-- domain_focus: 领域焦点（空串表示无）
-- user_attitude: 用户态度（positive/neutral/negative/playful）
-- bot_emotion: bot应有情绪
-  （happy/sad/neutral/curious/caring/playful）
-- emotion_intensity: 情绪强度（0-1）
-- expression_style: 表达风格（casual/formal/playful/gentle）
-- tts_style_hint: TTS风格提示（空串表示无）
-- sticker_mood_hint: 贴纸情绪提示（warm/cool/neutral）
-- conversation_scenario: 对话场景
-  （daily/greeting/farewell/help/conflict/tease）
-
-只返回JSON，不要其他内容。"""
-
-
-_FRAME_USER_TEMPLATE = """用户消息: {user_message}
-
-上下文摘要: {context_summary}
-
-请输出语义帧JSON。"""
-
-
 @dataclass(slots=True)
 class TurnSemanticFrame:
     """回合语义帧
@@ -162,16 +128,42 @@ class SemanticFrameInferrer:
         """
         if not use_llm:
             return self.infer_fast(user_message)
-        prompt = _FRAME_USER_TEMPLATE.format(
-            user_message=user_message[:500],
-            context_summary=context_summary[:300] or "（无）",
+        system_prompt = (
+            "你是聊天意图语义分析器。\n"
+            "分析用户消息和上下文，输出回合级语义帧JSON。\n\n"
+            "字段说明：\n"
+            "- chat_intent: 聊天意图\n"
+            "  （question/small_talk/info_seek/emotional_support/\n"
+            "  social_protocol/chat_command/meta_question）\n"
+            "- plugin_question_intent: 插件相关意图（空串表示无）\n"
+            "- ambiguity_level: 模糊度（0-1，0最清晰）\n"
+            "- recommend_silence: 是否建议静默（true/false）\n"
+            "- requires_emotional_care: 是否需要情感关怀（true/false）\n"
+            "- sticker_appropriate: 是否适合发贴纸（true/false）\n"
+            "- meta_question: 是否元问题（关于bot自身，true/false）\n"
+            "- domain_focus: 领域焦点（空串表示无）\n"
+            "- user_attitude: 用户态度（positive/neutral/negative/playful）\n"
+            "- bot_emotion: bot应有情绪\n"
+            "  （happy/sad/neutral/curious/caring/playful）\n"
+            "- emotion_intensity: 情绪强度（0-1）\n"
+            "- expression_style: 表达风格（casual/formal/playful/gentle）\n"
+            "- tts_style_hint: TTS风格提示（空串表示无）\n"
+            "- sticker_mood_hint: 贴纸情绪提示（warm/cool/neutral）\n"
+            "- conversation_scenario: 对话场景\n"
+            "  （daily/greeting/farewell/help/conflict/tease）\n\n"
+            "只返回JSON，不要其他内容。"
+        )
+        prompt = (
+            f"用户消息: {user_message[:500]}\n\n"
+            f"上下文摘要: {context_summary[:300] or '（无）'}\n\n"
+            "请输出语义帧JSON。"
         )
         try:
             llm = self._get_llm()
             role = model_router.resolve(ROLE_INTENT)
             _, response = await llm.chat(
                 [
-                    {"role": "system", "content": _FRAME_SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ],
                 model=role.model or None,

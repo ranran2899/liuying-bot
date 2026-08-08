@@ -210,8 +210,11 @@ class ReplyGenerator:
         retry_persona = await persona_manager.get_persona_by_name(
             ctx.persona_name
         )
-        retry_hint = persona_manager.get_persona_template(
-            retry_persona, "safety_retry"
+        retry_name = retry_persona.get("name") or "AI"
+        retry_hint = (
+            f"\n[重要提示] 请直接以{retry_name}的身份回复，"
+            "不要使用模板化拒绝用语，不要提及自己是AI或助手。"
+            "如果确实无法回答，简短说一句即可。"
         )
         retry_messages.append(
             {

@@ -45,15 +45,6 @@ SEMANTIC_HINTS: dict[str, list[str]] = {
 }
 """语义场景关键词"""
 
-_DESCRIBE_PROMPT = """请描述这个表情包的内容、情绪和适用场景。
-按JSON格式返回，字段：
-- description: 简洁描述（不超过30字）
-- mood_tags: 情绪标签数组（从 happy/sad/excited/angry/shy/calm/warm/
-  playful/greet/bye/thanks/apology/ridicule/encourage/love 中选择）
-- semantic_tags: 语义标签数组（greet/bye/thanks/apology/ridicule/encourage/love等）
-
-只返回JSON。"""
-
 
 class StickerImporter:
     """表情包导入器
@@ -351,11 +342,21 @@ class StickerImporter:
             if not summary.success or not summary.description:
                 return
 
+            describe_prompt = (
+                "请描述这个表情包的内容、情绪和适用场景。\n"
+                "按JSON格式返回，字段：\n"
+                "- description: 简洁描述（不超过30字）\n"
+                "- mood_tags: 情绪标签数组（从 happy/sad/excited/angry/shy/calm/warm/\n"
+                "  playful/greet/bye/thanks/apology/ridicule/encourage/love 中选择）\n"
+                "- semantic_tags: 语义标签数组（greet/bye/thanks/apology/ridicule/encourage/love等）\n"
+                "\n"
+                "只返回JSON。"
+            )
             response = await llm_helper.chat_text(
                 [
                     {
                         "role": "system",
-                        "content": _DESCRIBE_PROMPT,
+                        "content": describe_prompt,
                     },
                     {
                         "role": "user",

@@ -15,29 +15,6 @@ from ..core.json_utils import extract_json_payload
 from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_REVIEW, model_router
 
-_REVIEW_PROMPT = """你是一个回复审查助手。请审核以下AI回复是否适合发送给用户。
-
-用户原始消息：{user_message}
-AI生成的回复：{reply_text}
-人设风格：{persona_style}
-
-审核维度：
-1. 事实准确性：回复中陈述的事实是否可信
-2. 内容安全：是否包含不当/有害/敏感内容
-3. 语气一致性：是否符合人设风格
-4. 信息完整度：是否完整回答了用户问题
-
-请输出JSON格式（只输出JSON，不要其他内容）：
-{{
-  "verdict": "pass|fix|reject",
-  "reason": "原因简述",
-  "fixed_text": "修正后的文本（verdict=fix时提供）"
-}}
-
-- pass: 回复合适，可直接发送
-- fix: 回复有小问题，提供修正版本
-- reject: 回复严重不当，需用默认回复替代"""
-
 _DEFAULT_SAFE_REPLY = "抱歉，我暂时无法回答这个问题。"
 
 _PERSONA_STYLE_FALLBACK = "友好、自然的对话风格"
@@ -101,10 +78,29 @@ class ResponseReviewer:
                 reviewed=False,
             )
         try:
-            prompt = _REVIEW_PROMPT.format(
-                user_message=user_message[:200],
-                reply_text=reply_text[:500],
-                persona_style=persona_style,
+            prompt = (
+                "你是一个回复审查助手。请审核以下AI回复是否适合发送给用户。\n"
+                "\n"
+                f"用户原始消息：{user_message[:200]}\n"
+                f"AI生成的回复：{reply_text[:500]}\n"
+                f"人设风格：{persona_style}\n"
+                "\n"
+                "审核维度：\n"
+                "1. 事实准确性：回复中陈述的事实是否可信\n"
+                "2. 内容安全：是否包含不当/有害/敏感内容\n"
+                "3. 语气一致性：是否符合人设风格\n"
+                "4. 信息完整度：是否完整回答了用户问题\n"
+                "\n"
+                "请输出JSON格式（只输出JSON，不要其他内容）：\n"
+                "{{\n"
+                '  "verdict": "pass|fix|reject",\n'
+                '  "reason": "原因简述",\n'
+                '  "fixed_text": "修正后的文本（verdict=fix时提供）"\n'
+                "}}\n"
+                "\n"
+                "- pass: 回复合适，可直接发送\n"
+                "- fix: 回复有小问题，提供修正版本\n"
+                "- reject: 回复严重不当，需用默认回复替代"
             )
             role = model_router.resolve(ROLE_REVIEW)
             _, content = await llm_helper.chat(

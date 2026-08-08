@@ -32,21 +32,6 @@ _STYLE_TASK_ID = "ai_group_style_autobuild"
 _SAMPLE_LIMIT = 50
 """每次采样消息数"""
 
-_STYLE_PROMPT = """你是群聊风格分析器。
-分析以下群聊消息样本，推断群组的风格特征。
-
-消息样本：
-{messages}
-
-请输出JSON格式（只输出JSON，不要其他内容）：
-{{
-  "language_style": "语言风格描述（如休闲/正式/玩梗/技术向）",
-  "topic_preference": "话题偏好描述（如游戏/学习/日常/工作）",
-  "atmosphere": "群氛围描述（如活跃/安静/友好/竞争）",
-  "pace": "交流节奏描述（如快节奏/慢节奏/碎片化）",
-  "summary": "一句话总结群风格"
-}}"""
-
 
 async def _analyze_group_style(
     group_id: str,
@@ -91,7 +76,22 @@ async def _analyze_group_style(
         return ""
     messages_text = "\n".join(samples)
 
-    prompt = _STYLE_PROMPT.format(messages=messages_text)
+    prompt = (
+        "你是群聊风格分析器。\n"
+        "分析以下群聊消息样本，推断群组的风格特征。\n"
+        "\n"
+        "消息样本：\n"
+        f"{messages_text}\n"
+        "\n"
+        "请输出JSON格式（只输出JSON，不要其他内容）：\n"
+        "{{\n"
+        '  "language_style": "语言风格描述（如休闲/正式/玩梗/技术向）",\n'
+        '  "topic_preference": "话题偏好描述（如游戏/学习/日常/工作）",\n'
+        '  "atmosphere": "群氛围描述（如活跃/安静/友好/竞争）",\n'
+        '  "pace": "交流节奏描述（如快节奏/慢节奏/碎片化）",\n'
+        '  "summary": "一句话总结群风格"\n'
+        "}}"
+    )
     try:
         role = model_router.resolve(ROLE_WARMUP)
         _, response = await llm_helper.chat(

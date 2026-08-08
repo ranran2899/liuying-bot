@@ -23,45 +23,6 @@ __all__ = [
 ]
 
 
-_GROUP_STYLE_PROMPT = """你是群聊风格分析师。下面是一段群聊对话摘要。
-请总结这个群当前的整体说话风格，包含5个维度：
-- tone: 语气/氛围（10-20字）
-- pace: 节奏（慢/中/快+特点）
-- catchphrases: 口头禅/常用感叹词列表（3-6项）
-- taboos: 禁忌或敏感话题（0-3项）
-- typical_length: 典型单句长度（短/中/长+说明）
-
-只输出严格JSON对象，不要markdown。
-格式：{"tone":"...","pace":"...","catchphrases":["..."],
-"taboos":["..."],"typical_length":"..."}
-
-群聊对话摘要：
-{conversation}"""
-
-
-_GROUP_KNOWLEDGE_PROMPT = """你是群聊知识抽取器。从下面的群聊中抽取群知识。
-每条知识包含：
-- term: 术语/梗名
-- definition: 含义解释
-- aliases: 别名列表
-- is_meme: 是否为梗（true/false）
-- safe_usage: 安全用法说明
-
-只输出JSON数组，不要markdown。
-格式：[{{"term":"...","definition":"...","aliases":[],"is_meme":false,"safe_usage":"..."}}]
-
-群聊内容：
-{conversation}"""
-
-
-_SESSION_SUMMARY_PROMPT = """请将以下对话压缩成2-4句中文摘要。
-保留人物关系、话题延续、已确认事实和未完成事项。
-直接输出摘要，不要列表，不要解释。
-
-对话内容：
-{conversation}"""
-
-
 _STYLE_CACHE_TTL = 3600.0
 """群风格缓存TTL（秒）"""
 
@@ -128,7 +89,20 @@ async def extract_group_style(
     if not conversation.strip():
         return {}
 
-    prompt = _GROUP_STYLE_PROMPT.format(conversation=conversation[:2000])
+    prompt = (
+        "你是群聊风格分析师。下面是一段群聊对话摘要。\n"
+        "请总结这个群当前的整体说话风格，包含5个维度：\n"
+        "- tone: 语气/氛围（10-20字）\n"
+        "- pace: 节奏（慢/中/快+特点）\n"
+        "- catchphrases: 口头禅/常用感叹词列表（3-6项）\n"
+        "- taboos: 禁忌或敏感话题（0-3项）\n"
+        "- typical_length: 典型单句长度（短/中/长+说明）\n\n"
+        "只输出严格JSON对象，不要markdown。\n"
+        '格式：{"tone":"...","pace":"...","catchphrases":["..."],\n'
+        '"taboos":["..."],"typical_length":"..."}\n\n'
+        "群聊对话摘要：\n"
+        f"{conversation[:2000]}"
+    )
     try:
         response = await llm_helper.chat_text(
             [{"role": "user", "content": prompt}],
@@ -162,8 +136,18 @@ async def extract_group_knowledge(
     if not conversation.strip():
         return []
 
-    prompt = _GROUP_KNOWLEDGE_PROMPT.format(
-        conversation=conversation[:2000]
+    prompt = (
+        "你是群聊知识抽取器。从下面的群聊中抽取群知识。\n"
+        "每条知识包含：\n"
+        "- term: 术语/梗名\n"
+        "- definition: 含义解释\n"
+        "- aliases: 别名列表\n"
+        "- is_meme: 是否为梗（true/false）\n"
+        "- safe_usage: 安全用法说明\n\n"
+        "只输出JSON数组，不要markdown。\n"
+        '格式：[{"term":"...","definition":"...","aliases":[],"is_meme":false,"safe_usage":"..."}]\n\n'
+        "群聊内容：\n"
+        f"{conversation[:2000]}"
     )
     try:
         response = await llm_helper.chat_text(
@@ -199,8 +183,12 @@ async def summarize_conversation(
     if not conversation.strip():
         return ""
 
-    prompt = _SESSION_SUMMARY_PROMPT.format(
-        conversation=conversation[:3000]
+    prompt = (
+        "请将以下对话压缩成2-4句中文摘要。\n"
+        "保留人物关系、话题延续、已确认事实和未完成事项。\n"
+        "直接输出摘要，不要列表，不要解释。\n\n"
+        "对话内容：\n"
+        f"{conversation[:3000]}"
     )
     try:
         return await llm_helper.chat_text(

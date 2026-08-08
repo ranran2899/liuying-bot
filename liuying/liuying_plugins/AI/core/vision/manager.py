@@ -29,14 +29,6 @@ __all__ = [
 ]
 
 
-_VISION_PROMPT = "请用中文简要描述这张图片的内容，不超过50字。"
-"""视觉理解prompt"""
-
-
-_GIF_VISION_PROMPT = "请用中文简要描述这个GIF动图的内容，不超过50字。"
-"""GIF视觉理解prompt"""
-
-
 _GIF_MAX_BYTES = 8 * 1024 * 1024
 """GIF最大字节数"""
 
@@ -276,7 +268,7 @@ async def summarize_image(
     if llm_helper is None:
         llm_helper = _default_llm_helper
 
-    use_prompt = prompt or _VISION_PROMPT
+    use_prompt = prompt or "请用中文简要描述这张图片的内容，不超过50字。"
     data_url = VisionUtils.to_data_url(image_data, mime)
 
     messages: list[dict[str, Any]] = [
@@ -370,7 +362,7 @@ async def summarize_gif(
         jpeg_data,
         mime="image/jpeg",
         llm_helper=llm_helper,
-        prompt=_GIF_VISION_PROMPT,
+        prompt="请用中文简要描述这个GIF动图的内容，不超过50字。",
     )
 
     summary = GifSummary(

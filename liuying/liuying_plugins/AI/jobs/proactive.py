@@ -129,12 +129,38 @@ class ProactiveHelper:
             else "未知"
         )
 
-        prompt = await persona_manager.get_active_persona_template(
-            "proactive_group",
-            time_period=period,
-            time_flavor=time_flavor,
-            group_style=group_style or "未设置",
-            last_active=last_active_str,
+        persona = persona_manager.get_default_persona()
+        persona_name = persona.get("name") or "AI"
+        interests_list = persona.get("interests") or []
+        topics_list = persona.get("proactive_topics") or []
+        if not isinstance(interests_list, list):
+            interests_list = []
+        if not isinstance(topics_list, list):
+            topics_list = []
+        interests_str = (
+            "、".join(str(i) for i in interests_list)
+            if interests_list
+            else "未指定"
+        )
+        topics_str = (
+            "、".join(str(t) for t in topics_list)
+            if topics_list
+            else "无"
+        )
+        prompt = (
+            f"现在群里安静了一段时间，作为{persona_name}，"
+            "决定是否要主动说点什么。\n\n"
+            f"当前时段: {period}\n"
+            f"时段氛围: {time_flavor}\n"
+            f"群风格: {group_style or '未设置'}\n"
+            f"最近活跃时间: {last_active_str}\n"
+            f"兴趣领域: {interests_str}\n"
+            f"建议话题: {topics_str}\n\n"
+            "请用JSON格式返回决策:\n"
+            "- should_send: 是否发送消息（true/false）\n"
+            "- message: 要发送的消息内容（should_send为true时填写，不超过50字）\n"
+            "- reason: 决策理由\n\n"
+            "只返回JSON，不要其他内容。"
         )
 
         try:
@@ -255,8 +281,16 @@ class ProactiveHelper:
             str: 问候消息，失败返回空串
         """
         try:
-            prompt = await persona_manager.get_active_persona_template(
-                "private_greeting", greeting_type=greeting_type
+            persona = persona_manager.get_default_persona()
+            persona_name = persona.get("name") or "AI"
+            prompt = (
+                f"请以{persona_name}的口吻为一位高好感度好友"
+                f"发送一条{greeting_type}问候。\n\n"
+                "要求：\n"
+                "1. 自然亲切，符合好友关系\n"
+                "2. 不超过30字\n"
+                "3. 不要使用称呼，直接说问候内容\n\n"
+                "只返回问候文本，不要其他内容。"
             )
             role = model_router.resolve(ROLE_WARMUP)
             response = await llm_helper.chat_text(

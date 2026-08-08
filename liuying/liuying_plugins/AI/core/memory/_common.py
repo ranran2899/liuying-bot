@@ -27,17 +27,6 @@ _WORKING_EXPIRE_HOURS = 24
 _EPISODIC_EXPIRE_DAYS = 30
 """episodic层过期天数"""
 
-_CONSOLIDATE_PROMPT = """请将以下对话记录摘要成一段简洁的记忆。
-
-对话记录：
-{history}
-
-要求：
-1. 提取关键信息和事件
-2. 保留重要细节
-3. 不超过100字
-4. 只返回摘要文本"""
-
 
 class MemoryEmbeddingUtils:
     """记忆嵌入与实体提取工具集

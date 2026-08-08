@@ -36,12 +36,6 @@ from .response_review import response_reviewer
 from .text_policy import ReplyTextPolicy
 from .types import ReplyContext, ReplyResult
 
-_QUOTA_INSUFFICIENT_TPL: str = (
-    "咦？你的token似乎不足捏（剩余 {remaining} token），"
-    "去兑换铜币再试试看~"
-)
-"""额度不足提示模板"""
-
 
 class ReplyProcessor:
     """回复处理器
@@ -221,8 +215,9 @@ class ReplyProcessor:
                 diagnosis_code=quota.reason,
             )
             if quota.need_remind:
-                tip = _QUOTA_INSUFFICIENT_TPL.format(
-                    remaining=max(0, quota.remaining)
+                tip = (
+                    f"咦？你的token似乎不足捏（剩余 {max(0, quota.remaining)} token），"
+                    "去兑换铜币再试试看~"
                 )
                 return ReplyResult(
                     text=tip,

@@ -8,7 +8,6 @@
 from datetime import datetime
 import json
 from pathlib import Path
-from typing import Any
 
 from ruamel.yaml import YAML
 
@@ -20,13 +19,7 @@ from ..config import get_config, set_config
 from ..models.user_persona import UserPersonaProfile
 from ..models.user_persona_selection import UserPersonaSelection
 from .llm import llm_helper as _default_llm_helper
-from .persona_templates import (
-    FAVOR_ATTITUDES,
-    PERSONA_UPDATE_PROMPT,
-    extract_persona_desc,
-    get_fallback_prompt,
-    render_persona_template,
-)
+from .persona_templates import FAVOR_ATTITUDES, extract_persona_desc
 
 _PERSONAS_DIR = Path(__file__).parent.parent / "personas"
 """人格配置文件目录"""
@@ -393,7 +386,16 @@ class PersonaManager:
             f"{msg.get('role', 'user')}: {msg.get('content', '')}"
             for msg in history[-20:]
         )
-        prompt = PERSONA_UPDATE_PROMPT.format(history=history_text)
+        prompt = (
+            "请根据以下用户与AI的对话历史，生成一份用户画像。\n\n"
+            f"对话历史：\n{history_text}\n\n"
+            "请用简洁的语言描述这个用户的特征，包括：\n"
+            "- 性格特点\n"
+            "- 兴趣爱好\n"
+            "- 交流风格\n"
+            "- 特别偏好\n\n"
+            "只返回画像描述文本，不要其他内容。画像应不超过200字。"
+        )
 
         try:
             persona = await llm_helper.chat_text(
@@ -455,57 +457,18 @@ class PersonaManager:
         """
         return persona.get("sticker_mood", "neutral")
 
-    def get_persona_template(
-        self, persona: dict, template_name: str, **kwargs: Any
-    ) -> str:
-        """渲染人设场景化提示模板
-
-        委托给 persona_templates.render_persona_template 实现。
-        保留此方法以维持向后兼容的API。
-
-        参数:
-            persona: 人格配置字典
-            template_name: 模板名（greeting/news/diary等）
-            **kwargs: 模板占位符参数
-
-        返回:
-            str: 渲染后的提示词，模板不存在返回空串
-        """
-        return render_persona_template(
-            persona, template_name, **kwargs
-        )
-
     def get_persona_fallback_prompt(self) -> str:
-        """获取全局默认人设的 fallback 模板提示词
+        """获取全局默认人设的兜底提示词
 
-        供安全过滤重试等场景使用。
-
-        返回:
-            str: 渲染后的 fallback 提示词
-        """
-        return get_fallback_prompt(self.get_default_persona())
-
-    async def get_active_persona_template(
-        self, template_name: str, **kwargs: Any
-    ) -> str:
-        """渲染全局默认人设的场景化模板（异步）
-
-        供定时任务（社交智能/日记/主动行为）使用，
-        自动加载全局默认人设并渲染模板。
-
-        参数:
-            template_name: 模板名
-            **kwargs: 模板占位符参数
+        供安全过滤重试、人格加载失败等场景使用。
+        提示词直接内联，不再从 YAML 模板渲染。
 
         返回:
-            str: 渲染后的提示词
+            str: 兜底人设提示词
         """
-        persona = await self.get_persona_by_name(
-            self.get_active_persona_name()
-        )
-        return render_persona_template(
-            persona, template_name, **kwargs
-        )
+        persona = self.get_default_persona()
+        name = persona.get("name") or "AI"
+        return f"你是{name}，一个温柔、有活力的AI伙伴。"
 
     def _load_meme_seeds(self) -> dict:
         """加载网络梗词典

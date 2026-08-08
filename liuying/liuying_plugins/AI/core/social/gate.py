@@ -18,36 +18,6 @@ from ..llm import llm_helper
 __all__ = ["SocialGate", "social_gate"]
 
 
-_GATE_PROMPT_TEMPLATE: str = """\
-你是一个主动社交闸门，负责判断 bot 是否应该在此刻主动联系用户。
-
-[本次想发的场景]
-{scenario}
-
-[初稿文案]
-{draft}
-
-[用户信息]
-- user_id: {user_id}
-- 用户画像摘要：{persona_snippet}
-- 当前时间：{now}
-
-[判断维度]
-- 当前时间是否打扰用户（深夜/上班高峰等需谨慎）
-- 文案是否自然像真人主动，而不是模板化群发
-- 文案是否与用户画像/最近互动主题贴合
-- 是否会显得「为了发而发」
-
-[输出]
-严格输出 JSON：
-{{
-  "allow": true 或 false,
-  "reason": "一句话说明",
-  "rewritten": "如果需要小改，把改后的文案放这（不改就给空串）"
-}}"""
-"""门控提示词模板"""
-
-
 class SocialGate:
     """社交智能门控
 
@@ -82,14 +52,28 @@ class SocialGate:
         返回:
             tuple[bool, str|None, str]: (是否允许, 改写文案或None, 原因)
         """
-        prompt = _GATE_PROMPT_TEMPLATE.format(
-            scenario=scenario,
-            draft=draft,
-            user_id=user_id,
-            persona_snippet=(persona_snippet or "<无>")[
-                :200
-            ],
-            now=now_str or "",
+        prompt = (
+            "你是一个主动社交闸门，负责判断 bot 是否应该在此刻主动联系用户。\n\n"
+            "[本次想发的场景]\n"
+            f"{scenario}\n\n"
+            "[初稿文案]\n"
+            f"{draft}\n\n"
+            "[用户信息]\n"
+            f"- user_id: {user_id}\n"
+            f"- 用户画像摘要：{(persona_snippet or '<无>')[:200]}\n"
+            f"- 当前时间：{now_str or ''}\n\n"
+            "[判断维度]\n"
+            "- 当前时间是否打扰用户（深夜/上班高峰等需谨慎）\n"
+            "- 文案是否自然像真人主动，而不是模板化群发\n"
+            "- 文案是否与用户画像/最近互动主题贴合\n"
+            "- 是否会显得「为了发而发」\n\n"
+            "[输出]\n"
+            "严格输出 JSON：\n"
+            "{{\n"
+            '  "allow": true 或 false,\n'
+            '  "reason": "一句话说明",\n'
+            '  "rewritten": "如果需要小改，把改后的文案放这（不改就给空串）"\n'
+            "}}"
         )
         try:
             text = await llm_helper.chat_text(

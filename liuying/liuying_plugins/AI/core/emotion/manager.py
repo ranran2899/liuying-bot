@@ -20,25 +20,6 @@ from .inner_state import InnerStateHelper
 _DEFAULT_PERSONA = "default"
 """默认人格名（未指定时回退）"""
 
-_INNER_STATE_PROMPT = """请分析以下对话，更新我对这个用户的情绪状态。
-
-当前状态：
-- 心情: {mood}
-- 能量: {energy}
-- 关系温度: {relation_warmth}
-- 待处理想法: {pending_thoughts}
-
-对话内容：
-{conversation}
-
-请用JSON格式返回更新后的状态，包含以下字段：
-- mood: 心情（happy/sad/neutral/excited/angry/calm）
-- energy: 能量值（0-1）
-- relation_warmth: 关系温度（0-1）
-- pending_thoughts: 待处理想法列表
-
-只返回JSON，不要其他内容。"""
-
 
 class EmotionManager:
     """情绪状态管理器
@@ -103,12 +84,21 @@ class EmotionManager:
             for msg in messages[-10:]
         )
 
-        prompt = _INNER_STATE_PROMPT.format(
-            mood=state.mood,
-            energy=state.energy,
-            relation_warmth=state.relation_warmth,
-            pending_thoughts=thoughts,
-            conversation=conversation,
+        prompt = (
+            "请分析以下对话，更新我对这个用户的情绪状态。\n\n"
+            "当前状态：\n"
+            f"- 心情: {state.mood}\n"
+            f"- 能量: {state.energy}\n"
+            f"- 关系温度: {state.relation_warmth}\n"
+            f"- 待处理想法: {thoughts}\n\n"
+            "对话内容：\n"
+            f"{conversation}\n\n"
+            "请用JSON格式返回更新后的状态，包含以下字段：\n"
+            "- mood: 心情（happy/sad/neutral/excited/angry/calm）\n"
+            "- energy: 能量值（0-1）\n"
+            "- relation_warmth: 关系温度（0-1）\n"
+            "- pending_thoughts: 待处理想法列表\n\n"
+            "只返回JSON，不要其他内容。"
         )
 
         try:

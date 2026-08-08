@@ -296,6 +296,9 @@ class SocialIntelligenceHelper:
         festival_line = (
             f"今日节日: {festival}\n" if festival else ""
         )
+        persona_name = (
+            persona_manager.get_default_persona().get("name") or "AI"
+        )
 
         async def _build_prompt(
             group: GroupContextSnapshot, time_period: str
@@ -306,12 +309,16 @@ class SocialIntelligenceHelper:
                 )
             )
             style_prompt = ProfileToolkit.build_group_style_prompt_block(style)
-            return await persona_manager.get_active_persona_template(
-                "greeting",
-                greeting_type="早安",
-                time_period=time_period,
-                festival_line=festival_line,
-                group_style=style_prompt or "群风格: 未设置",
+            group_style_str = style_prompt or "群风格: 未设置"
+            return (
+                f"你是{persona_name}，请生成一句自然的早安问候语。\n\n"
+                f"当前时段: {time_period}\n"
+                f"{festival_line}{group_style_str}\n\n"
+                "要求：\n"
+                "- 简短自然，不超过30字\n"
+                f"- 符合{persona_name}的性格和当前时段氛围\n"
+                "- 不要使用模板化用语\n\n"
+                "直接输出问候语，不要解释。"
             )
 
         await SocialIntelligenceHelper._generate_and_send_to_groups(
@@ -321,6 +328,9 @@ class SocialIntelligenceHelper:
     @staticmethod
     async def _evening_greeting() -> None:
         """晚安问候任务"""
+        persona_name = (
+            persona_manager.get_default_persona().get("name") or "AI"
+        )
 
         async def _build_prompt(
             group: GroupContextSnapshot, time_period: str
@@ -331,12 +341,16 @@ class SocialIntelligenceHelper:
                 )
             )
             style_prompt = ProfileToolkit.build_group_style_prompt_block(style)
-            return await persona_manager.get_active_persona_template(
-                "greeting",
-                greeting_type="晚安",
-                time_period=time_period,
-                festival_line="",
-                group_style=style_prompt or "群风格: 未设置",
+            group_style_str = style_prompt or "群风格: 未设置"
+            return (
+                f"你是{persona_name}，请生成一句自然的晚安问候语。\n\n"
+                f"当前时段: {time_period}\n"
+                f"{group_style_str}\n\n"
+                "要求：\n"
+                "- 简短自然，不超过30字\n"
+                f"- 符合{persona_name}的性格和当前时段氛围\n"
+                "- 不要使用模板化用语\n\n"
+                "直接输出问候语，不要解释。"
             )
 
         await SocialIntelligenceHelper._generate_and_send_to_groups(
@@ -350,8 +364,14 @@ class SocialIntelligenceHelper:
         async def _build_prompt(
             _group: GroupContextSnapshot, time_period: str
         ) -> str:
-            return await persona_manager.get_active_persona_template(
-                "news", time_period=time_period
+            return (
+                "请生成一条适合在群聊分享的轻松话题或新闻摘要。\n\n"
+                f"当前时段: {time_period}\n\n"
+                "要求：\n"
+                "- 简短有趣，不超过40字\n"
+                "- 适合群聊氛围\n"
+                "- 可以是科技/游戏/生活类话题\n\n"
+                "直接输出内容，不要解释。"
             )
 
         await SocialIntelligenceHelper._generate_and_send_to_groups(
@@ -387,8 +407,13 @@ class SocialIntelligenceHelper:
             ):
                 continue
 
-            prompt = await persona_manager.get_active_persona_template(
-                "topic_followup", summary=summary[:200]
+            prompt = (
+                "基于最近的群聊摘要，生成一句自然的延续话题。\n\n"
+                f"群聊摘要: {summary[:200]}\n\n"
+                "要求：\n"
+                "- 简短自然，不超过30字\n"
+                "- 像真人继续之前的聊天\n\n"
+                "直接输出内容，不要解释。"
             )
             try:
                 text = await llm_helper.chat_text(

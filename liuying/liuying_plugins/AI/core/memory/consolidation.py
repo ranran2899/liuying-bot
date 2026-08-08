@@ -13,7 +13,6 @@ from ...models.conversation_record import ConversationRecord
 from ...models.memory_item import MemoryItem
 from ..llm import llm_helper
 from ._common import (
-    _CONSOLIDATE_PROMPT,
     _DEFAULT_PERSONA,
     _EPISODIC_EXPIRE_DAYS,
     _REINFORCE_THRESHOLD,
@@ -151,7 +150,16 @@ class ConsolidationMixin:
         history = "\n".join(
             f"{r.role}: {r.content}" for r in records[-20:]
         )
-        prompt = _CONSOLIDATE_PROMPT.format(history=history)
+        prompt = (
+            "请将以下对话记录摘要成一段简洁的记忆。\n\n"
+            "对话记录：\n"
+            f"{history}\n\n"
+            "要求：\n"
+            "1. 提取关键信息和事件\n"
+            "2. 保留重要细节\n"
+            "3. 不超过100字\n"
+            "4. 只返回摘要文本"
+        )
         try:
             summary = await llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],

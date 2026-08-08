@@ -44,33 +44,6 @@ _VALID_RELATIONS = frozenset(
 _MAX_CANDIDATES = 5
 """单次进化判断的候选旧记忆数量"""
 
-_EVOLVE_PROMPT = """你是一个记忆关系判断助手。
-请判断新记忆与旧记忆之间的关系，只输出以下五个英文单词之一：
-
-- replaces: 新记忆完全覆盖旧记忆（旧信息已过时或被纠正）
-- enriches: 新记忆补充旧记忆（两者可合并为更完整记录）
-- confirms: 新记忆确认旧记忆（内容基本一致，巩固旧记忆）
-- challenges: 新记忆与旧记忆矛盾（保留两者，标记冲突）
-- unrelated: 两者无直接关系
-
-旧记忆：
-{old_summary}
-
-新记忆：
-{new_summary}
-
-只输出一个英文单词，不要任何其他内容。"""
-
-_MERGE_PROMPT = """请合并以下两条记忆为一条更完整的摘要，保留双方关键信息。
-
-旧记忆：{old_summary}
-新记忆：{new_summary}
-
-要求：
-1. 只输出合并后的摘要文本
-2. 不超过100字
-3. 不输出任何解释"""
-
 
 class EvolveMixin:
     """记忆进化 Mixin
@@ -194,9 +167,19 @@ class EvolveMixin:
         返回:
             str: 关系类型
         """
-        prompt = _EVOLVE_PROMPT.format(
-            old_summary=old_summary,
-            new_summary=new_summary,
+        prompt = (
+            "你是一个记忆关系判断助手。\n"
+            "请判断新记忆与旧记忆之间的关系，只输出以下五个英文单词之一：\n\n"
+            "- replaces: 新记忆完全覆盖旧记忆（旧信息已过时或被纠正）\n"
+            "- enriches: 新记忆补充旧记忆（两者可合并为更完整记录）\n"
+            "- confirms: 新记忆确认旧记忆（内容基本一致，巩固旧记忆）\n"
+            "- challenges: 新记忆与旧记忆矛盾（保留两者，标记冲突）\n"
+            "- unrelated: 两者无直接关系\n\n"
+            "旧记忆：\n"
+            f"{old_summary}\n\n"
+            "新记忆：\n"
+            f"{new_summary}\n\n"
+            "只输出一个英文单词，不要任何其他内容。"
         )
         try:
             _, content = await llm_helper.chat(
@@ -271,9 +254,14 @@ class EvolveMixin:
             old_summary: 旧记忆摘要
             new_summary: 新记忆摘要
         """
-        prompt = _MERGE_PROMPT.format(
-            old_summary=old_summary,
-            new_summary=new_summary,
+        prompt = (
+            "请合并以下两条记忆为一条更完整的摘要，保留双方关键信息。\n\n"
+            f"旧记忆：{old_summary}\n"
+            f"新记忆：{new_summary}\n\n"
+            "要求：\n"
+            "1. 只输出合并后的摘要文本\n"
+            "2. 不超过100字\n"
+            "3. 不输出任何解释"
         )
         try:
             merged = await llm_helper.chat_text(

@@ -14,16 +14,6 @@ from ...models.memory_item import MemoryItem
 from ..llm import llm_helper
 from ._common import _DEFAULT_PERSONA
 
-_SUMMARIZE_PROMPT = """请将以下多条短期记忆摘要为一条简洁的长期记忆。
-
-短期记忆列表：
-{memories}
-
-要求：
-1. 提取关键信息和事件，去除重复内容
-2. 保留重要细节和时间线索
-3. 不超过150字
-4. 只返回摘要文本，不要任何解释"""
 
 _BATCH_SIZE = 8
 """单批摘要的记忆数量"""
@@ -163,8 +153,16 @@ class MemorySummarizer:
                 else ""
             )
             lines.append(f"- [{timestamp}] {mem.summary}")
-        prompt = _SUMMARIZE_PROMPT.format(
-            memories="\n".join(lines)
+        joined = "\n".join(lines)
+        prompt = (
+            "请将以下多条短期记忆摘要为一条简洁的长期记忆。\n\n"
+            "短期记忆列表：\n"
+            f"{joined}\n\n"
+            "要求：\n"
+            "1. 提取关键信息和事件，去除重复内容\n"
+            "2. 保留重要细节和时间线索\n"
+            "3. 不超过150字\n"
+            "4. 只返回摘要文本，不要任何解释"
         )
         try:
             summary = await llm_helper.chat_text(

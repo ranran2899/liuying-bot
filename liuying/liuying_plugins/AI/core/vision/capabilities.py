@@ -21,8 +21,6 @@ _PROBE_CACHE_TTL_HOURS = 6
 _PROBE_CACHE_TTL_SECONDS = _PROBE_CACHE_TTL_HOURS * 3600
 """能力探测缓存TTL（秒）"""
 
-_PROBE_TEST_PROMPT = "描述这张测试图片"
-"""能力探测测试prompt"""
 
 _VISION_MODEL_KEYWORDS: tuple[str, ...] = (
     "gpt-4o", "gpt-4-vision", "gpt-4-turbo",
@@ -224,7 +222,7 @@ class VisionCapabilityRouter:
                             "content": [
                                 {
                                     "type": "text",
-                                    "text": _PROBE_TEST_PROMPT,
+                                    "text": "描述这张测试图片",
                                 },
                                 {
                                     "type": "image_url",

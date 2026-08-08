@@ -11,24 +11,6 @@ from ..llm import llm_helper
 
 __all__ = ["rewrite_query"]
 
-_REWRITE_PROMPT = """\
-请改写以下用户查询，使其更适合知识库检索。
-
-原始查询: {query}
-
-任务：
-1. 识别查询中的网络梗、黑话、缩写
-2. 补出正式名称或全称
-3. 保留原意，不要扩展无关内容
-4. 如果查询已经清晰，原样返回
-
-严格输出JSON：
-{{
-  "rewritten": "改写后的查询",
-  "expanded_terms": ["扩展术语1", "扩展术语2"]
-}}
-"""
-
 
 async def rewrite_query(query: str) -> str:
     """改写查询以提升知识库召回准确率
@@ -44,7 +26,20 @@ async def rewrite_query(query: str) -> str:
     """
     if not query or not query.strip():
         return query
-    prompt = _REWRITE_PROMPT.format(query=query)
+    prompt = (
+        "请改写以下用户查询，使其更适合知识库检索。\n\n"
+        f"原始查询: {query}\n\n"
+        "任务：\n"
+        "1. 识别查询中的网络梗、黑话、缩写\n"
+        "2. 补出正式名称或全称\n"
+        "3. 保留原意，不要扩展无关内容\n"
+        "4. 如果查询已经清晰，原样返回\n\n"
+        "严格输出JSON：\n"
+        "{\n"
+        '  "rewritten": "改写后的查询",\n'
+        '  "expanded_terms": ["扩展术语1", "扩展术语2"]\n'
+        "}\n"
+    )
     try:
         text = await llm_helper.chat_text(
             [{"role": "user", "content": prompt}],

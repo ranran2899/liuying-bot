@@ -73,20 +73,6 @@ class StickerScene(StrEnum):
 _MOOD_VALUES = [m.value for m in StickerMood]
 _SCENE_VALUES = [s.value for s in StickerScene]
 
-_ANALYZE_PROMPT = """你是一个贴纸语义分析助手。
-请根据贴纸的描述信息，分析其心情标签和场景标签。
-
-贴纸描述：{description}
-贴纸文件名：{filename}
-
-可选心情标签：{moods}
-可选场景标签：{scenes}
-
-请输出JSON格式（只输出JSON，不要其他内容）：
-{{"mood": "心情标签", "scene": "场景标签", "confidence": 0.0-1.0}}
-
-如果无法判断，mood 或 scene 输出空字符串，confidence 输出 0.0。"""
-
 _MAX_CACHE_SIZE = 500
 """语义分析结果缓存上限"""
 
@@ -146,11 +132,16 @@ class StickerSemanticsAnalyzer:
             self._update_cache(sticker_id, result)
             return result
         try:
-            prompt = _ANALYZE_PROMPT.format(
-                description=description[:200],
-                filename=filename[:100],
-                moods="/".join(_MOOD_VALUES),
-                scenes="/".join(_SCENE_VALUES),
+            prompt = (
+                "你是一个贴纸语义分析助手。\n"
+                "请根据贴纸的描述信息，分析其心情标签和场景标签。\n\n"
+                f"贴纸描述：{description[:200]}\n"
+                f"贴纸文件名：{filename[:100]}\n\n"
+                f"可选心情标签：{'/'.join(_MOOD_VALUES)}\n"
+                f"可选场景标签：{'/'.join(_SCENE_VALUES)}\n\n"
+                "请输出JSON格式（只输出JSON，不要其他内容）：\n"
+                '{"mood": "心情标签", "scene": "场景标签", "confidence": 0.0-1.0}\n\n'
+                "如果无法判断，mood 或 scene 输出空字符串，confidence 输出 0.0。"
             )
             role = model_router.resolve(ROLE_STICKER)
             _, content = await llm_helper.chat(

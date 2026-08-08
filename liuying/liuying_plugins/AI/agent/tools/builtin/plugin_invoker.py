@@ -20,22 +20,6 @@ from ...runtime.constants import (
 )
 from ..decorators import register_tool
 
-_INVOKE_PROMPT = """你是一个命令转写助手。
-请根据目标插件的命令格式说明，将用户的自然语言意图转写为一条可直接执行的命令文本。
-
-目标插件：{plugin_name}
-插件说明：{description}
-命令格式列表（JSON）：
-{commands}
-
-用户意图：{user_intent}
-
-要求：
-1. 只输出一条命令文本，不要任何解释或多行
-2. 严格遵循命令格式中的前缀和参数顺序
-3. 参数缺失时使用合理的默认值或占位符
-4. 若用户意图与插件能力无关，输出空字符串"""
-
 _MAX_COMMANDS_IN_PROMPT = 8
 """提示词中最多携带的命令数量"""
 
@@ -159,11 +143,22 @@ async def invoke_plugin_command(
             "未暴露任何命令格式"
         )
     try:
-        prompt = _INVOKE_PROMPT.format(
-            plugin_name=plugin_name,
-            description=brief.get("description", ""),
-            commands=_format_commands_for_prompt(commands),
-            user_intent=user_intent,
+        prompt = (
+            "你是一个命令转写助手。\n"
+            "请根据目标插件的命令格式说明，将用户的自然语言意图转写为一条可直接执行的命令文本。\n"
+            "\n"
+            f"目标插件：{plugin_name}\n"
+            f"插件说明：{brief.get('description', '')}\n"
+            "命令格式列表（JSON）：\n"
+            f"{_format_commands_for_prompt(commands)}\n"
+            "\n"
+            f"用户意图：{user_intent}\n"
+            "\n"
+            "要求：\n"
+            "1. 只输出一条命令文本，不要任何解释或多行\n"
+            "2. 严格遵循命令格式中的前缀和参数顺序\n"
+            "3. 参数缺失时使用合理的默认值或占位符\n"
+            "4. 若用户意图与插件能力无关，输出空字符串"
         )
         command_text = await llm_helper.chat_text(
             [{"role": "user", "content": prompt}],

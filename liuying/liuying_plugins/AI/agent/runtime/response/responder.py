@@ -27,44 +27,6 @@ from ..constants import (
 from ..execution.evidence import EvidenceComposer
 from ..planning.types import TurnPlan
 
-_RESPONDER_SYSTEM_PROMPT = """你是扮演角色化的响应器。
-基于回合规划和收集到的证据，生成符合人格设定的回复。
-
-输出要求：
-1. 严格按JSON格式返回，字段如下：
-   - reply_text: 回复正文
-   - info_added: 是否补充了新信息（true/false）
-   - user_attitude: 推测的用户态度（friendly/neutral/curious/upset/playful）
-   - bot_emotion: 本回合AI情绪（happy/calm/excited/shy/sad/angry/neutral）
-   - expression_style: 表达风格（casual/formal/playful/serious/gentle）
-   - tts_style_hint: TTS风格提示（如温柔/活泼/严肃，留空表示不需要TTS）
-   - sticker_mood_hint: 表情包情绪提示（如开心/害羞/无奈，留空表示不需要表情包）
-   - ambiguity_level: 回复模糊度（0-1）
-   - recommend_silence: 是否建议静默（true/false，仅当回复内容明显不需要发送时为true）
-
-2. 回复风格要符合人格设定和用户好感度
-3. 不要暴露工具调用细节和证据合成过程
-4. 不要在回复中提及自己是AI助手
-5. 回复要简洁自然，符合对话场景
-
-只返回JSON，不要其他内容。"""
-
-_RESPONDER_USER_TEMPLATE = """回合规划:
-- 动作: {action}
-- 输出模式: {output_mode}
-- 意图标签: {intent_tags}
-- 模糊度: {ambiguity_level}
-
-证据合成:
-{evidence_text}
-
-证据指导:
-{evidence_guidance}
-
-用户消息: {user_message}
-
-请输出角色化响应JSON。"""
-
 _CLARIFY_TEMPLATES = (
     "嗯……能再说得详细一点吗？",
     "我没有完全理解，可以再解释一下吗？",
@@ -305,14 +267,18 @@ class PersonaResponder:
         if not evidence_guidance:
             evidence_guidance = "（无证据指导）"
 
-        prompt = _RESPONDER_USER_TEMPLATE.format(
-            action=plan.action,
-            output_mode=plan.output_mode,
-            intent_tags=", ".join(plan.intent_tags) or "（无）",
-            ambiguity_level=round(plan.ambiguity_level, 2),
-            evidence_text=evidence_text,
-            evidence_guidance=evidence_guidance,
-            user_message=user_message[:500],
+        intent_tags_str = ", ".join(plan.intent_tags) or "（无）"
+        ambiguity_str = round(plan.ambiguity_level, 2)
+        user_prompt = (
+            f"回合规划:\n"
+            f"- 动作: {plan.action}\n"
+            f"- 输出模式: {plan.output_mode}\n"
+            f"- 意图标签: {intent_tags_str}\n"
+            f"- 模糊度: {ambiguity_str}\n\n"
+            f"证据合成:\n{evidence_text}\n\n"
+            f"证据指导:\n{evidence_guidance}\n\n"
+            f"用户消息: {user_message[:500]}\n\n"
+            "请输出角色化响应JSON。"
         )
 
         # 构建系统提示词（含人格与用户画像）
@@ -320,10 +286,31 @@ class PersonaResponder:
             user_id, group_id, plan.output_mode
         )
 
+        responder_instruction = (
+            "你是响应器。"
+            "基于回合规划和收集到的证据，生成符合人格设定的回复。\n\n"
+            "输出要求：\n"
+            "1. 严格按JSON格式返回，字段如下：\n"
+            "   - reply_text: 回复正文\n"
+            "   - info_added: 是否补充了新信息（true/false）\n"
+            "   - user_attitude: 推测的用户态度（friendly/neutral/curious/upset/playful）\n"
+            "   - bot_emotion: 本回合AI情绪（happy/calm/excited/shy/sad/angry/neutral）\n"
+            "   - expression_style: 表达风格（casual/formal/playful/serious/gentle）\n"
+            "   - tts_style_hint: TTS风格提示（如温柔/活泼/严肃，留空表示不需要TTS）\n"
+            "   - sticker_mood_hint: 表情包情绪提示（如开心/害羞/无奈，留空表示不需要表情包）\n"
+            "   - ambiguity_level: 回复模糊度（0-1）\n"
+            "   - recommend_silence: 是否建议静默（true/false，仅当回复内容明显不需要发送时为true）\n\n"
+            "2. 回复风格要符合人格设定和用户好感度\n"
+            "3. 不要暴露工具调用细节和证据合成过程\n"
+            "4. 不要在回复中提及自己是AI助手\n"
+            "5. 回复要简洁自然，符合对话场景\n\n"
+            "只返回JSON，不要其他内容。"
+        )
+
         # 构建消息列表：系统提示 + 规划指令 + 对话历史 + 当前回合请求
         messages: list[dict[str, str]] = [
             {"role": "system", "content": system_prompt},
-            {"role": "system", "content": _RESPONDER_SYSTEM_PROMPT},
+            {"role": "system", "content": responder_instruction},
         ]
         if history:
             # 仅保留最近 6 条历史，避免 token 膨胀
@@ -335,7 +322,7 @@ class PersonaResponder:
                     messages.append(
                         {"role": role, "content": content[:500]}
                     )
-        messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "content": user_prompt})
 
         # 接入模型按角色路由：使用 ROLE_CHAT 配置的模型/温度/provider
         role = model_router.resolve(ROLE_CHAT)

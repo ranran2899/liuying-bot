@@ -30,69 +30,6 @@ from .types import TurnPlan
 
 __all__ = ["TurnPlan", "TurnPlanner"]
 
-_PLAN_SYSTEM_PROMPT = """你是回合规划器。
-分析用户消息和上下文，决策本回合的最佳行为，并输出回合语义帧。
-
-可选动作：
-- reply: 直接回复用户
-- silence: 保持沉默（不相关或无需回应）
-- ask_clarify: 请求澄清（信息不足）
-
-可选输出模式：
-- chat_short: 短聊天回复（闲聊、问候）
-- chat_answer: 完整答案回复（问答、解释）
-- structured_help: 结构化帮助（求助、命令查询）
-- source_summary: 来源摘要（带工具证据的回答）
-- silence: 静默
-
-意图标签集合：
-- realtime: 实时信息查询（新闻、天气、股价）
-- memory: 记忆召回（过往互动、用户偏好）
-- image: 图片相关（看图、生成图）
-- network: 网络请求（搜索、抓取）
-- admin: 管理操作（开关、配置）
-- local: 本地操作（时间、计算）
-- plugin: 插件调用（特定功能）
-
-请用JSON格式返回决策，字段如下：
-- action: 动作（reply/silence/ask_clarify）
-- output_mode: 输出模式
-- intent_tags: 意图标签数组
-- need_tool: 是否需要工具调用
-- tool_candidates: 候选工具名数组（need_tool为true时填写）
-- tool_args: 工具参数对象（单工具调用时填写，必须包含工具目录标注的必填参数）
-- need_memory: 是否需要记忆召回
-- memory_query: 记忆查询文本
-- need_vision: 是否需要视觉理解
-- need_research: 是否需要多步研究
-- ambiguity_level: 模糊度（0-1，0最清晰）
-- max_steps: 最大工具调用步数（整数）
-- reason: 决策理由（一句话）
-- semantic_frame: 回合语义帧对象，包含以下字段：
-  - chat_intent: 聊天意图（question/small_talk/info_seek/emotional_support/social_protocol/chat_command/meta_question）
-  - recommend_silence: 是否建议静默（true/false）
-  - requires_emotional_care: 是否需要情感关怀（true/false）
-  - sticker_appropriate: 是否适合发贴纸（true/false）
-  - meta_question: 是否元问题（关于bot自身，true/false）
-  - user_attitude: 用户态度（positive/neutral/negative/playful）
-  - bot_emotion: bot应有情绪（happy/sad/neutral/curious/caring/playful）
-  - emotion_intensity: 情绪强度（0-1）
-  - expression_style: 表达风格（casual/formal/playful/gentle）
-  - tts_style_hint: TTS风格提示（空串表示无）
-  - sticker_mood_hint: 贴纸情绪提示（warm/cool/neutral）
-  - conversation_scenario: 对话场景（daily/greeting/farewell/help/conflict/tease）
-
-只返回JSON，不要其他内容。"""
-
-_PLAN_USER_TEMPLATE = """用户消息: {user_message}
-
-上下文摘要: {context_summary}
-
-可用工具目录:
-{catalog_prompt}
-
-请输出回合规划JSON。"""
-
 
 class TurnPlanner:
     """回合规划器
@@ -276,10 +213,61 @@ class TurnPlanner:
         if not catalog_prompt:
             catalog_prompt = "（无注册工具）"
 
-        prompt = _PLAN_USER_TEMPLATE.format(
-            user_message=user_message[:500],
-            context_summary=context_summary[:300] or "（无）",
-            catalog_prompt=catalog_prompt,
+        system_prompt = (
+            "你是回合规划器。"
+            "分析用户消息和上下文，决策本回合的最佳行为，并输出回合语义帧。\n\n"
+            "可选动作：\n"
+            "- reply: 直接回复用户\n"
+            "- silence: 保持沉默（不相关或无需回应）\n"
+            "- ask_clarify: 请求澄清（信息不足）\n\n"
+            "可选输出模式：\n"
+            "- chat_short: 短聊天回复（闲聊、问候）\n"
+            "- chat_answer: 完整答案回复（问答、解释）\n"
+            "- structured_help: 结构化帮助（求助、命令查询）\n"
+            "- source_summary: 来源摘要（带工具证据的回答）\n"
+            "- silence: 静默\n\n"
+            "意图标签集合：\n"
+            "- realtime: 实时信息查询（新闻、天气、股价）\n"
+            "- memory: 记忆召回（过往互动、用户偏好）\n"
+            "- image: 图片相关（看图、生成图）\n"
+            "- network: 网络请求（搜索、抓取）\n"
+            "- admin: 管理操作（开关、配置）\n"
+            "- local: 本地操作（时间、计算）\n"
+            "- plugin: 插件调用（特定功能）\n\n"
+            "请用JSON格式返回决策，字段如下：\n"
+            "- action: 动作（reply/silence/ask_clarify）\n"
+            "- output_mode: 输出模式\n"
+            "- intent_tags: 意图标签数组\n"
+            "- need_tool: 是否需要工具调用\n"
+            "- tool_candidates: 候选工具名数组（need_tool为true时填写）\n"
+            "- tool_args: 工具参数对象（单工具调用时填写，必须包含工具目录标注的必填参数）\n"
+            "- need_memory: 是否需要记忆召回\n"
+            "- memory_query: 记忆查询文本\n"
+            "- need_vision: 是否需要视觉理解\n"
+            "- need_research: 是否需要多步研究\n"
+            "- ambiguity_level: 模糊度（0-1，0最清晰）\n"
+            "- max_steps: 最大工具调用步数（整数）\n"
+            "- reason: 决策理由（一句话）\n"
+            "- semantic_frame: 回合语义帧对象，包含以下字段：\n"
+            "  - chat_intent: 聊天意图（question/small_talk/info_seek/emotional_support/social_protocol/chat_command/meta_question）\n"
+            "  - recommend_silence: 是否建议静默（true/false）\n"
+            "  - requires_emotional_care: 是否需要情感关怀（true/false）\n"
+            "  - sticker_appropriate: 是否适合发贴纸（true/false）\n"
+            "  - meta_question: 是否元问题（关于bot自身，true/false）\n"
+            "  - user_attitude: 用户态度（positive/neutral/negative/playful）\n"
+            "  - bot_emotion: bot应有情绪（happy/sad/neutral/curious/caring/playful）\n"
+            "  - emotion_intensity: 情绪强度（0-1）\n"
+            "  - expression_style: 表达风格（casual/formal/playful/gentle）\n"
+            "  - tts_style_hint: TTS风格提示（空串表示无）\n"
+            "  - sticker_mood_hint: 贴纸情绪提示（warm/cool/neutral）\n"
+            "  - conversation_scenario: 对话场景（daily/greeting/farewell/help/conflict/tease）\n\n"
+            "只返回JSON，不要其他内容。"
+        )
+        user_prompt = (
+            f"用户消息: {user_message[:500]}\n\n"
+            f"上下文摘要: {context_summary[:300] or '（无）'}\n\n"
+            f"可用工具目录:\n{catalog_prompt}\n\n"
+            "请输出回合规划JSON。"
         )
 
         try:
@@ -287,8 +275,8 @@ class TurnPlanner:
             role = model_router.resolve(ROLE_AGENT)
             _, response = await llm.chat(
                 [
-                    {"role": "system", "content": _PLAN_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
                 ],
                 model=role.model or None,
                 options=role.apply_to_options(),

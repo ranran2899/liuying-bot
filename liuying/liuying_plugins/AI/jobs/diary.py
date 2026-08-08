@@ -61,11 +61,20 @@ class DiaryHelper:
             summary = "今天没有特别的互动记录。"
 
         angle = random.choice(_DIARY_ANGLE_POOL)
-        prompt = await persona_manager.get_active_persona_template(
-            "diary",
-            date=date_str,
-            time_period=context_manager.get_current_time_period(),
-            conversation_summary=summary[:1500],
+        persona = persona_manager.get_default_persona()
+        persona_name = persona.get("name") or "AI"
+        time_period = context_manager.get_current_time_period()
+        prompt = (
+            f"你是{persona_name}，请根据今天的互动写一篇日记。\n\n"
+            f"日期: {date_str}\n时段: {time_period}\n\n"
+            f"今日对话摘要:\n{summary[:1500]}\n\n"
+            "要求：\n"
+            "- 第一人称，像写私密日记\n"
+            "- 100-200字\n"
+            "- 记录今天印象最深的事、心情变化、对某个用户的感受\n"
+            "- 自然口语化，不要书面语\n"
+            "- 不要使用模板化用语\n\n"
+            "直接输出日记内容，不要标题。"
         )
         prompt += f"\n\n[切入角度参考] {angle}"
 
