@@ -4,12 +4,30 @@
 
 基于 NoneBot2 构建的多功能聊天机器人项目，集成 AI 对话核心、经济系统、管理员体系与 WebUI 控制台。
 
-[![license](https://img.shields.io/badge/license-AGPL--3.0-FE7D37)](./LICENSE)
-[![python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![nonebot](https://img.shields.io/badge/nonebot-v2.5.0-EA5252)](https://nonebot.dev/)
-[![onebot](https://img.shields.io/badge/OneBot-v11%2Fv12-black)](https://onebot.dev/)
-[![QQ](https://img.shields.io/badge/QQ-Bot-lightgrey)](https://bot.q.qq.com/wiki/)
-[![ruff](https://img.shields.io/badge/code%20style-ruff-000000)](https://github.com/astral-sh/ruff)
+<a href="./LICENSE">
+    <img src="https://img.shields.io/badge/license-AGPL--3.0-FE7D37" alt="license">
+</a>
+<a href="https://www.python.org">
+    <img src="https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white" alt="python">
+</a>
+<a href="https://nonebot.dev/">
+    <img src="https://img.shields.io/badge/nonebot-v2.5.0-EA5252" alt="nonebot">
+</a>
+<a href="https://onebot.dev/">
+  <img src="https://img.shields.io/badge/OneBot-v11-black?style=social&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAIVBMVEUAAAAAAAADAwMHBwceHh4UFBQNDQ0ZGRkoKCgvLy8iIiLWSdWYAAAAAXRSTlMAQObYZgAAAQVJREFUSMftlM0RgjAQhV+0ATYK6i1Xb+iMd0qgBEqgBEuwBOxU2QDKsjvojQPvkJ/ZL5sXkgWrFirK4MibYUdE3OR2nEpuKz1/q8CdNxNQgthZCXYVLjyoDQftaKuniHHWRnPh2GCUetR2/9HsMAXyUT4/3UHwtQT2AggSCGKeSAsFnxBIOuAggdh3AKTL7pDuCyABcMb0aQP7aM4AnAbc/wHwA5D2wDHTTe56gIIOUA/4YYV2e1sg713PXdZJAuncdZMAGkAukU9OAn40O849+0ornPwT93rphWF0mgAbauUrEOthlX8Zu7P5A6kZyKCJy75hhw1Mgr9RAUvX7A3csGqZegEdniCx30c3agAAAABJRU5ErkJggg==" alt="onebot">
+</a>
+<a href="https://onebot.dev/">
+  <img src="https://img.shields.io/badge/OneBot-v12-black?style=social&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAIVBMVEUAAAAAAAADAwMHBwceHh4UFBQNDQ0ZGRkoKCgvLy8iIiLWSdWYAAAAAXRSTlMAQObYZgAAAQVJREFUSMftlM0RgjAQhV+0ATYK6i1Xb+iMd0qgBEqgBEuwBOxU2QDKsjvojQPvkJ/ZL5sXkgWrFirK4MibYUdE3OR2nEpuKz1/q8CdNxNQgthZCXYVLjyoDQftaKuniHHWRnPh2GCUetR2/9HsMAXyUT4/3UHwtQT2AggSCGKeSAsFnxBIOuAggdh3AKTL7pDuCyABcMb0aQP7aM4AnAbc/wHwA5D2wDHTTe56gIIOUA/4YYV2e1sg713PXdZJAuncdZMAGkAukU9OAn40O849+0ornPwT93rphWF0mgAbauUrEOthlX8Zu7P5A6kZyKCJy75hhw1Mgr9RAUvX7A3csGqZegEdniCx30c3agAAAABJRU5ErkJggg==" alt="onebot">
+</a>
+<a href="https://bot.q.qq.com/wiki/">
+  <img src="https://img.shields.io/badge/QQ-Bot-lightgrey?style=social&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMTIuODIgMTMwLjg5Ij48ZyBkYXRhLW5hbWU9IuWbvuWxgiAyIj48ZyBkYXRhLW5hbWU9IuWbvuWxgiAxIj48cGF0aCBkPSJNNTUuNjMgMTMwLjhjLTcgMC0xMy45LjA4LTIwLjg2IDAtMTkuMTUtLjI1LTMxLjcxLTExLjQtMzQuMjItMzAuMy00LjA3LTMwLjY2IDE0LjkzLTU5LjIgNDQuODMtNjYuNjQgMi0uNTEgNS4yMS0uMzEgNS4yMS0xLjYzIDAtMi4xMy4xNC0yLjEzLjE0LTUuNTcgMC0uODktMS4zLTEuNDYtMi4yMi0yLjMxLTYuNzMtNi4yMy03LjY3LTEzLjQxLTEtMjAuMTggNS40LTUuNTIgMTEuODctNS40IDE3LjgtLjU5IDYuNDkgNS4yNiA2LjMxIDEzLjA4LS44NiAyMS0uNjguNzQtMS43OCAxLjYtMS43OCAyLjY3djQuMjFjMCAxLjM1IDIuMiAxLjYyIDQuNzkgMi4zNSAzMS4wOSA4LjY1IDQ4LjE3IDM0LjEzIDQ1IDY2LjM3LTEuNzYgMTguMTUtMTQuNTYgMzAuMjMtMzIuNyAzMC42My04LjAyLjE5LTE2LjA3LS4wMS0yNC4xMy0uMDF6IiBmaWxsPSIjMDI5OWZlIi8+PHBhdGggZD0iTTMxLjQ2IDExOC4zOGMtMTAuNS0uNjktMTYuOC02Ljg2LTE4LjM4LTE3LjI3LTMtMTkuNDIgMi43OC0zNS44NiAxOC40Ni00Ny44MyAxNC4xNi0xMC44IDI5Ljg3LTEyIDQ1LjM4LTMuMTkgMTcuMjUgOS44NCAyNC41OSAyNS44MSAyNCA0NS4yOS0uNDkgMTUuOS04LjQyIDIzLjE0LTI0LjM4IDIzLjUtNi41OS4xNC0xMy4xOSAwLTE5Ljc5IDAiIGZpbGw9IiNmZWZlZmUiLz48cGF0aCBkPSJNNDYuMDUgNzkuNThjLjA5IDUgLjIzIDkuODItNyA5Ljc3LTcuODItLjA2LTYuMS01LjY5LTYuMjQtMTAuMTktLjE1LTQuODItLjczLTEwIDYuNzMtOS44NHM2LjM3IDUuNTUgNi41MSAxMC4yNnoiIGZpbGw9IiMxMDlmZmUiLz48cGF0aCBkPSJNODAuMjcgNzkuMjdjLS41MyAzLjkxIDEuNzUgOS42NC01Ljg4IDEwLTcuNDcuMzctNi44MS00LjgyLTYuNjEtOS41LjItNC4zMi0xLjgzLTEwIDUuNzgtMTAuNDJzNi41OSA0Ljg5IDYuNzEgOS45MnoiIGZpbGw9IiMwODljZmUiLz48L2c+PC9nPjwvc3ZnPg==" alt="QQ">
+</a>
+<a href="https://github.com/astral-sh/ruff">
+    <img src="https://img.shields.io/badge/code%20style-ruff-000000?logo=ruff&logoColor=white" alt="ruff">
+</a>
+<a href="https://github.com/Microsoft/pyright">
+    <img src="https://img.shields.io/badge/types-pyright-797952.svg?logo=python&logoColor=edb641" alt="pyright">
+</a>
 
 </div>
 
@@ -31,12 +49,16 @@
 
 ### AI 对话
 
-- 多 LLM Provider 支持
-- Agent 工具调用
-- 四层记忆系统（RRF 融合）
-- 用户级人格隔离
+- 多 LLM Provider 支持（OpenAI / 智谱）
+- Agent 工具调用系统（含技能包：天气、新闻、日期、游戏信息）
+- 四层记忆系统（RRF 融合 + 向量检索）
+- 用户级人格隔离（14 种内置人格）
 - 多模态视觉理解
 - TTS 语音合成
+- 知识库系统（知识抽取与检索）
+- 情感状态模拟与群组上下文感知
+- 主动行为（定时日记、主动发言、社交智能）
+- 贴纸系统（自动选择与反馈学习）
 - WebUI 控制台
 
 ### 经济系统
@@ -151,18 +173,21 @@ liuying-bot/
     ├── models/               # 数据库模型
     │   ├── _bot/ _economy/ _group/ _llm/ _log/ _user/
     ├── services/             # 核心服务
-    │   ├── cache/            # 统一缓存
+    │   ├── LLM/              # LLM Provider（OpenAI / 智谱）
+    │   ├── cache/            # 统一缓存（内存 / Redis）
     │   ├── liuying_db/       # 数据库服务
     │   └── renderer/         # HTML 渲染
     ├── ui/                   # UI 构建器
     ├── utils/                # 通用工具
     ├── liuying_plugins/      # 主插件目录
-    │   ├── AI/ admin/ bottle/ economy/
+    │   ├── AI/               # AI 对话核心（agent / core / pipeline / personas）
+    │   ├── admin/ bottle/ economy/
     │   ├── fortune/ help/ hooks/ init/
     │   ├── platform/ signIn/ statistics/
-    │   ├── superuser/ ui_manager/
+    │   ├── superuser/ ui_manager/ web_ui/
     │   ├── user_info/ wife/ withdraw.py
     └── plugins/              # 自定义插件
+        ├── qq_bot_config/ qzone/ web_search/ zan/
 ```
 
 ---
@@ -171,21 +196,23 @@ liuying-bot/
 
 ### 业务插件
 
-- 流萤 AI（多 LLM 对话）
-- 银行系统
-- 商店、拍卖行、典当行、黑市
+- 流萤 AI（多 LLM 对话 + Agent 工具 + 记忆系统）
+- 银行系统（存取款、贷款、定期存款）
+- 商店、拍卖行、黑市、交易
 - 签到、今日运势、每日 wife
 - 漂流瓶、用户信息
-- UI 管理、统计、自动点赞
+- QQ 空间、网页搜索、自动点赞
 - 消息撤回
 
 ### 管理插件
 
 - 管理员帮助、超级用户帮助
 - 帮助菜单
-- 插件商店
-- QQ 配置
-- AI 空间、AI WebUI
+- 插件商店、插件开关
+- 群组管理、广播、请求管理
+- 敏感词管理、封禁系统
+- Bot 重启、SQL 执行、数据清理
+- WebUI 控制台（仪表盘 / 插件 / 数据库 / 系统）
 
 ---
 
