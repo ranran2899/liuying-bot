@@ -1,61 +1,78 @@
-"""LLM 状态文本构建模块"""
+"""LLM 状态数据构建与图片生成模块"""
+
+from datetime import datetime
+import json
+
 from liuying.models._llm import TokenUsage
 from liuying.services.LLM import llm_manager
 from liuying.services.LLM.tracker import token_tracker
 from liuying.services.LLM.web_search.tracker import search_tracker
+from liuying.ui.services import render
+
+BAIDU_MODE_LABELS = {
+    "web_search": "百度搜索",
+    "chat": "智能搜索生成",
+    "web_summary": "智能搜索生成(高性能版)",
+}
 
 
-def capability_names(provider_name: str) -> str:
+def capability_names(provider_name: str) -> list[str]:
     """获取供应商支持的能力名称列表
 
     参数:
         provider_name: 供应商名称
 
     返回:
-        逗号分隔的能力名称
+        能力名称列表
     """
     if not (provider := llm_manager.get_provider(provider_name)):
-        return "-"
-    return ", ".join(sorted(c.value for c in provider.capabilities()))
+        return []
+    return sorted(c.value for c in provider.capabilities())
 
 
-async def build_status_text() -> str:
-    """构建 LLM 状态文本
+def build_providers() -> list[dict]:
+    """构建供应商配置数据
 
     返回:
-        状态文本
+        供应商信息列表
     """
-    config = llm_manager.config
-    providers = llm_manager.get_all_providers()
-
-    lines = [
-        "【LLM 状态】",
-        f"默认模型: {config.default_model_name or '未配置'}",
-        "",
+    return [
+        {
+            "name": cfg.name,
+            "apiType": cfg.api_type,
+            "models": [m.model_name for m in cfg.models if m.model_name],
+            "capabilities": capability_names(cfg.name),
+        }
+        for cfg in llm_manager.get_all_providers()
     ]
 
-    if not providers:
-        lines.append("尚未配置任何供应商。")
-        return "\n".join(lines)
 
-    lines.append(f"已配置供应商 ({len(providers)}):")
-    for provider_cfg in providers:
-        models = [m.model_name for m in provider_cfg.models if m.model_name]
-        lines.append(f"- {provider_cfg.name} [{provider_cfg.api_type}]")
-        lines.append(f"  模型: {', '.join(models) if models else '-'}")
-        lines.append(f"  能力: {capability_names(provider_cfg.name)}")
-
-    await append_token_usage(lines)
-    await append_search_usage(lines)
-
-    return "\n".join(lines)
-
-
-async def append_token_usage(lines: list[str]) -> None:
-    """追加 Token 消耗统计到状态文本
+def _usage_rows(summary: dict[str, dict]) -> list[dict]:
+    """把 Token 统计字典转换为展示行
 
     参数:
-        lines: 状态文本行列表，原地追加
+        summary: 以名称为键的统计字典
+
+    返回:
+        展示行列表，按总计倒序
+    """
+    rows = [
+        {
+            "name": name,
+            "prompt": record["prompt_tokens"],
+            "completion": record["completion_tokens"],
+            "total": record["total_tokens"],
+        }
+        for name, record in summary.items()
+    ]
+    return sorted(rows, key=lambda row: row["total"], reverse=True)
+
+
+async def build_token_data() -> dict:
+    """构建 Token 消耗统计数据
+
+    返回:
+        Token 统计数据字典
     """
     provider_summary = await token_tracker.get_provider_summary()
     model_summary = await token_tracker.get_model_summary()
@@ -63,102 +80,114 @@ async def append_token_usage(lines: list[str]) -> None:
     weekly = await TokenUsage.get_range_summary(7)
     all_time = await TokenUsage.get_total_summary()
 
-    lines.append("")
-    lines.append("Token 消耗统计:")
+    weekly_rows = [
+        {
+            "date": key,
+            "total": record["total_tokens"],
+            "count": record["request_count"],
+        }
+        for key, record in sorted(weekly.items())
+    ]
 
-    if not model_summary and not all_time["total_tokens"]:
-        lines.append("暂无统计记录。")
-        return
-
-    if provider_summary:
-        lines.append("今日按供应商:")
-        for provider_name, record in sorted(provider_summary.items()):
-            lines.append(
-                f"- {provider_name}: "
-                f"提示 {record['prompt_tokens']} | "
-                f"补全 {record['completion_tokens']} | "
-                f"总计 {record['total_tokens']}"
-            )
-
-    if model_summary:
-        lines.append("今日按模型:")
-        for model_name, record in sorted(model_summary.items()):
-            lines.append(
-                f"- {model_name}: "
-                f"提示 {record['prompt_tokens']} | "
-                f"补全 {record['completion_tokens']} | "
-                f"总计 {record['total_tokens']}"
-            )
-
-    if daily_total["total_tokens"]:
-        lines.append(
-            f"今日合计: 提示 {daily_total['prompt_tokens']} | "
-            f"补全 {daily_total['completion_tokens']} | "
-            f"总计 {daily_total['total_tokens']}"
-        )
-
-    if weekly and all_time["total_tokens"]:
-        lines.append("近7天:")
-        for key, record in sorted(weekly.items()):
-            lines.append(
-                f"- {key}: "
-                f"总计 {record['total_tokens']} | "
-                f"请求 {record['request_count']} 次"
-            )
-
-    if all_time["total_tokens"]:
-        lines.append(
-            f"累计: 提示 {all_time['prompt_tokens']} | "
-            f"补全 {all_time['completion_tokens']} | "
-            f"总计 {all_time['total_tokens']} | "
-            f"请求 {all_time['request_count']} 次"
-        )
+    return {
+        "hasData": bool(model_summary or all_time["total_tokens"]),
+        "providers": _usage_rows(provider_summary),
+        "models": _usage_rows(model_summary),
+        "daily": {
+            "prompt": daily_total["prompt_tokens"],
+            "completion": daily_total["completion_tokens"],
+            "total": daily_total["total_tokens"],
+        },
+        "allTime": {
+            "prompt": all_time["prompt_tokens"],
+            "completion": all_time["completion_tokens"],
+            "total": all_time["total_tokens"],
+            "requestCount": all_time["request_count"],
+        },
+        "weekly": weekly_rows if all_time["total_tokens"] else [],
+    }
 
 
-async def append_search_usage(lines: list[str]) -> None:
-    """追加网络搜索使用次数统计到状态文本
+async def build_search_data() -> dict:
+    """构建网络搜索使用统计数据
 
-    参数:
-        lines: 状态文本行列表，原地追加
+    返回:
+        搜索统计数据字典
     """
     provider_summary = await search_tracker.get_provider_summary()
-    baidu_mode_summary = await search_tracker.get_baidu_mode_summary()
-    baidu_quota = await search_tracker.get_baidu_quota()
-    search_total = await search_tracker.get_total()
+    mode_summary = await search_tracker.get_baidu_mode_summary()
+    quota = await search_tracker.get_baidu_quota()
+    total = await search_tracker.get_total()
 
-    lines.append("")
-    lines.append("网络搜索使用统计:")
-    if not provider_summary:
-        lines.append("暂无统计记录。")
-        return
+    providers = sorted(
+        (
+            {
+                "name": name,
+                "count": record["count"],
+                "lastUsed": record["last_used"],
+            }
+            for name, record in provider_summary.items()
+        ),
+        key=lambda row: row["count"],
+        reverse=True,
+    )
 
-    lines.append("按引擎:")
-    for provider_name, record in sorted(provider_summary.items()):
-        lines.append(
-            f"- {provider_name}: 调用 {record['count']} 次"
-            + (f" (最近: {record['last_used']})" if record["last_used"] else "")
-        )
+    modes = [
+        {"label": BAIDU_MODE_LABELS.get(mode, mode), "count": record["count"]}
+        for mode, record in sorted(mode_summary.items())
+    ]
 
-    if baidu_mode_summary:
-        lines.append("百度搜索模式:")
-        mode_labels = {
-            "web_search": "百度搜索",
-            "chat": "智能搜索生成",
-            "web_summary": "智能搜索生成(高性能版)",
+    quota_data = None
+    if (daily_limit := quota["daily_limit"]) > 0:
+        quota_data = {
+            "used": quota["used"],
+            "remaining": quota["remaining"],
+            "dailyLimit": daily_limit,
+            "percent": min(100, int(quota["used"] / daily_limit * 100)),
         }
-        for mode, record in sorted(baidu_mode_summary.items()):
-            label = mode_labels.get(mode, mode)
-            lines.append(f"- {label}: {record['count']} 次")
 
-    daily_limit = baidu_quota["daily_limit"]
-    if daily_limit > 0:
-        remaining = baidu_quota["remaining"]
-        used = baidu_quota["used"]
-        lines.append(
-            f"百度智能搜索生成配额: 已用 {used}/{daily_limit}，"
-            f"剩余 {remaining} 次，次日零点重置"
-        )
-    else:
-        lines.append(
-            f"搜索总调用: {search_total['count']} 次"
-        )
+    return {
+        "providers": providers,
+        "modes": modes,
+        "quota": quota_data,
+        "total": total["count"],
+    }
+
+
+async def build_status_data() -> dict:
+    """构建 LLM 状态完整数据
+
+    返回:
+        用于模板渲染的数据字典
+    """
+    providers = build_providers()
+    return {
+        "defaultModel": llm_manager.config.default_model_name or "未配置",
+        "providerCount": len(providers),
+        "providers": providers,
+        "token": await build_token_data(),
+        "search": await build_search_data(),
+    }
+
+
+async def gen_status_img(user_id: str | None = None) -> bytes:
+    """生成 LLM 状态图片
+
+    参数:
+        user_id: 用户ID，用于选择用户主题
+
+    返回:
+        图片字节数据
+    """
+    data = await build_status_data()
+    weekly = data["token"]["weekly"]
+    data["chartLabels"] = json.dumps([row["date"] for row in weekly])
+    data["chartTotals"] = json.dumps([row["total"] for row in weekly])
+    data["currentTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    return await render(
+        "pages/builtin/llm_status",
+        data=data,
+        user_id=user_id,
+        wait=1,
+    )

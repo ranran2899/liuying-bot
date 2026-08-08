@@ -15,7 +15,7 @@ from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.message import MessageUtils
 from liuying.utils.rules import admin_check
 
-from .status_builder import build_status_text
+from .status_builder import gen_status_img
 
 user_token_quota = Config.get_config("llm_status", "USER_TOKEN_QUOTA_MAX")
 
@@ -154,6 +154,7 @@ __plugin_meta__ = PluginMetadata(
 llm_status_cmd = on_alconna(
     Alconna("LLM状态"),
     rule=admin_check(6),
+    aliases={"llm状态"}
     priority=5,
     block=True,
 )
@@ -187,9 +188,8 @@ async def handle_llm_status(session: Uninfo) -> None:
         session: 会话信息
     """
     logger.info("查看LLM状态", command="LLM状态", session=session)
-    await MessageUtils.build_message(
-        await build_status_text()
-    ).finish(reply_to=True)
+    image_bytes = await gen_status_img(session.user.id)
+    await MessageUtils.build_message(image_bytes).finish(reply_to=True)
 
 
 @reset_token_quota_cmd.handle()
