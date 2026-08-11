@@ -1,9 +1,11 @@
 from typing import ClassVar
 
+type MessageMap = dict[str, list[str]]
+
 
 class MessageManager:
     """消息管理器"""
-    data: ClassVar[dict[str, list[str]]] = {}
+    data: ClassVar[MessageMap] = {}
 
     @classmethod
     def add(cls, uid: str, msg_id: str):
@@ -12,12 +14,13 @@ class MessageManager:
 
     @classmethod
     def check(cls, uid: str, msg_id: str) -> bool:
-        return msg_id in cls.data.get(uid, [])
+        items = cls.data.get(uid)
+        return items is not None and msg_id in items
 
     @classmethod
     def remove_check(cls, uid: str):
-        if len(cls.data[uid]) > 200:
-            cls.data[uid] = cls.data[uid][100:]
+        if (items := cls.data.get(uid)) and len(items) > 200:
+            cls.data[uid] = items[100:]
 
     @classmethod
     def get(cls, uid: str) -> list[str]:

@@ -1,38 +1,45 @@
-import asyncio
+import time
 from collections import defaultdict, deque
 from typing import Any
 
-from liuying.utils.limiters import ConcurrencyLimiter
+type RateMap = dict[Any, deque[float]]
 
 
 class EventLoopRateLimiter:
     """基于事件循环时间的速率限制器
 
-    与 limiters.RateLimiter 不同，使用 asyncio 事件循环时间而非系统墙钟时间，
+    使用单调时钟（与事件循环时间一致）而非系统墙钟时间，
     适用于异步场景下更精确的速率控制。
     """
 
     def __init__(self, max_calls: int, time_window: float):
-        self.requests: dict[Any, deque[float]] = defaultdict(deque)
+        self.requests: RateMap = defaultdict(deque)
         self.max_calls = max_calls
         self.time_window = time_window
 
     def check(self, key: Any) -> bool:
         """检查是否超出速率限制。如果未超出，则记录本次调用。"""
-        now = asyncio.get_event_loop().time()
-        while self.requests[key] and self.requests[key][0] <= now - self.time_window:
-            self.requests[key].popleft()
-        if len(self.requests[key]) < self.max_calls:
-            self.requests[key].append(now)
+        now = time.monotonic()
+        queue = self.requests.get(key)
+        if queue is None:
+            if self.max_calls <= 0:
+                return False
+            self.requests[key] = deque((now,))
             return True
+        while queue and queue[0] <= now - self.time_window:
+            queue.popleft()
+        if len(queue) < self.max_calls:
+            queue.append(now)
+            return True
+        if not queue:
+            del self.requests[key]
         return False
 
     def left_time(self, key: Any) -> float:
         """计算距离下次可调用还需等待的时间"""
-        if self.requests[key]:
-            loop_time = asyncio.get_event_loop().time()
-            return max(0.0, self.requests[key][0] + self.time_window - loop_time)
+        if queue := self.requests.get(key):
+            return max(0.0, queue[0] + self.time_window - time.monotonic())
         return 0.0
 
 
-__all__ = ["ConcurrencyLimiter", "EventLoopRateLimiter"]
+__all__ = ["EventLoopRateLimiter"]

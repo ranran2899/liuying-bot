@@ -74,10 +74,10 @@ async def _execute_priority_hooks(hook_type: PriorityLifecycleType, type_name: s
 
 
 @driver.on_startup
-async def _():
+async def _startup_hook():
     await _execute_priority_hooks(PriorityLifecycleType.STARTUP, "startup")
 
 
 @driver.on_shutdown
-async def _():
+async def _shutdown_hook():
     await _execute_priority_hooks(PriorityLifecycleType.SHUTDOWN, "shutdown")

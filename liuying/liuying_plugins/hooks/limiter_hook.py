@@ -1,7 +1,7 @@
 from nonebot.matcher import Matcher
 from nonebot.message import run_postprocessor
 
-from liuying.utils.manager.limiter_manager import ConcurrencyLimiter
+from liuying.utils.limiters import ConcurrencyLimiter
 
 
 @run_postprocessor

@@ -4,12 +4,12 @@
 所有功能已封装为类，便于统一管理和导入
 """
 
-from collections.abc import Awaitable, Callable
-from io import BytesIO
 import os
-from pathlib import Path
 import random
 import re
+from collections.abc import Awaitable, Callable
+from io import BytesIO
+from pathlib import Path
 
 import imagehash
 from nonebot.utils import is_coroutine_callable
@@ -254,7 +254,6 @@ class TextRenderer:
         left_padding: int,
     ) -> BuildImage:
         """创建纯文本图片"""
-        _, h = BuildImage.get_text_size("正", _font)
         line_height = font_size // 3
 
         lines = text.split("\n")
@@ -312,12 +311,12 @@ class ImageGrouper:
             if image.uid in used_ids:
                 continue
 
+            surplus_list = [x for x in surplus_list if x.uid not in used_ids]
             group = [image]
             used_ids.add(image.uid)
             curr_h = image.height
 
             while True:
-                surplus_list = [x for x in surplus_list if x.uid not in used_ids]
                 found = False
 
                 for tmp in surplus_list:
@@ -326,6 +325,7 @@ class ImageGrouper:
                         curr_h += tmp.height + 15
                         used_ids.add(tmp.uid)
                         group.append(tmp)
+                        surplus_list.remove(tmp)
                         found = True
                         break
 
@@ -345,34 +345,24 @@ class ImageGrouper:
                 if img.uid in used_ids:
                     continue
 
-                min_h = float("inf")
-                min_index = -1
+                min_index = min(
+                    range(len(image_group)),
+                    key=lambda i: sum(x.height for x in image_group[i]),
+                )
 
-                for i, ig in enumerate(image_group):
-                    if (total_h := sum(x.height for x in ig)) < min_h:
-                        min_h = total_h
-                        min_index = i
-
-                if min_index != -1:
-                    image_group[min_index].append(img)
-                    used_ids.add(img.uid)
+                image_group[min_index].append(img)
+                used_ids.add(img.uid)
 
         max_h = max(sum(x.height + 15 for x in ig) for ig in image_group)
         max_w = sum(max(x.width for x in ig) + 30 for ig in image_group)
 
-        used_ids.clear()
-
         while abs(max_h - max_w) > 200 and len(image_group) - 1 >= len(image_group[-1]):
             for img in image_group[-1]:
-                min_h = float("inf")
-                min_index = -1
+                min_index = min(
+                    range(len(image_group)),
+                    key=lambda i: sum(x.height for x in image_group[i]) + img.height,
+                )
 
-                for i, ig in enumerate(image_group):
-                    if (total_h := sum(x.height for x in ig) + img.height) < min_h:
-                        min_h = total_h
-                        min_index = i
-
-                used_ids.add(min_index)
                 image_group[min_index].append(img)
 
             max_w -= max(x.width for x in image_group[-1]) - 30

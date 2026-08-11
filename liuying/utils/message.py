@@ -1,7 +1,7 @@
 import base64
+import random
 from io import BytesIO
 from pathlib import Path
-import random
 from typing import ClassVar
 
 import nonebot
@@ -31,7 +31,7 @@ from liuying.configs.config import BotConfig
 from liuying.services.log import logger
 from liuying.utils.image import BuildImage
 
-MESSAGE_TYPE = (
+type MESSAGE_TYPE = (
     str
     | int
     | float
@@ -99,16 +99,14 @@ class MessageUtils:
         """
         config = nonebot.get_plugin_config(Config)
         match msg:
+            case Path() if msg.exists():
+                if config.image_to_bytes:
+                    logger.debug("图片转为bytes发送", "MessageUtils")
+                    return Image(raw=BuildImage.open(msg).pic2bytes())
+                return Image(path=msg)
             case Path():
-                if msg.exists():
-                    if config.image_to_bytes:
-                        logger.debug("图片转为bytes发送", "MessageUtils")
-                        return Image(raw=BuildImage.open(msg).pic2bytes())
-                    return Image(path=msg)
                 logger.warning(f"图片路径不存在: {msg}")
-            case bytes():
-                return Image(raw=msg)
-            case BytesIO():
+            case bytes() | BytesIO():
                 return Image(raw=msg)
             case BuildImage():
                 return Image(raw=msg.pic2bytes())
@@ -130,21 +128,18 @@ class MessageUtils:
         message_list = []
         for msg in msg_list:
             match msg:
+                case str() if msg.startswith("base64://"):
+                    message_list.append(Image(raw=BytesIO(base64.b64decode(msg[9:]))))
                 case str():
-                    if msg.startswith("base64://"):
-                        message_list.append(
-                            Image(raw=BytesIO(base64.b64decode(msg[9:])))
-                        )
-                    else:
-                        formatted_msg = msg
-                        if format_args:
-                            try:
-                                formatted_msg = msg.format_map(format_args)
-                            except (KeyError, IndexError) as e:
-                                logger.debug(
-                                    f"格式化字符串 '{msg}' 失败 ({e})，将使用原始文本。"
-                                )
-                        message_list.append(Text(formatted_msg))
+                    text = msg
+                    if format_args:
+                        try:
+                            text = msg.format_map(format_args)
+                        except (KeyError, IndexError) as e:
+                            logger.debug(
+                                f"格式化字符串 '{msg}' 失败 ({e})，将使用原始文本。"
+                            )
+                    message_list.append(Text(text))
                 case int() | float():
                     message_list.append(Text(str(msg)))
                 case Path() | bytes() | BytesIO() | BuildImage():
@@ -219,13 +214,13 @@ class MessageUtils:
             CustomNode(
                 uid=uin,
                 name=name,
-                content=UniMessage(
-                    [cls._process_forward_node(m) for m in msg]
-                    if isinstance(msg := _msg, list)
-                    else _msg
+                content=(
+                    UniMessage([cls._process_forward_node(m) for m in msg])
+                    if isinstance(msg, list)
+                    else msg
                 ),
             )
-            for _msg in msg_list
+            for msg in msg_list
         ]
         return UniMessage(Reference(nodes=nodes))
 

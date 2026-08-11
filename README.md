@@ -8,7 +8,7 @@
     <img src="https://img.shields.io/badge/license-AGPL--3.0-FE7D37" alt="license">
 </a>
 <a href="https://www.python.org">
-    <img src="https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white" alt="python">
+    <img src="https://img.shields.io/badge/Python-3.14%2B-blue?logo=python&logoColor=white" alt="python">
 </a>
 <a href="https://nonebot.dev/">
     <img src="https://img.shields.io/badge/nonebot-v2.5.0-EA5252" alt="nonebot">
@@ -96,7 +96,7 @@
 
 ### 环境要求
 
-- Python >= 3.11
+- Python >= 3.14
 - uv 包管理器
 
 ### 安装步骤

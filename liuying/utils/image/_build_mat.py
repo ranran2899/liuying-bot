@@ -15,14 +15,14 @@
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
-from typing import Any, ClassVar, TypeAlias
+from typing import Any, ClassVar
 
 from PIL import Image
 
 from liuying.utils.image._build_image import BuildImage, _to_rgb
 
-ColorValue: TypeAlias = str | tuple[int, int, int]
-DataValue: TypeAlias = int | str | float
+type ColorValue = str | tuple[int, int, int]
+type DataValue = int | str | float
 
 TREND_ARROW_UP = "↑"
 TREND_ARROW_DOWN = "↓"
@@ -331,11 +331,11 @@ class BuildRankMat:
         参数:
             background_image: 背景图片路径或字节数据
         """
-        match background_image:
-            case bytes():
-                bg_img = Image.open(BytesIO(background_image))
-            case _:
-                bg_img = Image.open(background_image)
+        bg_img = (
+            Image.open(BytesIO(background_image))
+            if isinstance(background_image, bytes)
+            else Image.open(background_image)
+        )
 
         canvas = BuildImage(width=self.width, height=self.height, color="#FFFFFF")
 

@@ -7,10 +7,12 @@ from nonebot.adapters.onebot.v12 import Bot as v12Bot
 
 from liuying.utils.log import logger
 
+type WithdrawEntry = tuple[Bot, str | int, int]
+
 
 class WithdrawManager:
     """撤回消息管理器"""
-    _data: ClassVar[dict[int, tuple[Bot, str | int, int]]] = {}
+    _data: ClassVar[dict[int, WithdrawEntry]] = {}
     _index: ClassVar[int] = 0
 
     @classmethod
@@ -37,8 +39,7 @@ class WithdrawManager:
         参数:
             index: 消息索引
         """
-        if index in cls._data:
-            del cls._data[index]
+        cls._data.pop(index, None)
 
     @classmethod
     async def withdraw_message(

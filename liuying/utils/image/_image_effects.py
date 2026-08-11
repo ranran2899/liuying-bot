@@ -13,6 +13,8 @@
 - ``gradient_background`` 创建全新的 ``BuildImage``
 """
 
+from itertools import product
+
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 from PIL.ImageFont import FreeTypeFont
 
@@ -92,22 +94,18 @@ class ImageEffects:
         canvas_w = image.width + abs_dx * 2 + padding * 2
         canvas_h = image.height + abs_dy * 2 + padding * 2
 
-        # 阴影矩形相对画布的位置（考虑偏移方向）
-        shadow_x = padding + abs_dx + offset[0]
-        shadow_y = padding + abs_dy + offset[1]
+        # 阴影矩形与原图位置（偏移方向一致）
+        off_x = padding + abs_dx + offset[0]
+        off_y = padding + abs_dy + offset[1]
 
         shadow = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
         shadow_draw = ImageDraw.Draw(shadow)
         shadow_draw.rectangle(
-            [shadow_x, shadow_y, shadow_x + image.width, shadow_y + image.height],
+            [off_x, off_y, off_x + image.width, off_y + image.height],
             fill=(*rgb_color, alpha_val),
         )
         shadow = shadow.filter(ImageFilter.GaussianBlur(blur))
-
-        # 原图位置：与阴影偏移方向一致
-        img_x = padding + abs_dx + offset[0]
-        img_y = padding + abs_dy + offset[1]
-        shadow.alpha_composite(img_rgba, (img_x, img_y))
+        shadow.alpha_composite(img_rgba, (off_x, off_y))
 
         new_image = BuildImage(canvas_w, canvas_h, color=(0, 0, 0, 0), mode="RGBA")
         new_image.mark_img = shadow
@@ -143,32 +141,37 @@ class ImageEffects:
 
         match direction_val:
             case GradientDirection.HORIZONTAL:
-                # 水平渐变：1 像素高的横向渐变拉伸到全宽
+                # 水平渐变：1 像素高的横向渐变拉伸到全画布
                 gradient = Image.new("L", (w, 1))
-                for x in range(w):
-                    gradient.putpixel((x, 0), int(x / max(w - 1, 1) * 255))
+                span = max(w - 1, 1)
+                gradient.putdata([x * 255 // span for x in range(w)])
                 gradient = gradient.resize((w, h))
             case GradientDirection.VERTICAL:
                 gradient = Image.new("L", (1, h))
-                for y in range(h):
-                    gradient.putpixel((0, y), int(y / max(h - 1, 1) * 255))
+                span = max(h - 1, 1)
+                gradient.putdata([y * 255 // span for y in range(h)])
                 gradient = gradient.resize((w, h))
             case GradientDirection.DIAGONAL:
-                gradient = Image.new("L", (w, h), 0)
+                gradient = Image.new("L", (w, h))
                 max_pos = max(w + h - 2, 1)
-                for y in range(h):
-                    for x in range(w):
-                        gradient.putpixel((x, y), int((x + y) / max_pos * 255))
+                # 按行预计算 x 分量，避免逐像素重复运算
+                xs = list(range(w))
+                gradient.putdata(
+                    [(x + y) * 255 // max_pos for y in range(h) for x in xs]
+                )
             case GradientDirection.RADIAL:
-                gradient = Image.new("L", (w, h), 0)
+                gradient = Image.new("L", (w, h))
                 cx, cy = w // 2, h // 2
                 max_dist = max((cx**2 + cy**2) ** 0.5, 1.0)
-                for y in range(h):
-                    for x in range(w):
-                        dist = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
-                        gradient.putpixel(
-                            (x, y), int(min(dist / max_dist, 1.0) * 255)
-                        )
+                # 预计算横向平方距离，纵向仅计算一次
+                dx2 = [(x - cx) ** 2 for x in range(w)]
+                gradient.putdata(
+                    [
+                        min(int(((d + dy2) ** 0.5) / max_dist * 255), 255)
+                        for dy2 in ((y - cy) ** 2 for y in range(h))
+                        for d in dx2
+                    ]
+                )
 
         result = Image.composite(
             Image.new("RGB", (w, h), end_rgb),
@@ -225,10 +228,8 @@ class ImageEffects:
         """
         x, y = pos
         outline_rgb = _to_rgb(outline)
-        for dx in range(-width, width + 1):
-            for dy in range(-width, width + 1):
-                if dx == 0 and dy == 0:
-                    continue
+        for dx, dy in product(range(-width, width + 1), repeat=2):
+            if dx or dy:
                 draw.text((x + dx, y + dy), text, fill=outline_rgb, font=font)
         draw.text(pos, text, fill=fill, font=font)
 

@@ -1,13 +1,10 @@
 import asyncio
-from pathlib import Path
 import subprocess
-from subprocess import CalledProcessError
+from pathlib import Path
 from typing import ClassVar
 
 from liuying.configs.config import Config
 from liuying.utils.log import logger
-
-PYTHON311 = Path() / "Python311" / "python.exe"
 
 LOG_COMMAND = "VirtualEnvPackageManager"
 
@@ -30,8 +27,6 @@ class VirtualEnvPackageManager:
     def __get_command(cls) -> list[str]:
         if path := Config.get_config("virtualenv", "python_path"):
             return [path, "-m", "pip"]
-        if PYTHON311.exists():
-            return [str(PYTHON311), "-m", "pip"]
         return cls.DEFAULT_COMMAND.copy()
 
     @classmethod
@@ -59,7 +54,7 @@ class VirtualEnvPackageManager:
             if extra_args:
                 command.extend(extra_args)
             if packages:
-                command.append(" ".join(packages))
+                command.extend(packages)
             logger.info(f"执行虚拟环境{subcommand}包指令: {command}", LOG_COMMAND)
             result = await asyncio.to_thread(
                 subprocess.run,
@@ -73,7 +68,7 @@ class VirtualEnvPackageManager:
                 LOG_COMMAND,
             )
             return result.stdout
-        except CalledProcessError as e:
+        except subprocess.CalledProcessError as e:
             logger.error(
                 f"虚拟环境{subcommand}包指令执行失败: {e.stderr}.",
                 LOG_COMMAND,
@@ -117,33 +112,12 @@ class VirtualEnvPackageManager:
         异常:
             FileNotFoundError: 文件不存在
         """
-        if not requirement_file.exists():
+        if not await asyncio.to_thread(requirement_file.exists):
             raise FileNotFoundError(f"依赖文件 {requirement_file} 不存在")
-        try:
-            command = cls.__get_command()
-            command.extend(["install", "-r", str(requirement_file.absolute())])
-            logger.info(f"执行虚拟环境安装依赖文件指令: {command}", LOG_COMMAND)
-            result = await asyncio.to_thread(
-                subprocess.run,
-                command,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            logger.debug(
-                f"安装虚拟环境依赖文件指令执行完成: {result.stdout}",
-                LOG_COMMAND,
-            )
-            return result.stdout
-        except CalledProcessError as e:
-            logger.error(
-                f"安装虚拟环境依赖文件指令执行失败: {e.stderr}.",
-                LOG_COMMAND,
-            )
-            return e.stderr
+        abs_path = requirement_file.absolute()
+        return await cls._run_pip("install", [], ["-r", str(abs_path)])
 
     @classmethod
     async def list(cls) -> str:
         """列出已安装的依赖包"""
-        result = await cls._run_pip("list", [])
-        return result or ""
+        return await cls._run_pip("list", [])

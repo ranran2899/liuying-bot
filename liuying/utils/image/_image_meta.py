@@ -145,9 +145,7 @@ class ImageMetaProcessor:
             bytes: 清除 EXIF 后的图片二进制数据
         """
         with Image.open(BytesIO(image_bytes)) as img:
-            exif = img.getexif() if hasattr(img, "getexif") else None
-            if exif is not None:
-                exif.clear()
+            img.getexif().clear()
 
             # 直接保存原图（保留模式、调色板、动画）
             output = BytesIO()
@@ -247,9 +245,6 @@ def _extract_exif(img: Image.Image) -> dict[int, Any]:
         dict[int, Any]: EXIF 字典
     """
     try:
-        exif = img.getexif()
-        if exif is None:
-            return {}
-        return dict(exif)
-    except (AttributeError, OSError, ValueError):
+        return dict(img.getexif())
+    except (OSError, ValueError):
         return {}

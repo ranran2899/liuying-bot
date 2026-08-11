@@ -5,11 +5,14 @@
 """
 
 from collections.abc import Sequence
-from io import BytesIO
 
 from PIL import Image
 
-from liuying.utils.image._build_image import BuildImage, ColorAlias
+from liuying.utils.image._build_image import (
+    BuildImage,
+    ColorAlias,
+    to_build_image,
+)
 
 
 class ImageComposer:
@@ -45,7 +48,7 @@ class ImageComposer:
         if align not in {"top", "center", "bottom"}:
             raise ValueError("align 必须是 top/center/bottom")
 
-        normalized = [_to_build_image(img) for img in images]
+        normalized = [to_build_image(img) for img in images]
         total_width = sum(img.width for img in normalized) + gap * (len(normalized) - 1)
         max_height = max(img.height for img in normalized)
 
@@ -91,7 +94,7 @@ class ImageComposer:
         if align not in {"left", "center", "right"}:
             raise ValueError("align 必须是 left/center/right")
 
-        normalized = [_to_build_image(img) for img in images]
+        normalized = [to_build_image(img) for img in images]
         total_height = (
             sum(img.height for img in normalized) + gap * (len(normalized) - 1)
         )
@@ -148,7 +151,7 @@ class ImageComposer:
         elif cols is None:
             cols = (len(images) + rows - 1) // rows
 
-        normalized = [_to_build_image(img) for img in images]
+        normalized = [to_build_image(img) for img in images]
         max_w = max(img.width for img in normalized)
         max_h = max(img.height for img in normalized)
 
@@ -188,8 +191,8 @@ class ImageComposer:
         返回:
             BuildImage: 对比图
         """
-        before_img = _to_build_image(before)
-        after_img = _to_build_image(after)
+        before_img = to_build_image(before)
+        after_img = to_build_image(after)
         target_h = max(before_img.height, after_img.height)
 
         if before_img.height != target_h:
@@ -258,7 +261,7 @@ class ImageComposer:
         if not images:
             raise ValueError("图片列表不能为空")
 
-        normalized = [_to_build_image(img) for img in images]
+        normalized = [to_build_image(img) for img in images]
         dx, dy = offset
         total_w = normalized[0].width + dx * (len(normalized) - 1)
         total_h = normalized[0].height + dy * (len(normalized) - 1)
@@ -300,7 +303,7 @@ class ImageComposer:
         if not images:
             raise ValueError("图片列表不能为空")
 
-        normalized = [_to_build_image(img) for img in images]
+        normalized = [to_build_image(img) for img in images]
         cols = _auto_columns(len(normalized))
         rows = (len(normalized) + cols - 1) // cols
 
@@ -327,22 +330,6 @@ class ImageComposer:
         return canvas
 
 
-def _to_build_image(image: BuildImage | Image.Image) -> BuildImage:
-    """统一转换为 BuildImage
-
-    参数:
-        image: BuildImage 或 PIL Image 对象
-
-    返回:
-        BuildImage: 转换后的对象
-    """
-    if isinstance(image, BuildImage):
-        return image
-    buf = BytesIO()
-    image.save(buf, format="PNG")
-    return BuildImage.open(buf.getvalue())
-
-
 def _auto_columns(count: int) -> int:
     """根据图片数量自动决定列数
 
@@ -352,10 +339,4 @@ def _auto_columns(count: int) -> int:
     返回:
         int: 推荐列数
     """
-    if count <= 1:
-        return 1
-    if count <= 4:
-        return 2
-    if count <= 9:
-        return 3
-    return 4
+    return 1 if count <= 1 else 2 if count <= 4 else 3 if count <= 9 else 4

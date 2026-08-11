@@ -6,11 +6,11 @@
 
 import base64
 import contextlib
+import uuid
 from functools import cache
 from io import BytesIO
 from pathlib import Path
-from typing import TypeAlias, overload
-import uuid
+from typing import overload
 
 from nonebot.utils import run_sync
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -21,7 +21,7 @@ from PIL.ImageFont import FreeTypeFont
 from liuying.configs.path_config import FONT_PATH
 from liuying.utils.enum import CenterType, FilterType, ModeType
 
-ColorAlias: TypeAlias = str | tuple[int, int, int] | tuple[int, int, int, int] | None
+type ColorAlias = str | tuple[int, int, int] | tuple[int, int, int, int] | None
 
 
 @cache
@@ -280,6 +280,19 @@ class BuildImage:
         text_box = _get_measure_draw().textbbox((0, 0), str(msg), font=self.font)
         return text_box[2] - text_box[0], text_box[3] - text_box[1] + 10
 
+    @staticmethod
+    def _resolve_font(
+        font: FreeTypeFont | str | Path | None,
+        font_size: int,
+        default_font: FreeTypeFont,
+    ) -> FreeTypeFont:
+        """解析字体为 FreeTypeFont，字符串按路径加载，否则回退默认字体。"""
+        if isinstance(font, FreeTypeFont):
+            return font
+        if font:
+            return BuildImage.load_font(font, font_size)
+        return default_font
+
     def _center_xy(
         self,
         pos: tuple[int, int],
@@ -408,11 +421,7 @@ class BuildImage:
         sentence = str(text).split("\n")
         max_length_text = max(sentence, key=len, default="")
 
-        _font = (
-            self.load_font(font, font_size)
-            if font and not isinstance(font, FreeTypeFont)
-            else font if isinstance(font, FreeTypeFont) else self.font
-        )
+        _font = self._resolve_font(font, font_size, self.font)
 
         if center_type:
             ttf_w, ttf_h = self.getsize(max_length_text)
@@ -446,11 +455,7 @@ class BuildImage:
         返回:
             BuildImage: Self
         """
-        _font = (
-            self.load_font(font, font_size)
-            if font and not isinstance(font, FreeTypeFont)
-            else font if isinstance(font, FreeTypeFont) else self.font
-        )
+        _font = self._resolve_font(font, font_size, self.font)
         cur_x, cur_y = pos
         for line in str(text).split("\n"):
             line_text = ""
@@ -839,6 +844,43 @@ class BuildImage:
         if isinstance(self.mark_img, Image.Image):
             self.draw = ImageDraw.Draw(self.mark_img)
         return self
+
+
+def to_build_image(image: "BuildImage | tImage | bytes") -> "BuildImage":
+    """统一转换为 BuildImage
+
+    参数:
+        image: BuildImage、PIL Image 或图片字节数据
+
+    返回:
+        BuildImage: 转换后的对象
+    """
+    if isinstance(image, BuildImage):
+        return image
+    if isinstance(image, bytes):
+        return BuildImage.open(image)
+    buf = BytesIO()
+    image.save(buf, format="PNG")
+    return BuildImage.open(buf.getvalue())
+
+
+def to_pil_image(image: "BuildImage | tImage | bytes") -> tImage:
+    """统一转换为 PIL Image（返回独立副本，避免副作用）
+
+    参数:
+        image: BuildImage、PIL Image 或图片字节数据
+
+    返回:
+        Image.Image: PIL 图片对象的副本
+    """
+    match image:
+        case BuildImage():
+            return image.mark_img.copy()
+        case bytes():
+            with Image.open(BytesIO(image)) as img:
+                return img.copy()
+        case _:
+            return image.copy()
 
 
 def _to_rgb(color: str | tuple[int, ...]) -> tuple[int, int, int]:

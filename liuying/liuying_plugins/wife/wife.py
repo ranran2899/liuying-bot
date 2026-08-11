@@ -76,7 +76,7 @@ class WifeHandler:
                 f"今天的wife是 {wife_name}，但图片加载失败了~"
             ).finish()
 
-        msg = f"你的今日老婆是「{wife_name}」~\n今天的第{today_count}个老婆"
+        msg = f"#你的今日老婆是「{wife_name}」~\n今天的第{today_count}个老婆"
         if is_new:
             await UserGold.add_user_gold(
                 user_id=user_id, amount=enable_gold, source="今日老婆"

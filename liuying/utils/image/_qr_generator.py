@@ -7,8 +7,8 @@
 from dataclasses import dataclass, replace
 from io import BytesIO
 
-from PIL import Image, ImageDraw
 import qrcode
+from PIL import Image, ImageDraw
 from qrcode.constants import (
     ERROR_CORRECT_H,
     ERROR_CORRECT_L,
@@ -17,7 +17,11 @@ from qrcode.constants import (
 )
 
 from liuying.utils.enum import ModuleStyle
-from liuying.utils.image._build_image import BuildImage, _to_rgb
+from liuying.utils.image._build_image import (
+    BuildImage,
+    _to_rgb,
+    to_build_image,
+)
 
 
 class ErrorCorrectionLevel:
@@ -88,7 +92,7 @@ class QrGenerator:
         )
 
         img = _resize_to(img, cfg.size)
-        return _to_build_image(img)
+        return to_build_image(img)
 
     @staticmethod
     def generate_with_logo(
@@ -137,7 +141,7 @@ class QrGenerator:
         )
         img.alpha_composite(logo_pil, logo_pos)
 
-        return _to_build_image(img)
+        return to_build_image(img)
 
     @staticmethod
     def generate_styled(
@@ -171,7 +175,7 @@ class QrGenerator:
         )
 
         img = _resize_to(img, cfg.size)
-        return _to_build_image(img)
+        return to_build_image(img)
 
 
 def _build_matrix(data: str, error_correction: int, border: int):
@@ -227,6 +231,7 @@ def _render_matrix(
     img = Image.new("RGBA", (total_size, total_size), (*bg_rgb, 255))
     draw = ImageDraw.Draw(img)
     radius = max(1, box_size // 2)
+    fill = (*color_rgb, 255)
 
     for y, row in enumerate(matrix):
         for x, is_dark in enumerate(row):
@@ -237,16 +242,16 @@ def _render_matrix(
             box = [px, py, px + box_size, py + box_size]
             match style:
                 case ModuleStyle.SQUARE:
-                    draw.rectangle(box, fill=(*color_rgb, 255))
+                    draw.rectangle(box, fill=fill)
                 case ModuleStyle.ROUNDED:
-                    draw.rounded_rectangle(box, radius=radius, fill=(*color_rgb, 255))
+                    draw.rounded_rectangle(box, radius=radius, fill=fill)
                 case ModuleStyle.CIRCLE:
-                    draw.ellipse(box, fill=(*color_rgb, 255))
+                    draw.ellipse(box, fill=fill)
                 case ModuleStyle.GAPPED:
                     gap = max(1, box_size // 5)
                     draw.rectangle(
                         [box[0] + gap, box[1] + gap, box[2] - gap, box[3] - gap],
-                        fill=(*color_rgb, 255),
+                        fill=fill,
                     )
     return img
 
@@ -279,17 +284,3 @@ def _to_pil(image: BuildImage | bytes) -> Image.Image:
         return image.mark_img.copy()
     with Image.open(BytesIO(image)) as img:
         return img.convert("RGBA")
-
-
-def _to_build_image(img: Image.Image) -> BuildImage:
-    """PIL Image 转换为 BuildImage
-
-    参数:
-        img: PIL Image 对象
-
-    返回:
-        BuildImage: BuildImage 对象
-    """
-    buf = BytesIO()
-    img.save(buf, format="PNG")
-    return BuildImage.open(buf.getvalue())

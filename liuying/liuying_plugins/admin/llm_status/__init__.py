@@ -154,7 +154,7 @@ __plugin_meta__ = PluginMetadata(
 llm_status_cmd = on_alconna(
     Alconna("LLM状态"),
     rule=admin_check(6),
-    aliases={"llm状态"}
+    # aliases={"llm状态"}
     priority=5,
     block=True,
 )

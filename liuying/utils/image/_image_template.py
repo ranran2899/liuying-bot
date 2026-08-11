@@ -3,12 +3,12 @@
 提供图片模板生成功能，包括表格、文档、Markdown 和 Notebook 格式
 """
 
+import random
 from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-import random
-from typing import ClassVar, Self, TypeAlias
+from typing import ClassVar, Self
 
 from nonebot_plugin_htmlrender import md_to_pic, template_to_pic
 from PIL.ImageFont import FreeTypeFont
@@ -16,8 +16,8 @@ from PIL.ImageFont import FreeTypeFont
 from liuying.configs.path_config import TEMPLATE_PATH
 from liuying.utils.image._build_image import BuildImage
 
-ColorType: TypeAlias = str | tuple[int, int, int]
-TableDataItem: TypeAlias = str | int | tuple[Path | BuildImage | bytes, int, int]
+type ColorType = str | tuple[int, int, int]
+type TableDataItem = str | int | tuple[Path | BuildImage | bytes, int, int]
 
 
 @dataclass(slots=True)
