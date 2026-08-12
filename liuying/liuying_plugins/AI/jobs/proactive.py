@@ -245,7 +245,7 @@ class ProactiveHelper:
             try:
                 message = (
                     await ProactiveHelper._generate_greeting(
-                        greeting_type
+                        greeting_type, user.user_id
                     )
                 )
                 if not message:
@@ -270,19 +270,24 @@ class ProactiveHelper:
 
     @staticmethod
     async def _generate_greeting(
-        greeting_type: str
+        greeting_type: str,
+        user_id: str | None = None,
     ) -> str:
         """生成问候消息
 
         参数:
             greeting_type: 问候类型（早安/晚安）
+            user_id: 目标用户ID，用于按用户切换的人格口吻生成
 
         返回:
             str: 问候消息，失败返回空串
         """
         try:
-            persona = persona_manager.get_default_persona()
-            persona_name = persona.get("name") or "AI"
+            persona_name = (
+                persona_manager.get_user_persona_name(user_id)
+                if user_id
+                else "AI"
+            )
             prompt = (
                 f"请以{persona_name}的口吻为一位高好感度好友"
                 f"发送一条{greeting_type}问候。\n\n"

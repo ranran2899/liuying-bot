@@ -129,7 +129,13 @@ class MemoryDecayHelper:
         """用户画像更新任务
 
         每2小时执行，检查用户消息历史达阈值则更新画像。
-        按 persona_name 分组统计与拉取历史，保证人设间数据隔离。
+
+        用户画像（`UserPersonaProfile`）按 user_id 单条存储，不区
+        分人格，因此按 (user_id, group_id) 聚合即可；原先按
+        persona_name 额外分组会导致同一用户被重复生成 N 次画像
+        （每人称一次 LLM 调用），且最终画像由最后一个人格历史
+        覆盖（非确定性）。现改为按 (user_id, group_id) 聚合，用
+        用户当前激活人格取历史生成，单次、确定。
         优化：一次查询所有近期 user 消息并在 Python 内存分组计数，
         消除循环内 count 查询的 N+1 问题。
         """
@@ -143,24 +149,20 @@ class MemoryDecayHelper:
                 role="user",
             ).all()
 
-            # Python 内存按 (user_id, group_id, persona_name) 分组计数，
-            # 避免循环内 N 次 count 查询的 N+1 问题
+            # 画像按用户存储，仅按 (user_id, group_id) 聚合计数
             counter: dict[
-                tuple[str, str | None, str | None], int
+                tuple[str, str | None], int
             ] = defaultdict(int)
             for r in records:
-                counter[
-                    (r.user_id, r.group_id, r.persona_name)
-                ] += 1
+                counter[(r.user_id, r.group_id)] += 1
 
             updated = 0
-            for (
-                user_id,
-                group_id,
-                persona_name,
-            ), count in counter.items():
+            for (user_id, group_id), count in counter.items():
                 if count < _PERSONA_UPDATE_THRESHOLD:
                     continue
+                persona_name = await persona_manager.get_user_persona_name(
+                    user_id
+                )
                 history_records = (
                     await ConversationRecord.get_history(
                         user_id,

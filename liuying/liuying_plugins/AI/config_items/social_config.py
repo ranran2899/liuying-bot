@@ -136,5 +136,14 @@ SOCIAL_CONFIGS: list[RegisterConfig] = [
         default_value={"enabled": True, "interval": 12},
         type=dict,
     ),
+    # ===== 主动拍一拍每日上限 =====
+    RegisterConfig(
+        key="PROACTIVE_POKE_DAILY_LIMIT",
+        value=3,
+        module=MODULE,
+        help="主动拍一拍每日触发上限",
+        default_value=3,
+        type=int,
+    ),
 ]
 """社交与主动行为配置项列表"""

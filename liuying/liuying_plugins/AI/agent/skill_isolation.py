@@ -12,6 +12,8 @@ from pathlib import Path
 import sys
 from typing import Any
 
+from liuying.utils.log import logger
+
 __all__ = [
     "SkillIsolationRunner",
     "skill_isolation_runner",
@@ -128,6 +130,15 @@ class SkillIsolationRunner:
                 timeout=timeout,
             )
         except TimeoutError:
+            # 超时分支同时排空 stderr，保留诊断信息（原实现会丢弃）
+            try:
+                _, stderr = await proc.communicate()
+                err = stderr.decode("utf-8", errors="replace").strip()
+                logger.warning(
+                    f"技能隔离执行超时: {err}", command="AI"
+                )
+            except Exception:
+                pass
             proc.kill()
             await proc.wait()
             raise

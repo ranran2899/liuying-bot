@@ -118,15 +118,15 @@ __plugin_meta__ = PluginMetadata(
     ).to_dict(),
 )
 
-@PriorityLifecycle.on_startup(priority=1)
+@PriorityLifecycle.on_startup(priority=20)
 async def _init_ai_plugin() -> None:
     """AI插件初始化
 
     初始化内置知识库（独立 SQLite，与 liuying_db 解耦），
     注册定时任务和matcher。
 
-    通过 PriorityLifecycle 注册，优先级=2，确保在依赖系统
-    （数据库/LLM/缓存）就绪后、业务插件之前加载。
+    通过 PriorityLifecycle 注册，优先级=20，作为业务插件在核心服务
+    （数据库/LLM/缓存，优先级<=10）就绪后加载。
     """
     if not get_config("ENABLE_AI", True):
         logger.info("AI插件已禁用", command="AI")
@@ -172,9 +172,8 @@ async def _init_ai_plugin() -> None:
     # WebUI 管理能力已整合到流萤本体 web_ui 插件（liuying_plugins/web_ui），
     # 通过 /liuying/api/ai/* 路由统一挂载，使用本体JWT认证。
 
-    # 延迟导入以避免循环依赖：skill_runtime 导入 agent 工具模块，
-    # 而 AI 插件 __init__ 在初始化阶段调用 register_all
-    # 参考参考插件 __init__.py 的 SkillRuntime 构建方式，
+    # 延迟导入以避免循环依赖：skills 层导入 agent 工具与 core 服务，
+    # 而 AI 插件 __init__ 在初始化阶段调用 register_all，
     # 显式注入主插件服务给技能包
     from datetime import datetime
 
@@ -183,12 +182,11 @@ async def _init_ai_plugin() -> None:
     from liuying.configs.path_config import DATA_PATH
     from liuying.utils.apscheduler import task_manager
 
-    from .agent.skill_runtime import skill_loader
-    from .agent.skill_runtime_api import SkillRuntime
     from .core.knowledge_db import knowledge_base as kb
     from .core.llm import llm_helper
     from .core.memory import memory_manager
     from .core.persona import persona_manager
+    from .skills import SkillRuntime, skill_loader
 
     ai_data_dir = DATA_PATH / "ai"
     ai_data_dir.mkdir(parents=True, exist_ok=True)
@@ -205,8 +203,10 @@ async def _init_ai_plugin() -> None:
         scheduler=task_manager,
         get_bots=nonebot.get_bots,
     )
-    skill_loader.register_all(runtime=runtime)
-    logger.debug("AI技能包已加载", command="AI")
+    tool_count = skill_loader.register_all(runtime=runtime)
+    logger.debug(
+        f"AI技能包已加载，注册工具{tool_count}个", command="AI"
+    )
 
 
 @PriorityLifecycle.on_shutdown(priority=5)

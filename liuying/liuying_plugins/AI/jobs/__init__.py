@@ -4,9 +4,9 @@
 日记系统、知识库刷新与清理、群风格自动学习、用户定时任务恢复。
 """
 
-from ..agent.skill_runtime import skill_loader
 from ..config import get_config
 from ..core.tasks_service import task_service
+from ..skills import skill_loader
 from .diary import setup_diary_job
 from .group_style_autobuild import setup_group_style_autobuild_job
 from .knowledge_refresh import setup_knowledge_jobs

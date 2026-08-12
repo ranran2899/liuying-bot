@@ -9,6 +9,8 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 
+from liuying.utils.log import logger
+
 from ...config import get_config
 from ...models.memory_item import MemoryItem
 from ..knowledge_db.query_rewriter import rewrite_query
@@ -82,8 +84,28 @@ class RecallMixin:
                 embedding_task,
                 entity_task,
                 time_task,
+                return_exceptions=True,
             )
         )
+        # 单路召回失败（嵌入API/DB异常等）不应中断整体回复，
+        # 逐路降级为空，保留其余路径的召回结果
+        for _name, _res in (
+            ("fts", fts_res),
+            ("vector", vec_res),
+            ("embedding", emb_res),
+            ("entity", ent_res),
+            ("time", time_res),
+        ):
+            if isinstance(_res, Exception):
+                logger.warning(
+                    f"记忆召回 {_name} 路失败，降级为空: {_res}",
+                    command="AI",
+                )
+        fts_res = fts_res if isinstance(fts_res, list) else []
+        vec_res = vec_res if isinstance(vec_res, list) else []
+        emb_res = emb_res if isinstance(emb_res, list) else []
+        ent_res = ent_res if isinstance(ent_res, list) else []
+        time_res = time_res if isinstance(time_res, list) else []
         candidates: dict[str, list[tuple[int, float]]] = {
             "fts": fts_res,
             "vector": vec_res,

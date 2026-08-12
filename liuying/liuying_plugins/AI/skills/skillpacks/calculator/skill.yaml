@@ -1,0 +1,13 @@
+name: calculator
+description: 精确计算数学表达式，避免模型心算出错
+category: compute
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    expression:
+      type: string
+      description: 数学表达式
+  required:
+    - expression

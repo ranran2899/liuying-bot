@@ -25,12 +25,11 @@ from ..constants import (
 from .evidence import RETRYABLE_LOOKUP_TOOLS, EvidenceComposer
 
 # 时效性搜索工具白名单（注入当前日期提升结果新鲜度）
+# 仅限真实联网检索类工具，避免对插件能力查询等无关工具注入日期
 _TIMESENSITIVE_SEARCH_TOOLS: set[str] = {
     "web_search",
     "fetch_webpage",
-    "search_plugin_by_capability",
 }
-"""时效性搜索工具，query含时间词时注入当前日期"""
 
 # 时效性关键词，命中时触发日期注入
 _TIMESENSITIVE_KEYWORDS: tuple[str, ...] = (
@@ -49,6 +48,12 @@ _TIMESENSITIVE_KEYWORDS: tuple[str, ...] = (
 
 _MAX_QUERY_VARIANTS = 3
 """单工具最多尝试的查询变体数"""
+
+_MAX_PARALLEL_TOOLS = 3
+"""研究模式下单批并发执行的工具数上限"""
+
+_DEFAULT_CHAIN_BUDGET = 180.0
+"""工具链默认时间预算（秒）"""
 
 
 @dataclass(slots=True)
@@ -492,6 +497,114 @@ class ToolExecutor:
                 return name
         return ""
 
+    def _is_satisfiable(
+        self, tool_name: str, args: dict[str, Any]
+    ) -> bool:
+        """判断工具的必填参数能否被给定参数满足
+
+        并发批次中除主工具外没有 LLM 给出的专属参数，
+        必填参数无法满足的工具直接排除，避免白跑一次校验失败。
+
+        参数:
+            tool_name: 工具名
+            args: 可用参数字典
+
+        返回:
+            bool: 必填参数是否齐备
+        """
+        tool = self._registry.get(tool_name)
+        if tool is None or tool.is_disabled:
+            return False
+        required = (tool.parameters or {}).get("required") or []
+        return all(key in args for key in required)
+
+    def _pick_parallel_tools(
+        self, plan, base_args: dict[str, Any]
+    ) -> list[str]:
+        """挑选可并发执行的工具批次
+
+        从规划候选中取出参数可满足、彼此独立的工具，
+        最多 _MAX_PARALLEL_TOOLS 个。
+
+        参数:
+            plan: 回合规划
+            base_args: LLM 给出的基础参数
+
+        返回:
+            list[str]: 工具名列表，首个为规划主工具
+        """
+        active_names = {
+            t.name for t in self._registry.active_tools()
+        }
+        ordered: list[str] = []
+        if plan.tool_name:
+            ordered.append(plan.tool_name)
+        ordered.extend(plan.tool_candidates)
+        if not plan.tool_candidates and plan.intent_tags:
+            ordered.extend(
+                tool_catalog.recommend_tools(plan.intent_tags)
+            )
+
+        picked: list[str] = []
+        for name in ordered:
+            if name in picked or name not in active_names:
+                continue
+            if picked and not self._is_satisfiable(name, base_args):
+                continue
+            picked.append(name)
+            if len(picked) >= _MAX_PARALLEL_TOOLS:
+                break
+        return picked
+
+    async def execute_batch(
+        self,
+        specs: list[tuple[str, dict[str, Any]]],
+        time_budget: float,
+    ) -> list[ToolCallRecord]:
+        """并发执行一批工具调用
+
+        单个工具失败或超时不影响同批其他工具，
+        整批共享同一时间预算。
+
+        参数:
+            specs: (工具名, 参数) 列表
+            time_budget: 本批时间预算（秒）
+
+        返回:
+            list[ToolCallRecord]: 与 specs 顺序一致的调用记录
+        """
+        if not specs:
+            return []
+        per_call_timeout = min(self._default_timeout, time_budget)
+        results = await asyncio.gather(
+            *(
+                self.execute(
+                    tool_name=name,
+                    args=args,
+                    timeout=per_call_timeout,
+                )
+                for name, args in specs
+            ),
+            return_exceptions=True,
+        )
+
+        records: list[ToolCallRecord] = []
+        for (name, args), result in zip(specs, results, strict=True):
+            if isinstance(result, ToolCallRecord):
+                records.append(result)
+                continue
+            # gather 的异常已被 execute 内部消化，此分支仅兜底
+            # 任务取消等极端情况，转为失败记录保持返回结构一致。
+            record = ToolCallRecord(
+                tool_name=name,
+                args=dict(args),
+                timestamp=time.time(),
+                error=f"工具 '{name}' 并发执行异常: {result}",
+            )
+            self._metrics.record(record)
+            records.append(record)
+        return records
+
     async def execute_chain(
         self,
         plan,
@@ -500,8 +613,9 @@ class ToolExecutor:
         """按规划链式执行工具
 
         当 plan.need_tool 为 True 时执行；
-        当 plan.need_research 为 True 时允许多步调用，
-        否则只调用一次。支持查询变体重试：可重试工具返回空结果时
+        当 plan.need_research 为 True 时先尝试并发批次，
+        把原本 N 轮串行往返压缩为 1 轮；并发无收获时回退串行链式。
+        非研究模式只调用一次。支持查询变体重试：可重试工具返回空结果时
         换用变体query重试，最多 _MAX_QUERY_VARIANTS 次。
 
         参数:
@@ -515,11 +629,23 @@ class ToolExecutor:
             return []
 
         records: list[ToolCallRecord] = []
-        budget = time_budget or 180.0
+        budget = time_budget or _DEFAULT_CHAIN_BUDGET
         start = time.time()
         exclude: set[str] = set()
 
         max_steps = plan.max_steps if plan.need_research else 1
+
+        if plan.need_research and max_steps > 1:
+            batch = await self._execute_research_batch(plan, budget)
+            records.extend(batch)
+            exclude.update(record.tool_name for record in batch)
+            if any(
+                record.success
+                and not self._is_empty_tool_result(record.result)
+                for record in batch
+            ):
+                return records
+            max_steps -= 1
 
         for step_index in range(max_steps):
             # 时间预算检查
@@ -555,6 +681,47 @@ class ToolExecutor:
 
         return records
 
+    async def _execute_research_batch(
+        self, plan, budget: float
+    ) -> list[ToolCallRecord]:
+        """执行研究模式的并发首批工具
+
+        单工具时退化为普通执行（含查询变体重试），
+        多工具时并发执行，把多轮网络往返压缩为一轮。
+
+        参数:
+            plan: 回合规划
+            budget: 时间预算（秒）
+
+        返回:
+            list[ToolCallRecord]: 调用记录列表
+        """
+        base_args = dict(plan.tool_args or {})
+        picked = self._pick_parallel_tools(plan, base_args)
+        if not picked:
+            return []
+        if len(picked) == 1:
+            return [
+                await self._execute_with_variants(
+                    tool_name=picked[0],
+                    base_args=base_args,
+                    plan=plan,
+                    remaining_budget=budget,
+                )
+            ]
+
+        specs = [
+            (name, base_args if index == 0 else dict(base_args))
+            for index, name in enumerate(picked)
+        ]
+        records = await self.execute_batch(specs, budget)
+        logger.debug(
+            f"并发研究批次完成: {len(picked)}个工具，"
+            f"成功{sum(r.success for r in records)}个",
+            command="AI",
+        )
+        return records
+
     async def _execute_with_variants(
         self,
         tool_name: str,
@@ -587,15 +754,17 @@ class ToolExecutor:
 
         # 生成查询变体
         variants = self._generate_query_variants(base_args, plan)
+        variant_start = time.time()
         last_record = ToolCallRecord(
             tool_name=tool_name,
             args=dict(base_args),
-            timestamp=time.time(),
+            timestamp=variant_start,
         )
 
         for variant_args in variants[:_MAX_QUERY_VARIANTS]:
+            # 预算基于批次起点累计，否则每轮重置导致预算永不耗尽
             remaining = remaining_budget - (
-                time.time() - last_record.timestamp
+                time.time() - variant_start
             )
             if remaining <= 0:
                 last_record.error = (

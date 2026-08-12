@@ -33,7 +33,11 @@ class _AIUserStateManager:
     """
 
     def __init__(self) -> None:
-        """初始化状态管理器"""
+        """初始化状态管理器
+
+        仅记录被关闭的用户，默认启用，从而保证字典规模
+        仅随禁用用户数增长而非全体用户数，避免长期运行膨胀。
+        """
         self._states: dict[str, bool] = {}
 
     def is_enabled(self, user_id: str) -> bool:
@@ -45,7 +49,7 @@ class _AIUserStateManager:
         返回:
             bool: 是否启用
         """
-        return self._states.get(user_id, True)
+        return not self._states.get(user_id, False)
 
     def set_state(self, user_id: str, enabled: bool) -> None:
         """设置用户AI对话开关状态
@@ -54,7 +58,10 @@ class _AIUserStateManager:
             user_id: 用户ID
             enabled: 是否启用
         """
-        self._states[user_id] = enabled
+        if enabled:
+            self._states.pop(user_id, None)
+        else:
+            self._states[user_id] = True
 
 
 _ai_user_states = _AIUserStateManager()
@@ -168,6 +175,9 @@ class ChatMatchersHelper:
                 quote_msg_id: 引用回复的消息ID，None为不引用
                 at_user_id: @的用户ID，None为不@
             """
+        # 归一化分段：过滤空串，全空则视为无分段
+        segments = [s for s in (segments or []) if s] or None
+
         def _build_prefix_parts(idx: int) -> list:
             """构造首条段的引用/@前缀段
 

@@ -223,7 +223,7 @@ class StickerManager:
             user_id: 用户ID
             bot_id: 机器人ID
         """
-        if not sticker_id:
+        if sticker_id is None:
             return
         try:
             await sticker_curation.record_usage(

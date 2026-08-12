@@ -1,0 +1,12 @@
+name: user_profile
+description: 主动记录用户事实并汇总用户画像
+category: memory
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    fact:
+      type: string
+      description: 要记住的事实，留空则返回画像
+  required: []

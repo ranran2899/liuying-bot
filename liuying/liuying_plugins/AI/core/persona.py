@@ -8,6 +8,7 @@
 from datetime import datetime
 import json
 from pathlib import Path
+import time
 
 from ruamel.yaml import YAML
 
@@ -42,6 +43,11 @@ class PersonaManager:
         self._yaml = YAML(typ="safe")
         self._cache = CacheDict("AI_PERSONA")
         """人格配置缓存（永不过期）"""
+        # 用户激活人格名短TTL缓存：单次消息链路内
+        # get_user_persona_name 会被反复调用（processor/prompt_builder/
+        # decisions 各取一次），缓存避免每条消息多次查库
+        self._name_cache: dict[str, tuple[float, str]] = {}
+        self._name_cache_ttl = 60.0
 
     def get_active_persona_name(self) -> str:
         """获取全局默认人格名
@@ -87,10 +93,18 @@ class PersonaManager:
         返回:
             str: 用户当前激活的人格名
         """
+        now = time.monotonic()
+        cached = self._name_cache.get(user_id)
+        if cached is not None and now - cached[0] < self._name_cache_ttl:
+            return cached[1]
         name = await UserPersonaSelection.get_persona_name(user_id)
-        if name and self._persona_exists(name):
-            return name
-        return self.get_active_persona_name()
+        resolved = (
+            name
+            if name and self._persona_exists(name)
+            else self.get_active_persona_name()
+        )
+        self._name_cache[user_id] = (now, resolved)
+        return resolved
 
     async def set_user_persona(
         self, user_id: str, name: str
@@ -108,6 +122,7 @@ class PersonaManager:
             FileNotFoundError: 人格文件不存在
         """
         self.load_persona(name)
+        self._name_cache.pop(user_id, None)
         await UserPersonaSelection.set_persona_name(user_id, name)
         logger.info(
             f"用户 {user_id} 切换人格: {name}",

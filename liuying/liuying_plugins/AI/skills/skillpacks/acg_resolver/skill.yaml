@@ -1,0 +1,16 @@
+name: acg_resolver
+description: 查询动画/漫画/游戏的作品与角色信息
+category: query
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    name:
+      type: string
+      description: 作品名或角色名
+    kind:
+      type: string
+      description: 查询类型 anime/character/game/manga/auto
+  required:
+    - name

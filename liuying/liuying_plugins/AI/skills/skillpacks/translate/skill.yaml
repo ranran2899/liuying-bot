@@ -1,0 +1,16 @@
+name: translate
+description: 将文本翻译成指定语言
+category: language
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    text:
+      type: string
+      description: 待翻译文本
+    target_language:
+      type: string
+      description: 目标语言，默认简体中文
+  required:
+    - text

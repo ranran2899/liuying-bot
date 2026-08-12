@@ -1,0 +1,13 @@
+name: time_companion
+description: 日期推算与时段陪伴：日期差、倒计时、日期偏移、作息节律建议
+category: compute
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    target:
+      type: string
+      description: 目标日期
+  required:
+    - target

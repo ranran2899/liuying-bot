@@ -1,0 +1,18 @@
+name: web_research
+description: 复杂问题的多角度并发检索与结论汇总
+category: research
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    question:
+      type: string
+      description: 要研究的问题
+    queries:
+      type: array
+      items:
+        type: string
+      description: 拆解出的子查询
+  required:
+    - question

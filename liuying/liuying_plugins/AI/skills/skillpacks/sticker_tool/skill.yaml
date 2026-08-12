@@ -1,0 +1,15 @@
+name: sticker_tool
+description: 表情包主动挑选、关键词检索与库规模统计
+category: expression
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    mood:
+      type: string
+      description: 期望的心情标签
+    context:
+      type: string
+      description: 当前回复文本或语境
+  required: []

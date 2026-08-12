@@ -1,0 +1,16 @@
+name: vision_analyze
+description: 图片与动图内容分析，支持单图问答与多图并发对比
+category: vision
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    image_url:
+      type: string
+      description: 图片的完整URL
+    question:
+      type: string
+      description: 针对图片的具体问题
+  required:
+    - image_url

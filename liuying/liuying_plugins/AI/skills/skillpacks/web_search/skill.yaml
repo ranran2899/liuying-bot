@@ -1,0 +1,18 @@
+name: web_search
+description: 带图检索，先从图片抽取视觉线索再联网查询
+category: research
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    query:
+      type: string
+      description: 用户想查的问题
+    image_urls:
+      type: array
+      items:
+        type: string
+      description: 相关图片URL列表
+  required:
+    - query

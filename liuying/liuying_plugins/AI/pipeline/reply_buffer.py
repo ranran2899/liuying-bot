@@ -148,13 +148,21 @@ class ReplyBuffer:
         self._buffers[session_key] = entry
 
         window = self._get_window(is_private)
-        await asyncio.sleep(window)
+        try:
+            await asyncio.sleep(window)
+        except asyncio.CancelledError:
+            # 首条协程被取消（如 matcher 超时）：标记已flush，
+            # 避免后续消息被永久合并吞没
+            entry.flushed = True
+            raise
+        finally:
+            # 无论正常/异常，确保清理缓冲区，杜绝僵尸 entry
+            self._buffers.pop(session_key, None)
 
-        # 窗口期结束，标记已flush并清理
+        # 窗口期结束，收集合并文本
         entry.flushed = True
         combined_texts = list(entry.texts)
         first_message_id = entry.first_message_id
-        del self._buffers[session_key]
 
         combined = "\n".join(t for t in combined_texts if t)
         if len(combined_texts) > 1:

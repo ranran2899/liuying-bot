@@ -288,7 +288,7 @@ _LIGHTWEIGHT_LOOKUP_TOOL_NAMES: set[str] = {
     "fetch_webpage",
     "recall_memory",
     "get_favor",
-    "get_datetime",
+    "get_current_time",
     "search_plugin_knowledge",
 }
 """闲聊场景放行的轻量查证工具名白名单"""
@@ -531,11 +531,6 @@ _TOOL_METADATA_DEFAULTS: dict[str, dict[str, Any]] = {
     },
     # 上下文查询类
     "get_favor": {
-        "intent_tags": [INTENT_TAG_LOCAL],
-        "evidence_kind": "context",
-        "latency_class": "fast",
-    },
-    "get_datetime": {
         "intent_tags": [INTENT_TAG_LOCAL],
         "evidence_kind": "context",
         "latency_class": "fast",

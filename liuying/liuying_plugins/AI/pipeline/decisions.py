@@ -18,6 +18,7 @@ from liuying.utils.log import logger
 
 from ..agent.runner import AgentResult
 from ..config import get_config
+from ..core.emotion.manager import emotion_manager
 from ..core.llm import llm_helper
 from ..core.persona import persona_manager
 from .humanize import HumanizeToolkit
@@ -208,6 +209,10 @@ class ReplyDecisions:
             catchphrases, list
         ):
             return text
+        state = await emotion_manager.get_state(
+            ctx.user_id, ctx.group_id, persona_name=ctx.persona_name
+        )
+        mood = (state.mood if state else "neutral") or "neutral"
         return HumanizeToolkit.maybe_prepend_catchphrase(
-            text, catchphrases
+            text, catchphrases, mood=mood
         )

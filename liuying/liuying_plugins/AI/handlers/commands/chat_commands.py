@@ -263,29 +263,43 @@ def setup_chat_commands() -> None:
                 )
             return
 
+        # 全空串分段视为无分段，避免静默丢失消息/引用
+        if result.segments and all(
+            not s for s in result.segments
+        ):
+            result.segments = None
+
         if not result.text and not result.segments:
             return
 
-        # 输入状态模拟（发送前，仅私聊）
-        if result.should_set_typing:
-            await _apply_set_typing(session)
+        # 输入状态模拟与发送（异常兜底，避免 matcher 静默崩溃）
+        try:
+            if result.should_set_typing:
+                await _apply_set_typing(session)
 
-        if result.typing_delay > 0:
-            await asyncio.sleep(result.typing_delay)
+            if result.typing_delay > 0:
+                await asyncio.sleep(result.typing_delay)
 
-        await ChatMatchersHelper._send_reply(
-            session,
-            result.text,
-            result.sticker,
-            result.tts_audio,
-            image_url=result.image_url,
-            segments=result.segments or None,
-            gap_delays=result.gap_delays or None,
-            quote_msg_id=(
-                message_id if result.should_quote else None
-            ),
-            at_user_id=result.at_user_id,
-        )
+            await ChatMatchersHelper._send_reply(
+                session,
+                result.text,
+                result.sticker,
+                result.tts_audio,
+                image_url=result.image_url,
+                segments=result.segments or None,
+                gap_delays=result.gap_delays or None,
+                quote_msg_id=(
+                    message_id if result.should_quote else None
+                ),
+                at_user_id=result.at_user_id,
+            )
+        except Exception as e:
+            logger.error(
+                f"AI回复发送失败：{e}", command="流萤", e=e
+            )
+            await MessageUtils.build_message(
+                "出了点小问题，待会再试试~"
+            ).send()
 
 
 def _register_peer_bot_listener() -> None:

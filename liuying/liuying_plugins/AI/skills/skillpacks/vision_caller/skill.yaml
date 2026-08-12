@@ -1,0 +1,12 @@
+name: vision_caller
+description: 视觉模型能力探测与路由自述，回答能否看图及走哪个模型
+category: vision
+entrypoint: scripts/main.py
+enabled: true
+parameters:
+  type: object
+  properties:
+    prefer_model:
+      type: string
+      description: 优先探测的模型名
+  required: []

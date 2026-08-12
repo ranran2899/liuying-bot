@@ -8,6 +8,8 @@
 import random
 import re
 
+from .text_policy import ReplyTextPolicy
+
 _BASE_TYPING_DELAY = 0.5
 """基础打字延迟（秒）"""
 
@@ -78,20 +80,6 @@ _PARAGRAPH_SPLIT_PATTERN = re.compile(r"\n\s*\n+")
 
 _SUBSEGMENT_SPLIT_PATTERN = re.compile(r"([，；,;]+)")
 """子段分隔模式（按中英文逗号、分号）"""
-
-_MARKDOWN_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\*\*([^*]+)\*\*"),
-    re.compile(r"__([^_]+)__"),
-    re.compile(r"\*([^*]+)\*"),
-    re.compile(r"_([^_]+)_"),
-    re.compile(r"^#{1,6}\s+", re.MULTILINE),
-    re.compile(r"^\s*[-*+]\s+", re.MULTILINE),
-    re.compile(r"\[([^\]]+)\]\([^)]+\)"),
-    re.compile(r"`([^`]+)`"),
-    re.compile(r"^>\s+", re.MULTILINE),
-)
-"""Markdown残留模式元组"""
-
 
 class HumanizeToolkit:
     """拟人化工具集
@@ -213,36 +201,6 @@ class HumanizeToolkit:
         return new_text, right
 
     @staticmethod
-    def normalize_visible_reply_text(text: str) -> str:
-        """清理Markdown残留，让回复更像口语短句
-
-        参数:
-            text: 原始文本
-
-        返回:
-            str: 清理后的文本
-        """
-        cleaned = (text or "").strip()
-        for pattern in _MARKDOWN_PATTERNS:
-            if pattern.pattern.startswith(r"\["):
-                cleaned = pattern.sub(r"\1", cleaned)
-            elif pattern.pattern.startswith(r"`"):
-                cleaned = pattern.sub(r"\1", cleaned)
-            elif (
-                pattern.pattern.startswith(r"\*\*")
-                or pattern.pattern.startswith(r"__")
-            ):
-                cleaned = pattern.sub(r"\1", cleaned)
-            elif (
-                pattern.pattern.startswith(r"\*")
-                or pattern.pattern.startswith(r"_")
-            ):
-                cleaned = pattern.sub(r"\1", cleaned)
-            else:
-                cleaned = pattern.sub("", cleaned)
-        return cleaned.strip()
-
-    @staticmethod
     def split_text_into_segments(text: str) -> list[str]:
         """将文本按空行切成段落
 
@@ -309,7 +267,7 @@ class HumanizeToolkit:
         返回:
             list[str]: 碎片段列表
         """
-        cleaned = HumanizeToolkit.normalize_visible_reply_text(text)
+        cleaned = ReplyTextPolicy.normalize_visible_reply_text(text)
         if not cleaned:
             return []
         segments = HumanizeToolkit.split_text_into_segments(cleaned)
