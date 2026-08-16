@@ -20,7 +20,7 @@
 import asyncio
 from dataclasses import dataclass, field
 import json
-from typing import Any
+from typing import Any, Self
 
 from liuying.utils.log import logger
 
@@ -90,7 +90,7 @@ class McpStdioClient:
         self._proc: asyncio.subprocess.Process | None = None
         self._request_id = 0
 
-    async def __aenter__(self) -> "McpStdioClient":
+    async def __aenter__(self) -> Self:
         """启动MCP服务器子进程"""
         self._proc = await asyncio.create_subprocess_exec(
             self._command,

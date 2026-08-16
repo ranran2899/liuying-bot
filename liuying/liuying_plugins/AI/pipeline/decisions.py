@@ -11,6 +11,7 @@
 """
 
 import random
+from typing import Any
 
 from nonebot_plugin_alconna import Image
 
@@ -43,6 +44,7 @@ class ReplyDecisions:
         text: str,
         ctx: ReplyContext,
         agent_result: AgentResult | None = None,
+        persona: dict[str, Any] | None = None,
     ) -> Image | None:
         """贴纸决策
 
@@ -53,13 +55,18 @@ class ReplyDecisions:
             text: 回复文本
             ctx: 回复上下文
             agent_result: Agent结果（用于提取情绪提示）
+            persona: 调用方透传的用户人格配置，
+                None时自行获取（兼容独立调用）
 
         返回:
             Image | None: 贴纸图片对象，不发时返回None
         """
         try:
-            persona = await persona_manager.get_user_persona_config(
-                ctx.user_id
+            persona = (
+                persona
+                or await persona_manager.get_user_persona_config(
+                    ctx.user_id
+                )
             )
             persona_mood = persona_manager.get_persona_sticker_mood(
                 persona
@@ -95,7 +102,9 @@ class ReplyDecisions:
 
     @staticmethod
     async def decide_tts(
-        text: str, ctx: ReplyContext
+        text: str,
+        ctx: ReplyContext,
+        persona: dict[str, Any] | None = None,
     ) -> bytes | None:
         """TTS决策
 
@@ -106,28 +115,35 @@ class ReplyDecisions:
         参数:
             text: 回复文本
             ctx: 回复上下文
+            persona: 调用方透传的用户人格配置，
+                None时自行获取（兼容独立调用）
 
         返回:
             bytes | None: 音频数据，不发时返回None
         """
-        if not get_config("TTS", {}).get("enabled", False) or not get_config(
-            "TTS_AUTO", {}
-        ).get("enabled", False):
+        tts_cfg = get_config("TTS", {})
+        tts_auto_cfg = get_config("TTS_AUTO", {})
+        if not tts_cfg.get("enabled", False) or not tts_auto_cfg.get(
+            "enabled", False
+        ):
             return None
         if len(text) < _TTS_AUTO_TEXT_MIN_LEN:
             return None
 
-        if random.random() >= get_config("TTS_AUTO", {}).get("probability", 0.2):
+        if random.random() >= tts_auto_cfg.get("probability", 0.2):
             return None
         try:
-            persona = await persona_manager.get_user_persona_config(
-                ctx.user_id
+            persona = (
+                persona
+                or await persona_manager.get_user_persona_config(
+                    ctx.user_id
+                )
             )
             tts_config = persona_manager.get_persona_tts_config(
                 persona
             )
             voice = tts_config.get(
-                "voice", get_config("TTS", {}).get("voice", "alloy")
+                "voice", tts_cfg.get("voice", "alloy")
             )
             return await llm_helper.tts(text, voice=voice)
         except Exception as e:
@@ -184,7 +200,9 @@ class ReplyDecisions:
 
     @staticmethod
     async def maybe_prepend_catchphrase(
-        text: str, ctx: ReplyContext
+        text: str,
+        ctx: ReplyContext,
+        persona: dict[str, Any] | None = None,
     ) -> str:
         """按概率在回复前插入人格口头禅
 
@@ -194,12 +212,17 @@ class ReplyDecisions:
         参数:
             text: 拟人化后的回复文本
             ctx: 回复上下文
+            persona: 调用方透传的用户人格配置，
+                None时自行获取（兼容独立调用）
 
         返回:
             str: 可能前置了口头禅的文本
         """
-        persona = await persona_manager.get_user_persona_config(
-            ctx.user_id
+        persona = (
+            persona
+            or await persona_manager.get_user_persona_config(
+                ctx.user_id
+            )
         )
         traits = persona.get("traits") or {}
         if not isinstance(traits, dict):

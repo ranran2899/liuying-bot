@@ -3,17 +3,18 @@
 在新记忆写入后，自动判断其与同用户同人格的旧记忆的关系
 （replaces/enriches/confirms/challenges），执行覆盖、合并、
 巩固或冲突标记，实现记忆库的自动演化与去重。
-作为 Mixin 注入到 MemoryManager，依赖宿主类的 `_db` 成员。
+作为组合式内部服务由 MemoryManager 构造并注入依赖。
 """
 
 from datetime import datetime
-from typing import Any
 
 from liuying.utils.log import logger
 
 from ...models.memory_item import MemoryItem
 from ..llm import llm_helper
 from ._common import _DEFAULT_PERSONA
+from .consolidation import MemoryConsolidationService
+from .recall import MemoryRecallService
 
 _RELATION_REPLACES = "replaces"
 """新记忆覆盖旧记忆"""
@@ -45,16 +46,26 @@ _MAX_CANDIDATES = 5
 """单次进化判断的候选旧记忆数量"""
 
 
-class EvolveMixin:
-    """记忆进化 Mixin
+class MemoryEvolveService:
+    """记忆进化服务
 
-    提供新记忆与旧记忆关系判断及自动演化能力。
-    依赖宿主类的 `_db`、`add`、`recall` 等成员。
+    提供新旧记忆关系判断及自动演化能力。
+    召回与强化能力由注入的召回/巩固服务提供。
     """
 
-    # 类型提示，由宿主类 MemoryManager 初始化
-    _db: Any
-    _embedding_dim: int = 64
+    def __init__(
+        self,
+        recall_service: MemoryRecallService,
+        consolidation_service: MemoryConsolidationService,
+    ) -> None:
+        """初始化进化服务
+
+        参数:
+            recall_service: 召回服务（提供候选记忆检索）
+            consolidation_service: 巩固服务（提供 reinforce）
+        """
+        self._recall_service = recall_service
+        self._consolidation_service = consolidation_service
 
     async def evolve_memory(
         self,
@@ -136,7 +147,7 @@ class EvolveMixin:
         返回:
             list[dict]: 候选旧记忆列表
         """
-        results = await self.recall(
+        results = await self._recall_service.recall(
             user_id=user_id,
             query=new_summary,
             group_id=group_id,
@@ -221,7 +232,7 @@ class EvolveMixin:
                 old_id, old_memory.get("summary", ""), new_summary
             )
         elif relation == _RELATION_CONFIRMS:
-            await self.reinforce(old_id)
+            await self._consolidation_service.reinforce(old_id)
         elif relation == _RELATION_CHALLENGES:
             await self._mark_conflict(old_id, new_memory_id)
 

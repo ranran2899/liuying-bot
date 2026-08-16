@@ -112,14 +112,13 @@ class ReplyPipeline:
         )
 
         typing_delay = 0.0
-        if get_config("HUMANIZE_TYPING", {}).get("enabled", True):
+        typing_cfg = get_config("HUMANIZE_TYPING", {})
+        if typing_cfg.get("enabled", True):
             is_night = context_manager.is_night_time()
             typing_delay = HumanizeToolkit.compute_typing_delay(
                 text,
-                cps=get_config("HUMANIZE_TYPING", {}).get("cps", 7.0),
-                max_delay=get_config(
-                    "HUMANIZE_TYPING", {}
-                ).get("max_delay", 5.0),
+                cps=typing_cfg.get("cps", 7.0),
+                max_delay=typing_cfg.get("max_delay", 5.0),
                 already_elapsed=elapsed,
                 is_night=is_night,
             )
@@ -142,13 +141,14 @@ class ReplyPipeline:
         if not text:
             return [], []
 
+        fragment_cfg = get_config("FRAGMENT", {})
         if (
             not ctx.group_id
-            or get_config("FRAGMENT", {}).get("style", "prompt") == "off"
+            or fragment_cfg.get("style", "prompt") == "off"
         ):
             return [text], []
 
-        max_chars = get_config("FRAGMENT", {}).get("max_chars", 40)
+        max_chars = fragment_cfg.get("max_chars", 40)
         segments = HumanizeToolkit.fragment_reply(
             text, max_segment_chars=max_chars
         )

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import time
 from typing import Any
 
-from ..constants import EVIDENCE_KIND_CONTEXT, EVIDENCE_KIND_TOOL
+from .constants import EVIDENCE_KIND_CONTEXT, EVIDENCE_KIND_TOOL
 
 # 可重试的查询类工具（空结果时可换变体重试）
 RETRYABLE_LOOKUP_TOOLS: set[str] = {

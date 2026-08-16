@@ -20,10 +20,53 @@ from ..config import get_config, set_config
 from ..models.user_persona import UserPersonaProfile
 from ..models.user_persona_selection import UserPersonaSelection
 from .llm import llm_helper as _default_llm_helper
-from .persona_templates import FAVOR_ATTITUDES, extract_persona_desc
 
 _PERSONAS_DIR = Path(__file__).parent.parent / "personas"
 """人格配置文件目录"""
+
+FAVOR_ATTITUDES: dict[str, str] = {
+    "陌生": "礼貌但保持距离，不主动套近乎",
+    "初识": "友好但不过分亲近，保持基本礼貌",
+    "熟悉": "可以自然交流，偶尔开玩笑",
+    "友好": "态度温和，愿意帮助对方",
+    "信任": "像朋友一样自然，可以分享日常",
+    "亲密": "关系很好，可以聊更多话题",
+    "挚友": "像老朋友一样自然，可以畅所欲言",
+    "至交": "非常亲密，可以分享内心想法",
+    "知己": "心灵相通，可以深入交流",
+    "恋人": "温柔亲密，主动表达关心和爱意",
+}
+"""好感度态度档"""
+
+
+def extract_persona_desc(persona: dict) -> str:
+    """从人格配置提取简短描述
+
+    优先使用 description 字段；未配置时回退到从 system_prompt
+    提取首行有效内容。
+
+    参数:
+        persona: 人格配置字典
+
+    返回:
+        str: 简短描述（不超过80字）
+    """
+    desc = persona.get("description") or ""
+    if isinstance(desc, str) and desc.strip():
+        return desc.strip()[:80]
+    prompt = persona.get("system_prompt", "")
+    if not prompt:
+        return ""
+    first_line = ""
+    for line in prompt.split("\n"):
+        line = line.strip()
+        _skip = ("姓名", "年龄", "性别")
+        if line and not any(line.startswith(s) for s in _skip):
+            first_line = line
+            break
+    if not first_line:
+        first_line = prompt.strip().split("\n")[0].strip()
+    return first_line[:80]
 
 
 class PersonaManager:
@@ -48,6 +91,8 @@ class PersonaManager:
         # decisions 各取一次），缓存避免每条消息多次查库
         self._name_cache: dict[str, tuple[float, str]] = {}
         self._name_cache_ttl = 60.0
+        self._name_cache_max = 512
+        """缓存条目上限，超出时先清过期项再淘汰最旧项"""
 
     def get_active_persona_name(self) -> str:
         """获取全局默认人格名
@@ -103,8 +148,33 @@ class PersonaManager:
             if name and self._persona_exists(name)
             else self.get_active_persona_name()
         )
+        self._prune_name_cache(now)
         self._name_cache[user_id] = (now, resolved)
         return resolved
+
+    def _prune_name_cache(self, now: float) -> None:
+        """控制人格名缓存容量
+
+        条目达到上限时先清除已过期项，仍超限则按
+        写入时间淘汰最旧条目，防止长期运行无限增长。
+
+        参数:
+            now: 当前单调时钟时间戳
+        """
+        if len(self._name_cache) < self._name_cache_max:
+            return
+        expired = [
+            uid
+            for uid, (ts, _) in self._name_cache.items()
+            if now - ts >= self._name_cache_ttl
+        ]
+        for uid in expired:
+            del self._name_cache[uid]
+        while len(self._name_cache) >= self._name_cache_max:
+            oldest = min(
+                self._name_cache, key=lambda u: self._name_cache[u][0]
+            )
+            del self._name_cache[oldest]
 
     async def set_user_persona(
         self, user_id: str, name: str
@@ -205,7 +275,16 @@ class PersonaManager:
             dict: 人格配置字典
         """
         active_name = await self.get_user_persona_name(user_id)
-        return await self.get_persona_by_name(active_name)
+        try:
+            return await self.get_persona_by_name(active_name)
+        except FileNotFoundError:
+            # 用户选择的人格文件缺失时回退全局默认，
+            # 避免单个人格文件丢失阻断整条回复链路
+            logger.warning(
+                f"人格 {active_name} 文件缺失，回退默认人格",
+                command="AI",
+            )
+            return self.get_default_persona()
 
     def get_default_persona(self) -> dict:
         """获取全局默认人格配置（同步）

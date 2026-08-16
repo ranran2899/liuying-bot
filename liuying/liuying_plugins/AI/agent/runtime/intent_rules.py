@@ -6,8 +6,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from ....config import get_config
-from ..constants import (
+from ...config import get_config
+from .constants import (
     DEFAULT_AGENT_MAX_STEPS,
     INTENT_TAG_ADMIN,
     INTENT_TAG_IMAGE,
@@ -23,7 +23,7 @@ from ..constants import (
     TURN_ACTION_REPLY,
     TURN_ACTION_SILENCE,
 )
-from .types import TurnPlan
+from .plan_types import TurnPlan
 
 
 def _get_agent_max_steps() -> int:

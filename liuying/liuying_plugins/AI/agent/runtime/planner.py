@@ -7,13 +7,12 @@
 
 from liuying.utils.log import logger
 
-from ....config import get_config
-from ....core.chat_intent import semantic_frame_inferrer
-from ....core.llm import llm_helper
-from ....core.llm.model_router import ROLE_INTENT, model_router
-from ....core.vision import vision_router
-from ..catalog.tool_catalog import ToolCatalog, tool_catalog
-from ..constants import (
+from ...config import get_config
+from ...core.chat_intent import semantic_frame_inferrer
+from ...core.llm import llm_helper
+from ...core.llm.model_router import ROLE_INTENT, model_router
+from ...core.vision import vision_router
+from .constants import (
     INTENT_TAG_IMAGE,
     OUTPUT_MODE_CHAT_ANSWER,
     OUTPUT_MODE_CHAT_SHORT,
@@ -23,12 +22,13 @@ from ..constants import (
     TURN_ACTION_SILENCE,
 )
 from .intent_rules import IntentRuleManager
-from .types import (
+from .plan_types import (
     TurnPlan,
     extract_json_payload,
     metadata_fallback_turn_plan,
     parse_turn_plan_payload,
 )
+from .tool_catalog import ToolCatalog, tool_catalog
 
 __all__ = ["TurnPlan", "TurnPlanner"]
 
@@ -68,11 +68,12 @@ class TurnPlanner:
     def _get_registry(self):
         """获取工具注册表单例
 
-        延迟导入避免 tools 包与 runtime 的循环依赖
-        （tools.builtin 在导入时引用 runtime.session_context）。
+        延迟导入避免真实循环依赖：agent.tools 包在导入期
+        引用 runtime.session_context/constants，而 planner 由
+        runtime 包初始化时导入，顶部导入 tools 会成环。
         """
         if self._registry is None:
-            from ...tools import tool_registry
+            from ..tools import tool_registry
 
             self._registry = tool_registry
         return self._registry

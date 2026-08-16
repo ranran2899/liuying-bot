@@ -3,7 +3,10 @@
 提供LLM调用封装、人格管理、记忆系统、情绪状态、上下文管理、
 画像服务、运行时开关、环境感知、主动学习、消息目标推断、
 社交智能、提示词钩子与回复回合追踪。
-所有能力按功能子包组织，通过本模块统一 re-export。
+
+分类标准：独立功能域（含多文件或强内聚状态）组织为子包；
+跨域共用的单文件行为模块（persona/chat_intent/peer_awareness等）
+保留为顶层模块，通过本模块统一 re-export。
 """
 
 from .active_learning import ActiveLearning, active_learning

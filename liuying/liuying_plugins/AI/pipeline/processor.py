@@ -112,21 +112,16 @@ class ReplyProcessor:
             for r in reversed(records)
         ]
 
-        if not history or not get_config(
-            "CONTEXT_COMPRESS", {}
-        ).get("enabled", True):
+        compress_cfg = get_config("CONTEXT_COMPRESS", {})
+        if not history or not compress_cfg.get("enabled", True):
             return history
 
         try:
             chunks = [
                 f"{m['role']}: {m.get('content', '')}" for m in history
             ]
-            max_tokens = get_config(
-                "CONTEXT_COMPRESS", {}
-            ).get("max_tokens", 2000)
-            keep_recent = get_config(
-                "CONTEXT_COMPRESS", {}
-            ).get("keep_recent", 6)
+            max_tokens = compress_cfg.get("max_tokens", 2000)
+            keep_recent = compress_cfg.get("keep_recent", 6)
 
             async def _call_compress(
                 msgs: list[dict[str, str]],
@@ -367,9 +362,14 @@ class ReplyProcessor:
             trace_id=trace_id, key="humanize", label="拟人化完成"
         )
 
+        # 用户人格配置取一次后透传，避免贴纸/TTS/口头禅重复获取
+        persona = await persona_manager.get_user_persona_config(
+            ctx.user_id
+        )
+
         # 口头禅运行时插入：从人格catchphrase按概率前置
         humanized_text = await ReplyDecisions.maybe_prepend_catchphrase(
-            humanized_text, ctx
+            humanized_text, ctx, persona
         )
 
         segments, gap_delays = ReplyPipeline.build_segments(
@@ -400,9 +400,9 @@ class ReplyProcessor:
         # gather确保任一协程异常时取消其他任务，避免悬挂任务
         sticker_path, tts_audio, _ = await asyncio.gather(
             ReplyDecisions.decide_sticker(
-                humanized_text, ctx, agent_result
+                humanized_text, ctx, agent_result, persona
             ),
-            ReplyDecisions.decide_tts(humanized_text, ctx),
+            ReplyDecisions.decide_tts(humanized_text, ctx, persona),
             ReplyPipeline.persist_conversation(
                 ctx, ctx.text, humanized_text, agent_result, elapsed
             ),

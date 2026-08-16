@@ -4,9 +4,14 @@ AI对话核心 + 主动行为 + 工具调用 + 拟人化发送 + 完整记忆系
 深度整合流萤本体系统：LLM/数据库/缓存/定时任务/好感度/权限。
 """
 
+from datetime import datetime
+
+import nonebot
 from nonebot.plugin import PluginMetadata
 
+from liuying.configs.path_config import DATA_PATH
 from liuying.configs.utils import Command, PluginExtraData, PluginSetting
+from liuying.utils.apscheduler import task_manager
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
@@ -18,6 +23,13 @@ from .agent.tools import (  # 公开API供第三方注册工具
 )
 from .config import PluginConfig, get_config
 from .core.knowledge_db import knowledge_base
+from .core.llm import llm_helper, token_ledger
+from .core.memory import memory_manager
+from .core.persona import persona_manager
+from .core.runtime import runtime_switch
+from .handlers.admin_commands import setup_admin_matchers
+from .handlers.chat_matchers import setup_matchers
+from .jobs import setup_jobs
 from .models import (  # noqa: F401  导入触发模型注册
     ConversationRecord,
     EmotionState,
@@ -31,6 +43,7 @@ from .models import (  # noqa: F401  导入触发模型注册
     UserPersonaProfile,
     UserPersonaSelection,
 )
+from .skills import SkillRuntime, skill_loader
 
 __all__ = [
     "AgentTool",
@@ -142,52 +155,20 @@ async def _init_ai_plugin() -> None:
     logger.debug("Agent内置工具已自动注册", command="AI")
 
     # 初始化运行时开关（从配置加载全局状态）
-    # 延迟导入以避免循环依赖：__init__ 导入 runtime_switch，
-    # runtime_switch 可能通过 core 层间接引用 AI 插件配置
-    from .core.runtime import runtime_switch
-
     runtime_switch.initialize()
     logger.debug("运行时开关已初始化", command="AI")
 
-    # 延迟导入以避免循环依赖：chat_matchers 导入 AI 插件模块，
-    # 而 __init__ 在初始化阶段调用 setup_matchers
-    from .handlers.chat_matchers import setup_matchers
-
+    # 注册对话matcher与AI管理员命令
     setup_matchers()
-
-    # 注册AI管理员命令
-    # 延迟导入以避免循环依赖：admin_commands 导入 AI 插件模块，
-    # 而 __init__ 在初始化阶段调用 setup_admin_matchers
-    from .handlers.admin_commands import setup_admin_matchers
-
     setup_admin_matchers()
     logger.debug("AI管理员命令已注册", command="AI")
-
-    # 延迟导入以避免循环依赖：jobs 模块导入 AI 插件核心模块，
-    # 而 __init__ 在初始化阶段调用 setup_jobs
-    from .jobs import setup_jobs
 
     await setup_jobs()
 
     # WebUI 管理能力已整合到流萤本体 web_ui 插件（liuying_plugins/web_ui），
     # 通过 /liuying/api/ai/* 路由统一挂载，使用本体JWT认证。
 
-    # 延迟导入以避免循环依赖：skills 层导入 agent 工具与 core 服务，
-    # 而 AI 插件 __init__ 在初始化阶段调用 register_all，
     # 显式注入主插件服务给技能包
-    from datetime import datetime
-
-    import nonebot
-
-    from liuying.configs.path_config import DATA_PATH
-    from liuying.utils.apscheduler import task_manager
-
-    from .core.knowledge_db import knowledge_base as kb
-    from .core.llm import llm_helper
-    from .core.memory import memory_manager
-    from .core.persona import persona_manager
-    from .skills import SkillRuntime, skill_loader
-
     ai_data_dir = DATA_PATH / "ai"
     ai_data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -197,7 +178,7 @@ async def _init_ai_plugin() -> None:
         get_now=datetime.now,
         llm_helper=llm_helper,
         memory_manager=memory_manager,
-        knowledge_base=kb,
+        knowledge_base=knowledge_base,
         persona_manager=persona_manager,
         data_dir=ai_data_dir,
         scheduler=task_manager,
@@ -213,9 +194,5 @@ async def _init_ai_plugin() -> None:
 async def _shutdown_ai_plugin() -> None:
     """AI插件关闭清理
     """
-    # 延迟导入以避免循环依赖：core.llm 模块可能在初始化时
-    # 间接引用 AI 插件配置，而 __init__ 在关闭阶段调用 prune_old
-    from .core.llm import token_ledger
-
     await token_ledger.prune_old(days=1)
     logger.info("AI插件已关闭", command="AI")

@@ -13,19 +13,19 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ....core.json_utils import extract_json_payload
-from ....core.llm import llm_helper
-from ....core.llm.model_router import ROLE_CHAT, model_router
-from ....core.persona import persona_manager
-from ..constants import (
+from ...core.llm import llm_helper
+from ...core.llm.model_router import ROLE_CHAT, model_router
+from ...core.persona import persona_manager
+from ...core.tools.json_utils import extract_json_payload
+from .constants import (
     OUTPUT_MODE_CHAT_ANSWER,
     OUTPUT_MODE_CHAT_SHORT,
     OUTPUT_MODE_SILENCE,
     OUTPUT_MODE_SOURCE_SUMMARY,
     OUTPUT_MODE_STRUCTURED_HELP,
 )
-from ..execution.evidence import EvidenceComposer
-from ..planning.types import OUTPUT_MODE_LENGTHS, TurnPlan
+from .evidence import EvidenceComposer
+from .plan_types import OUTPUT_MODE_LENGTHS, TurnPlan
 
 _CLARIFY_TEMPLATES = (
     "嗯……能再说得详细一点吗？",

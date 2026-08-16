@@ -86,6 +86,8 @@ class MemoryCurator:
         """初始化策展器"""
         self._last_curation: datetime | None = None
         self._curating = False
+        # 复用记忆管理器的嵌入服务单例，保证模型版本与维度一致
+        self._embedding_service = memory_manager._embedding_service
 
     async def curate_all(
         self,

@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from liuying.utils.log import logger
 
 from ..config import get_config
-from ..core.json_utils import extract_json_payload
 from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_REVIEW, model_router
+from ..core.tools.json_utils import extract_json_payload
 
 _DEFAULT_SAFE_REPLY = "抱歉，我暂时无法回答这个问题。"
 

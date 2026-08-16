@@ -5,6 +5,7 @@
 """
 
 from collections.abc import AsyncIterator
+import time
 from typing import Any
 
 from liuying.services.LLM import Capability, llm_manager
@@ -14,6 +15,13 @@ from ...config import get_config
 from .ai_routes import ai_cli_router
 from .provider_router import provider_router
 
+_CANDIDATES_TTL = 60.0
+"""provider候选列表缓存有效期（秒）
+
+provider注册与能力集在运行期不变，冷却切换由
+provider_router 在故障转移时处理，候选枚举无需每次重算。
+"""
+
 
 class LLMHelper:
     """LLM调用助手
@@ -21,6 +29,16 @@ class LLMHelper:
     封装llm_manager，提供统一的对话/嵌入/TTS/图片生成接口。
     通过provider_router实现多provider自动容错切换。
     """
+
+    def __init__(self) -> None:
+        """初始化LLM助手
+
+        初始化provider候选列表缓存，避免每次调用
+        全量遍历provider探测能力。
+        """
+        self._candidates_cache: dict[
+            tuple[Capability, str], tuple[float, list[str]]
+        ] = {}
 
     def _get_provider(self, name: str | None = None):
         """获取provider实例
@@ -82,6 +100,9 @@ class LLMHelper:
     ) -> list[str]:
         """构建支持指定能力的provider候选列表
 
+        结果按（能力，首选provider）缓存短TTL，
+        避免高频调用时重复遍历全部provider。
+
         参数:
             capability: 能力类型
             preferred: 优先使用的provider名
@@ -89,6 +110,12 @@ class LLMHelper:
         返回:
             list[str]: 候选provider名列表
         """
+        cache_key = (capability, preferred or "")
+        now = time.monotonic()
+        cached = self._candidates_cache.get(cache_key)
+        if cached is not None and now - cached[0] < _CANDIDATES_TTL:
+            return cached[1]
+
         names: list[str] = []
 
         def _supports(name: str) -> bool:
@@ -120,6 +147,7 @@ class LLMHelper:
             provider = llm_manager.get_provider(pname)
             if provider and provider.get_capability(capability):
                 names.append(pname)
+        self._candidates_cache[cache_key] = (now, names)
         return names
 
     async def chat(
@@ -149,10 +177,11 @@ class LLMHelper:
             ValueError: provider未配置
             Exception: 调用失败
         """
-        use_model = model or get_config("CHAT_MODEL", {}).get("model", None) or ""
+        chat_cfg = get_config("CHAT_MODEL", {})
+        use_model = model or chat_cfg.get("model", None) or ""
         candidates = self._build_candidates(
             Capability.CHAT,
-            provider_name or get_config("CHAT_MODEL", {}).get("provider", None),
+            provider_name or chat_cfg.get("provider", None),
         )
         call_options = {
             **(options or {}),
@@ -242,7 +271,8 @@ class LLMHelper:
             流式调用暂不支持中途切换provider，仅做首选provider冷却检测。
             若首选provider冷却，则回退到非流式chat_text并一次性yield结果。
         """
-        preferred = provider_name or get_config("CHAT_MODEL", {}).get("provider", None)
+        stream_cfg = get_config("CHAT_MODEL", {})
+        preferred = provider_name or stream_cfg.get("provider", None)
         if preferred and provider_router.is_cooling(preferred):
             logger.warning(
                 f"provider {preferred} 处于冷却期，流式调用回退到非流式",
@@ -260,7 +290,7 @@ class LLMHelper:
             raise ValueError(
                 f"provider '{provider.name}' 不支持流式对话"
             )
-        use_model = model or get_config("CHAT_MODEL", {}).get("model", None) or ""
+        use_model = model or stream_cfg.get("model", None) or ""
         call_options = {
             **(options or {}),
             "reasoning_enabled": get_config(
@@ -291,10 +321,11 @@ class LLMHelper:
         异常:
             ValueError: provider不支持嵌入
         """
-        use_model = model or get_config("EMBEDDING", {}).get("model", None) or ""
+        embedding_cfg = get_config("EMBEDDING", {})
+        use_model = model or embedding_cfg.get("model", None) or ""
         candidates = self._build_candidates(
             Capability.EMBEDDING,
-            provider_name or get_config("EMBEDDING", {}).get("provider", None),
+            provider_name or embedding_cfg.get("provider", None),
         )
 
         async def _call(name: str) -> list[float]:
@@ -328,11 +359,12 @@ class LLMHelper:
         异常:
             ValueError: provider不支持TTS
         """
-        use_model = model or get_config("TTS", {}).get("model", "tts-1")
-        use_voice = voice or get_config("TTS", {}).get("voice", "alloy")
+        tts_cfg = get_config("TTS", {})
+        use_model = model or tts_cfg.get("model", "tts-1")
+        use_voice = voice or tts_cfg.get("voice", "alloy")
         candidates = self._build_candidates(
             Capability.AUDIO,
-            provider_name or get_config("TTS", {}).get("provider", None),
+            provider_name or tts_cfg.get("provider", None),
         )
 
         async def _call(name: str) -> bytes:
@@ -370,10 +402,11 @@ class LLMHelper:
         异常:
             ValueError: provider不支持图片生成
         """
-        use_model = model or get_config("IMAGE", {}).get("model", "dall-e-3")
+        image_cfg = get_config("IMAGE", {})
+        use_model = model or image_cfg.get("model", "dall-e-3")
         candidates = self._build_candidates(
             Capability.IMAGE,
-            provider_name or get_config("IMAGE", {}).get("provider", None),
+            provider_name or image_cfg.get("provider", None),
         )
 
         async def _call(name: str) -> list[str]:

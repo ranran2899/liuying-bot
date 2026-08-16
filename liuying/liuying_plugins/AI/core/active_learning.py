@@ -13,9 +13,9 @@ from datetime import datetime, timedelta
 from liuying.utils.log import logger
 
 from ..config import get_config
-from .json_utils import extract_json_payload
 from .llm import llm_helper
 from .memory import memory_manager
+from .tools.json_utils import extract_json_payload
 
 _DAILY_QUOTA = 10
 """每日主动学习配额"""

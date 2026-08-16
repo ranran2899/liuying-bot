@@ -107,11 +107,20 @@ class DiaryHelper:
 
     @staticmethod
     async def _diary_job() -> None:
-        """日记定时任务"""
+        """日记定时任务
+
+        任务体统一兜异常：前置的记忆查询/人格加载
+        失败不应让定时任务崩溃退出。
+        """
         if not get_config("DIARY_ENABLED", True):
             return
 
-        await DiaryHelper.generate_diary()
+        try:
+            await DiaryHelper.generate_diary()
+        except Exception as e:
+            logger.warning(
+                f"日记任务失败: {e}", command="AI", e=e
+            )
 
 
 async def setup_diary_job() -> None:

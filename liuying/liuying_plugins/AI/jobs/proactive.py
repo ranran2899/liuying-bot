@@ -17,10 +17,10 @@ from liuying.utils.message import MessageUtils
 
 from ..config import get_config
 from ..core.context import context_manager
-from ..core.json_utils import extract_json_payload
 from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..core.persona import persona_manager
+from ..core.tools.json_utils import extract_json_payload
 from ..models.group_context import GroupContextSnapshot
 
 _PROACTIVE_TASK_ID = "ai_proactive_group_message"

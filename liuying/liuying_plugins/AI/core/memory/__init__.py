@@ -9,7 +9,7 @@ from .background_intelligence import (
     background_intelligence,
 )
 from .curator import CurationReport, MemoryCurator, memory_curator
-from .evolves import EvolveMixin
+from .evolves import MemoryEvolveService
 from .extractors import EntityMention
 from .manager import MemoryManager, memory_manager
 from .search_ranker import SearchRanker, search_ranker
@@ -19,8 +19,8 @@ __all__ = [
     "BackgroundIntelligence",
     "CurationReport",
     "EntityMention",
-    "EvolveMixin",
     "MemoryCurator",
+    "MemoryEvolveService",
     "MemoryManager",
     "MemorySummarizer",
     "SearchRanker",

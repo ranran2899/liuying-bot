@@ -8,6 +8,8 @@ data/
 # 忽略日志目录
 log/
 
+resources/
+
 wiki/
 
 

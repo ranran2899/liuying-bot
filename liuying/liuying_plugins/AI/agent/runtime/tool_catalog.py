@@ -8,7 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..constants import (
+from .constants import (
     INTENT_TAG_ADMIN,
     INTENT_TAG_IMAGE,
     INTENT_TAG_LOCAL,

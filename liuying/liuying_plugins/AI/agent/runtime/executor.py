@@ -16,13 +16,13 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ..catalog.tool_catalog import tool_catalog
-from ..constants import (
+from .constants import (
     DEFAULT_RETRY_COUNT,
     DEFAULT_TOOL_TIMEOUT,
     EVIDENCE_KIND_CONTEXT,
 )
 from .evidence import RETRYABLE_LOOKUP_TOOLS, EvidenceComposer
+from .tool_catalog import tool_catalog
 
 # 时效性搜索工具白名单（注入当前日期提升结果新鲜度）
 # 仅限真实联网检索类工具，避免对插件能力查询等无关工具注入日期

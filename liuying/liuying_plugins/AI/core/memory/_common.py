@@ -6,8 +6,9 @@
 
 import hashlib
 import math
+import re
 
-__all__ = ["MemoryEmbeddingUtils"]
+__all__ = ["MemoryEmbeddingUtils", "tokenize"]
 
 _DEFAULT_PERSONA = "default"
 """默认人格名（未指定时回退）"""
@@ -26,6 +27,37 @@ _WORKING_EXPIRE_HOURS = 24
 
 _EPISODIC_EXPIRE_DAYS = 30
 """episodic层过期天数"""
+
+_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9]+")
+"""词元提取模式：连续CJK段或连续字母数字段"""
+
+
+def tokenize(text: str) -> list[str]:
+    """零依赖中英文分词
+
+    英文/数字按连续段整体作为词元（小写化），
+    连续CJK段按 2-gram 展开（单字段保留单字），
+    解决中文无空格时整句被当作单一词导致的嵌入退化。
+
+    参数:
+        text: 输入文本
+
+    返回:
+        list[str]: 词元列表
+    """
+    tokens: list[str] = []
+    for match in _TOKEN_RE.finditer(text):
+        seg = match.group()
+        if "\u4e00" <= seg[0] <= "\u9fff":
+            if len(seg) == 1:
+                tokens.append(seg)
+            else:
+                tokens.extend(
+                    seg[i : i + 2] for i in range(len(seg) - 1)
+                )
+        else:
+            tokens.append(seg.lower())
+    return tokens
 
 
 class MemoryEmbeddingUtils:
@@ -50,7 +82,7 @@ class MemoryEmbeddingUtils:
     ) -> list[float]:
         """生成hash-bow嵌入向量
 
-        使用blake2b哈希将文本映射到固定维度向量，再L2归一化。
+        使用blake2b哈希将词元映射到固定维度向量，再L2归一化。
         零外部依赖，适合作为默认嵌入方案。
 
         参数:
@@ -63,8 +95,7 @@ class MemoryEmbeddingUtils:
         vec = [0.0] * dim
         if not text:
             return vec
-        words = text.split()
-        for word in words:
+        for word in tokenize(text):
             h = hashlib.blake2b(word.encode("utf-8"), digest_size=8).digest()
             idx = int.from_bytes(h, "big") % dim
             vec[idx] += 1.0
@@ -77,7 +108,8 @@ class MemoryEmbeddingUtils:
     def extract_entities_simple(text: str) -> list[dict]:
         """简单实体提取
 
-        基于关键词频率提取实体（无NLP依赖的简化方案）。
+        基于词元频率提取实体（无NLP依赖的简化方案），
+        中文按 2-gram 统计，避免整句被当作单一实体。
 
         参数:
             text: 输入文本
@@ -88,9 +120,8 @@ class MemoryEmbeddingUtils:
         if not text:
             return []
         entities: list[dict] = []
-        words = text.split()
         freq: dict[str, int] = {}
-        for word in words:
+        for word in tokenize(text):
             if len(word) >= 2:
                 freq[word] = freq.get(word, 0) + 1
         sorted_words = sorted(

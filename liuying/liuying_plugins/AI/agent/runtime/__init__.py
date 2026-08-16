@@ -3,7 +3,6 @@
 提供规划-执行-响应三层分离的Agent架构。
 """
 
-from .catalog import ToolCatalog, ToolCategory
 from .constants import (
     DEFAULT_AGENT_MAX_STEPS,
     DEFAULT_TIME_BUDGET,
@@ -21,9 +20,12 @@ from .constants import (
     TURN_ACTION_REPLY,
     TURN_ACTION_SILENCE,
 )
-from .execution import EvidenceComposer, ToolExecutor
-from .planning import TurnPlan, TurnPlanner
-from .response import PersonaResponder, PersonaResponse
+from .evidence import EvidenceComposer
+from .executor import ToolExecutor
+from .plan_types import TurnPlan
+from .planner import TurnPlanner
+from .responder import PersonaResponder, PersonaResponse
+from .tool_catalog import ToolCatalog, ToolCategory
 
 __all__ = [
     "DEFAULT_AGENT_MAX_STEPS",

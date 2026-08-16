@@ -78,13 +78,21 @@ class MemoryDecayHelper:
             )
             total = 0
             for user_id, group_id, persona_name in users:
-                count = await memory_manager.consolidate(
-                    user_id,
-                    group_id,
-                    window_hours=24,
-                    persona_name=persona_name,
-                )
-                total += count
+                # 单用户巩固失败（LLM/DB异常）不中断其余用户
+                try:
+                    count = await memory_manager.consolidate(
+                        user_id,
+                        group_id,
+                        window_hours=24,
+                        persona_name=persona_name,
+                    )
+                    total += count
+                except Exception as e:
+                    logger.warning(
+                        f"用户记忆巩固失败 {user_id}: {e}",
+                        command="AI",
+                        e=e,
+                    )
             if total > 0:
                 logger.info(
                     f"记忆巩固完成，处理{total}条",

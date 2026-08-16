@@ -171,7 +171,16 @@ class SocialTriggerRegistry:
         """
 
         async def _wrapped() -> None:
-            await handler(SocialContext())
+            # 定时任务体统一兜底：单个社交场景异常
+            # 不应影响调度器中其他任务的执行
+            try:
+                await handler(SocialContext())
+            except Exception as e:
+                logger.warning(
+                    f"社交触发器执行失败: {e}",
+                    command="AI",
+                    e=e,
+                )
 
         return _wrapped
 

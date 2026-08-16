@@ -78,6 +78,36 @@ class SkillIsolationRunner:
         env.update(_PYTHON_ENV_GUARDS)
         return env
 
+    @staticmethod
+    def _build_payload(
+        script_path: Path, function: str, kwargs: dict[str, Any] | None
+    ) -> str:
+        """构建子进程调用载荷
+
+        路径解析放在同步函数内，避免异步函数体内
+        执行文件系统访问（ASYNC240）。
+
+        参数:
+            script_path: 技能脚本路径
+            function: 要调用的函数名
+            kwargs: 函数参数
+
+        返回:
+            str: JSON载荷文本
+        """
+        return json.dumps(
+            {
+                "script_path": str(script_path.resolve()),
+                "function": function,
+                "kwargs": kwargs or {},
+                "sys_paths": [
+                    str(script_path.parent),
+                    str(script_path.parent.parent),
+                ],
+            },
+            ensure_ascii=False,
+        )
+
     @classmethod
     async def run_in_subprocess(
         cls,
@@ -103,18 +133,7 @@ class SkillIsolationRunner:
             TimeoutError: 执行超时
             RuntimeError: 子进程执行失败
         """
-        payload = json.dumps(
-            {
-                "script_path": str(script_path.resolve()),
-                "function": function,
-                "kwargs": kwargs or {},
-                "sys_paths": [
-                    str(script_path.parent),
-                    str(script_path.parent.parent),
-                ],
-            },
-            ensure_ascii=False,
-        )
+        payload = cls._build_payload(script_path, function, kwargs)
         env = cls._build_env(inherit_env)
         proc = await asyncio.create_subprocess_exec(
             sys.executable,

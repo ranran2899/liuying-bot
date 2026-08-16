@@ -18,9 +18,9 @@ from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 
 from ..config import get_config
-from ..core.json_utils import extract_json_payload
 from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_WARMUP, model_router
+from ..core.tools.json_utils import extract_json_payload
 from ..models.conversation_record import ConversationRecord
 from ..models.group_context import GroupContextSnapshot
 
@@ -144,26 +144,42 @@ async def _run_group_style_autobuild() -> None:
         "群风格自动学习任务启动",
         command="AI",
     )
-    # 查询所有活跃群组
-    groups = await GroupContextSnapshot.filter(
-        is_active=True
-    ).all()
+    # 前置查询失败不应让定时任务崩溃退出
+    try:
+        groups = await GroupContextSnapshot.filter(
+            is_active=True
+        ).all()
+    except Exception as e:
+        logger.warning(
+            f"群风格学习查询活跃群失败: {e}",
+            command="AI",
+            e=e,
+        )
+        return
     if not groups:
         logger.debug("无活跃群组，跳过风格学习", command="AI")
         return
 
     updated = 0
     for group in groups:
-        style = await _analyze_group_style(group.group_id)
-        if style:
-            await GroupContextSnapshot.update_context(
-                group_id=group.group_id,
-                style=style,
-            )
-            updated += 1
-            logger.debug(
-                f"群 {group.group_id} 风格已更新: {style[:50]}",
+        # 单群失败（LLM/DB异常）不中断其余群组的风格学习
+        try:
+            style = await _analyze_group_style(group.group_id)
+            if style:
+                await GroupContextSnapshot.update_context(
+                    group_id=group.group_id,
+                    style=style,
+                )
+                updated += 1
+                logger.debug(
+                    f"群 {group.group_id} 风格已更新: {style[:50]}",
+                    command="AI",
+                )
+        except Exception as e:
+            logger.warning(
+                f"群 {group.group_id} 风格学习失败: {e}",
                 command="AI",
+                e=e,
             )
 
     logger.info(
@@ -178,11 +194,10 @@ async def setup_group_style_autobuild_job() -> None:
 
     默认12小时执行一次，通过 GROUP_STYLE_AUTOBUILD_INTERVAL 配置。
     """
-    if not get_config("GROUP_STYLE_AUTOBUILD", {}).get("enabled", True):
+    autobuild_cfg = get_config("GROUP_STYLE_AUTOBUILD", {})
+    if not autobuild_cfg.get("enabled", True):
         return
-    interval_hours = int(
-        get_config("GROUP_STYLE_AUTOBUILD", {}).get("interval", 12)
-    )
+    interval_hours = int(autobuild_cfg.get("interval", 12))
     interval_hours = max(1, interval_hours)
 
     await task_manager.add_interval(

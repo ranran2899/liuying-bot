@@ -1,7 +1,7 @@
 """记忆召回模块
 
 提供 5 路召回（FTS5/向量/嵌入/实体/时间）+ RRF 融合的检索能力，
-作为 Mixin 注入到 MemoryManager，依赖其 `_db`/`_embedding_dim` 状态。
+作为组合式内部服务由 MemoryManager 构造并注入依赖。
 融合后通过 search_ranker 进行综合重排序，提升召回质量。
 """
 
@@ -13,28 +13,37 @@ from liuying.utils.log import logger
 
 from ...config import get_config
 from ...models.memory_item import MemoryItem
+from ..knowledge_db import KnowledgeBase
 from ..knowledge_db.query_rewriter import rewrite_query
 from ._common import (
     _DEFAULT_PERSONA,
-    _EMBEDDING_DIM,
     _EPISODIC_EXPIRE_DAYS,
     _RRF_K,
     MemoryEmbeddingUtils,
 )
+from .embedding_service import EmbeddingService
 from .search_ranker import search_ranker
 
 
-class RecallMixin:
-    """召回 Mixin
+class MemoryRecallService:
+    """记忆召回服务
 
-    提供 5 路召回与 RRF 融合能力，依赖宿主类的
-    `_db`、`_embedding_dim`、`access` 等成员。
+    提供 5 路召回与 RRF 融合能力，依赖由构造器显式注入。
     """
 
-    # 类型提示，由宿主类 MemoryManager 初始化
-    _db: Any
-    _embedding_dim: int = _EMBEDDING_DIM
-    _embedding_service: Any
+    def __init__(
+        self,
+        db: KnowledgeBase,
+        embedding_service: EmbeddingService,
+    ) -> None:
+        """初始化召回服务
+
+        参数:
+            db: 知识库检索实例
+            embedding_service: 嵌入服务
+        """
+        self._db = db
+        self._embedding_service = embedding_service
 
     async def recall(
         self,
@@ -65,54 +74,55 @@ class RecallMixin:
         # 检索意图改写：LLM识别梗/黑话/缩写补出正式名，提升召回准确率
         if get_config("KNOWLEDGE_QUERY_REWRITE_ENABLED", True):
             query = await rewrite_query(query)
+        # 查询向量只计算一次，向量/嵌入双路共用，
+        # 避免同一查询重复调用嵌入API
+        try:
+            query_vec: list[float] | None = (
+                await self._embedding_service.embed_text(query)
+            )
+        except Exception as e:
+            logger.warning(
+                f"查询嵌入失败，向量双路降级为空: {e}",
+                command="AI",
+                e=e,
+            )
+            query_vec = None
+        limit = top_k * 3
         # 5 路召回并行执行，避免串行 5x 耗时
-        fts_task = self._search_fts(query, top_k * 3)
-        vector_task = self._search_vector(query, top_k * 3)
-        embedding_task = self._search_embedding(query, top_k * 3)
-        entity_task = self._search_entity(query, top_k * 3)
-        time_task = self._search_time(
-            query,
-            top_k * 3,
-            user_id=user_id,
-            group_id=group_id,
-            persona_name=persona_name,
-        )
         fts_res, vec_res, emb_res, ent_res, time_res = (
             await asyncio.gather(
-                fts_task,
-                vector_task,
-                embedding_task,
-                entity_task,
-                time_task,
+                self._search_fts(query, limit),
+                self._search_vector(query_vec, limit),
+                self._search_embedding(query_vec, limit),
+                self._search_entity(query, limit),
+                self._search_time(
+                    query,
+                    limit,
+                    user_id=user_id,
+                    group_id=group_id,
+                    persona_name=persona_name,
+                ),
                 return_exceptions=True,
             )
         )
         # 单路召回失败（嵌入API/DB异常等）不应中断整体回复，
         # 逐路降级为空，保留其余路径的召回结果
-        for _name, _res in (
-            ("fts", fts_res),
-            ("vector", vec_res),
-            ("embedding", emb_res),
-            ("entity", ent_res),
-            ("time", time_res),
-        ):
-            if isinstance(_res, Exception):
-                logger.warning(
-                    f"记忆召回 {_name} 路失败，降级为空: {_res}",
-                    command="AI",
-                )
-        fts_res = fts_res if isinstance(fts_res, list) else []
-        vec_res = vec_res if isinstance(vec_res, list) else []
-        emb_res = emb_res if isinstance(emb_res, list) else []
-        ent_res = ent_res if isinstance(ent_res, list) else []
-        time_res = time_res if isinstance(time_res, list) else []
-        candidates: dict[str, list[tuple[int, float]]] = {
+        raw_results = {
             "fts": fts_res,
             "vector": vec_res,
             "embedding": emb_res,
             "entity": ent_res,
             "time": time_res,
         }
+        candidates: dict[str, list[tuple[int, float]]] = {}
+        for name, result in raw_results.items():
+            if isinstance(result, Exception):
+                logger.warning(
+                    f"记忆召回 {name} 路失败，降级为空: {result}",
+                    command="AI",
+                )
+                continue
+            candidates[name] = result
         fused = self._fuse_recall(candidates)
         if not fused:
             return []
@@ -210,21 +220,6 @@ class RecallMixin:
             ),
         }
 
-    async def access(self, memory_id: int) -> None:
-        """访问记忆
-
-        参数:
-            memory_id: 记忆ID
-        """
-        memory = await MemoryItem.filter(id=memory_id).first()
-        if not memory:
-            return
-        memory.access_count += 1
-        memory.last_access_time = datetime.now()
-        await memory.save(
-            update_fields=["access_count", "last_access_time"]
-        )
-
     async def _search_fts(
         self, query: str, limit: int
     ) -> list[tuple[int, float]]:
@@ -240,20 +235,19 @@ class RecallMixin:
         return await self._db.search_fts(query, limit)
 
     async def _search_vector(
-        self, query: str, limit: int
+        self, query_vec: list[float] | None, limit: int
     ) -> list[tuple[int, float]]:
         """向量检索
 
         参数:
-            query: 查询文本
+            query_vec: 预计算的查询向量，None时跳过
             limit: 返回上限
 
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
-        query_vec = await self._embedding_service.embed_text(
-            query
-        )
+        if query_vec is None:
+            return []
         return await self._db.search_vector(
             query_vec,
             limit,
@@ -261,7 +255,7 @@ class RecallMixin:
         )
 
     async def _search_embedding(
-        self, query: str, limit: int
+        self, query_vec: list[float] | None, limit: int
     ) -> list[tuple[int, float]]:
         """主嵌入向量检索
 
@@ -269,15 +263,14 @@ class RecallMixin:
         而非分块表（search_vector_chunks）。
 
         参数:
-            query: 查询文本
+            query_vec: 预计算的查询向量，None时跳过
             limit: 返回上限
 
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
         """
-        query_vec = await self._embedding_service.embed_text(
-            query
-        )
+        if query_vec is None:
+            return []
         return await self._db.search_embedding(
             query_vec,
             limit,

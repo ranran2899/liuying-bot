@@ -1,16 +1,17 @@
 """记忆巩固与衰减模块
 
 提供记忆巩固（reinforce/consolidate）与过期衰减（decay_expired）能力，
-作为 Mixin 注入到 MemoryManager。
+作为组合式内部服务由 MemoryManager 构造并注入依赖。
 """
 
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from typing import Any
 
 from liuying.utils.log import logger
 
 from ...models.conversation_record import ConversationRecord
 from ...models.memory_item import MemoryItem
+from ..knowledge_db import KnowledgeBase
 from ..llm import llm_helper
 from ._common import (
     _DEFAULT_PERSONA,
@@ -20,16 +21,27 @@ from ._common import (
 )
 
 
-class ConsolidationMixin:
-    """巩固与衰减 Mixin
+class MemoryConsolidationService:
+    """巩固与衰减服务
 
     提供记忆强化、晋升、衰减与摘要巩固能力。
-    依赖宿主类的 `_db`、`add` 等成员，以及模块级 `llm_helper`。
+    依赖由构造器显式注入；写入新记忆通过注入的
+    add_memory 回调委托给 MemoryManager.add。
     """
 
-    # 类型提示，由宿主类 MemoryManager 初始化
-    _db: Any
-    _embedding_service: Any
+    def __init__(
+        self,
+        db: KnowledgeBase,
+        add_memory: Callable[..., Awaitable[int]],
+    ) -> None:
+        """初始化巩固服务
+
+        参数:
+            db: 知识库检索实例
+            add_memory: 记忆写入回调（MemoryManager.add）
+        """
+        self._db = db
+        self._add_memory = add_memory
 
     async def reinforce(self, memory_id: int) -> None:
         """巩固记忆
@@ -165,7 +177,7 @@ class ConsolidationMixin:
                 [{"role": "user", "content": prompt}],
                 options={"temperature": 0.3},
             )
-            await self.add(
+            await self._add_memory(
                 user_id=user_id,
                 content=history[:500],
                 summary=summary,

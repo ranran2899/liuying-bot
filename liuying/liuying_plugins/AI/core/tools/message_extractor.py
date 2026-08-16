@@ -4,9 +4,9 @@
 屏蔽不同适配器消息段差异，供 AI 插件各模块复用。
 """
 import base64
-from pathlib import Path
 from typing import Any
 
+import anyio
 from nonebot.adapters import Event
 
 from liuying.utils.http.http_utils import AsyncHttpx
@@ -108,9 +108,10 @@ class MessageExtractor:
 
         if path:
             try:
-                file_path = Path(path)
-                if file_path.exists():
-                    return file_path.read_bytes()
+                # anyio.Path 提供异步文件操作，避免阻塞事件循环
+                file_path = anyio.Path(path)
+                if await file_path.exists():
+                    return await file_path.read_bytes()
             except Exception as e:
                 logger.debug(
                     f"读取本地图片失败: {e}", command="AI", e=e

@@ -10,9 +10,9 @@
 - 多候选词生成，首轮失败可依次重试
 """
 
+from dataclasses import dataclass, field
 import json
 import re
-from dataclasses import dataclass, field
 from typing import Any
 
 from liuying.utils.log import logger

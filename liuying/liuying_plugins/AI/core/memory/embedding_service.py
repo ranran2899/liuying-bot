@@ -43,8 +43,9 @@ class EmbeddingService:
         self.embedding_dim: int = MemoryEmbeddingUtils.default_dim()
 
         if self._use_llm:
-            provider = get_config("EMBEDDING", {}).get("provider", None)
-            model = get_config("EMBEDDING", {}).get("model", None)
+            embedding_cfg = get_config("EMBEDDING", {})
+            provider = embedding_cfg.get("provider", None)
+            model = embedding_cfg.get("model", None)
             if provider and model:
                 self._llm_ready = True
                 self.model_version = f"llm:{provider}:{model}"
@@ -109,8 +110,10 @@ class EmbeddingService:
                 command="AI",
                 e=e,
             )
+            # 降级向量维度必须与当前模型维度一致，
+            # 否则与已入库向量做相似度计算时失真
             return MemoryEmbeddingUtils.hash_bow_embedding(
-                text, MemoryEmbeddingUtils.default_dim()
+                text, self.embedding_dim
             )
 
     async def embed_batch(
@@ -147,7 +150,7 @@ class EmbeddingService:
             )
             return [
                 MemoryEmbeddingUtils.hash_bow_embedding(
-                    t, MemoryEmbeddingUtils.default_dim()
+                    t, self.embedding_dim
                 )
                 for t in texts
             ]
@@ -193,18 +196,3 @@ class EmbeddingService:
         if result and isinstance(result[0], list):
             return result  # type: ignore[return-value]
         return [result] if expected == 1 else []
-
-    def embed_text_sync(self, text: str) -> list[float]:
-        """同步生成嵌入向量(仅本地哈希)
-
-        供无法使用 await 的场景调用,始终使用本地方案。
-
-        参数:
-            text: 输入文本
-
-        返回:
-            list[float]: 嵌入向量
-        """
-        return MemoryEmbeddingUtils.hash_bow_embedding(
-            text, MemoryEmbeddingUtils.default_dim()
-        )

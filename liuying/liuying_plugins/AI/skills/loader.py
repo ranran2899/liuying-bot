@@ -32,12 +32,16 @@ import yaml
 from liuying.utils.log import logger
 
 from ..agent.mcp_bridge import mcp_bridge
-from ..agent.runtime.catalog.tool_catalog import (
+from ..agent.runtime.tool_catalog import (
     apply_tool_metadata_defaults,
 )
 from ..agent.skill_isolation import skill_isolation_runner
 from ..agent.tools import AgentTool, ToolRegistry, tool_registry
 from ..config import get_config
+from ..core.knowledge_db import knowledge_base
+from ..core.llm import llm_helper
+from ..core.memory import memory_manager
+from ..core.persona import persona_manager
 from .api import SkillRuntime
 
 __all__ = [
@@ -143,13 +147,6 @@ def _build_default_runtime() -> SkillRuntime:
     返回:
         SkillRuntime: 默认运行时实例
     """
-    # 循环依赖：core 子包在初始化期会反向引用 AI 插件配置，
-    # 故此处延迟导入，避免模块导入阶段成环。
-    from ..core.knowledge_db import knowledge_base
-    from ..core.llm import llm_helper
-    from ..core.memory import memory_manager
-    from ..core.persona import persona_manager
-
     return SkillRuntime(
         plugin_config=get_config,
         logger=logger,

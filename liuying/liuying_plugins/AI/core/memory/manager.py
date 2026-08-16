@@ -15,21 +15,24 @@ from ...models.memory_item import MemoryItem
 from ..knowledge_db import knowledge_base
 from ._common import (
     _DEFAULT_PERSONA,
+    _WORKING_EXPIRE_HOURS,
     MemoryEmbeddingUtils,
 )
 from .background_intelligence import background_intelligence
-from .consolidation import ConsolidationMixin
+from .consolidation import MemoryConsolidationService
 from .embedding_service import EmbeddingService
-from .evolves import EvolveMixin
-from .recall import RecallMixin
+from .evolves import MemoryEvolveService
+from .recall import MemoryRecallService
 
 
-class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
+class MemoryManager:
     """记忆管理器
 
     管理4层记忆，提供5路召回+RRF融合的检索能力。
     所有记忆绑定 persona_name，实现人设间数据隔离。
     集成记忆进化引擎，写入后自动判断与旧记忆的关系。
+    召回/巩固/进化能力由组合式内部服务提供，
+    依赖通过构造器显式注入。
     """
 
     def __init__(self, db=None) -> None:
@@ -42,6 +45,79 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
         self._embedding_service = EmbeddingService()
         self._embedding_dim = self._embedding_service.embedding_dim
         self._bg_tasks: set[asyncio.Task] = set()
+        self._recall_service = MemoryRecallService(
+            self._db, self._embedding_service
+        )
+        self._consolidation_service = MemoryConsolidationService(
+            self._db, add_memory=self.add
+        )
+        self._evolve_service = MemoryEvolveService(
+            self._recall_service, self._consolidation_service
+        )
+
+    async def recall(
+        self,
+        user_id: str,
+        query: str,
+        group_id: str | None = None,
+        top_k: int = 5,
+        mode: str = "auto",
+        persona_name: str = _DEFAULT_PERSONA,
+    ) -> list[dict]:
+        """记忆召回（委托召回服务）
+
+        参数:
+            user_id: 用户ID
+            query: 查询文本
+            group_id: 群组ID
+            top_k: 返回数量
+            mode: 召回模式（auto/fast/deep）
+            persona_name: bot人格名
+
+        返回:
+            list[dict]: 记忆列表
+        """
+        return await self._recall_service.recall(
+            user_id=user_id,
+            query=query,
+            group_id=group_id,
+            top_k=top_k,
+            mode=mode,
+            persona_name=persona_name,
+        )
+
+    async def decay_expired(self) -> int:
+        """衰减过期记忆（委托巩固服务）
+
+        返回:
+            int: 处理的记忆数量
+        """
+        return await self._consolidation_service.decay_expired()
+
+    async def consolidate(
+        self,
+        user_id: str,
+        group_id: str | None = None,
+        window_hours: int = _WORKING_EXPIRE_HOURS,
+        persona_name: str = _DEFAULT_PERSONA,
+    ) -> int:
+        """巩固记忆（委托巩固服务）
+
+        参数:
+            user_id: 用户ID
+            group_id: 群组ID
+            window_hours: 时间窗口（小时）
+            persona_name: bot人格名
+
+        返回:
+            int: 巩固的记忆数量
+        """
+        return await self._consolidation_service.consolidate(
+            user_id=user_id,
+            group_id=group_id,
+            window_hours=window_hours,
+            persona_name=persona_name,
+        )
 
     async def add(
         self,
@@ -138,7 +214,7 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
             persona_name: bot人格名
         """
         try:
-            await self.evolve_memory(
+            await self._evolve_service.evolve_memory(
                 user_id=user_id,
                 new_memory_id=new_memory_id,
                 new_summary=new_summary,
@@ -238,7 +314,7 @@ class MemoryManager(RecallMixin, ConsolidationMixin, EvolveMixin):
         返回:
             str: 记忆上下文提示文本
         """
-        memories = await self.recall(
+        memories = await self._recall_service.recall(
             user_id,
             query,
             group_id,
