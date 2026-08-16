@@ -13,8 +13,8 @@ from liuying.utils.log import logger
 
 from ...models.emotion_state import EmotionState
 from ..context import context_manager
-from ..json_utils import extract_json_payload
 from ..llm import llm_helper as _default_llm_helper
+from ..tools.json_utils import extract_json_payload
 from .inner_state import InnerStateHelper
 
 _DEFAULT_PERSONA = "default"

@@ -12,7 +12,7 @@ from liuying.services.cache import CacheDict
 from liuying.utils.log import logger
 
 from ...models.group_context import GroupContextSnapshot
-from ..json_utils import extract_json_payload
+from ..tools.json_utils import extract_json_payload
 
 __all__ = [
     "ProfileToolkit",

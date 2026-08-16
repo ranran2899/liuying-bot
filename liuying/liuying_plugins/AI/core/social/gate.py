@@ -12,8 +12,8 @@
 
 from liuying.utils.log import logger
 
-from ..json_utils import extract_json_payload
 from ..llm import llm_helper
+from ..tools.json_utils import extract_json_payload
 
 __all__ = ["SocialGate", "social_gate"]
 
