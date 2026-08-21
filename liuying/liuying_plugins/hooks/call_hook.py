@@ -7,6 +7,9 @@ from liuying.utils.manager.message_manager import MessageManager
 
 LOG_COMMAND = "MessageHook"
 
+QQ_MSG_APIS = {"post_c2c_messages", "post_group_messages"}
+"""QQ官方适配器发送消息的API名"""
+
 
 def replace_message(message: Message) -> str:
     """替换消息内容为字符串
@@ -42,24 +45,20 @@ async def handle_api_result(
     bot: Bot, exception: Exception | None, api: str, data: dict[str, Any], result: Any
 ):
     """处理API调用结果"""
-    if exception or api != "send_msg":
+    if exception or not result:
         return
-
-    if not result:
-        return
-
-    user_id = data.get("user_id")
-    message_id = result.get("message_id")
-
-    if not (user_id and message_id):
-        return
-
-    try:
+    if api == "send_msg":
+        user_id = data.get("user_id")
+        message_id = result.get("message_id") if isinstance(result, dict) else None
+        if not (user_id and message_id):
+            return
         MessageManager.add(str(user_id), str(message_id))
         logger.debug(
             f"收集消息id，user_id: {user_id}, msg_id: {message_id}", LOG_COMMAND
         )
-    except Exception as e:
-        logger.warning(
-            f"收集消息id发生错误...data: {data}, result: {result}", LOG_COMMAND, e=e
-        )
+    elif api in QQ_MSG_APIS and (msg_id := result.id):
+        if openid := data.get("openid") or data.get("group_openid"):
+            MessageManager.add(openid, msg_id, openid)
+            logger.debug(
+                f"收集消息id，openid: {openid}, msg_id: {msg_id}", LOG_COMMAND
+            )

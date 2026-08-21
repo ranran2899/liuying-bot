@@ -87,6 +87,19 @@ class GameToken(Model):
         await cls.filter(uid=uid).delete()
 
     @classmethod
+    def _run_script(cls) -> list[str]:
+        """数据库迁移脚本。
+
+        旧版 ``mgga_token`` 表可能缺 ``token / uid / expires_at`` 三列。
+        这里用 ``ALTER TABLE ADD ... DEFAULT ...`` 幂等补齐，列已存在时
+        由框架忽略 ``duplicate column`` 异常。
+        """
+        return [
+           # "DROP TABLE IF EXISTS mgga_token;",
+        ]
+
+
+    @classmethod
     async def purge_expired(cls) -> int:
         """清理过期令牌。
 

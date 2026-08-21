@@ -7,12 +7,16 @@ import re
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from nonebot.adapters import Bot
+from nonebot.adapters.qq import Bot as QQBot
 from nonebot.utils import run_sync
 import psutil
 import ujson as json
 
-from liuying.configs.config import Config
+from liuying.configs.config import BotConfig, Config
 from liuying.configs.path_config import DATA_PATH
+from liuying.utils.log import logger
+from liuying.utils.platform import PlatformUtils
 
 from .base_model import SystemFolderSize, SystemStatus, User
 
@@ -176,3 +180,83 @@ def get_system_disk(
             )
         )
     return data_list
+
+
+async def get_bot_login_info(
+    bot: Bot, default_id: str | None = None
+) -> tuple[str, str]:
+    """获取机器人登录信息（昵称与头像URL）
+
+    优先判断是否为 QQ 官方机器人：若是则使用 QQ 官方
+    /users/@me 接口返回的信息（昵称与头像），否则回退至
+    OneBot 的 get_login_info 与 QQ 头像拼接逻辑。
+
+    参数:
+        bot: NoneBot Bot 实例
+        default_id: 无法获取时的默认ID
+
+    返回:
+        tuple[str, str]: (昵称, 头像URL)
+    """
+    bot_id = bot.self_id or default_id or ""
+    if isinstance(bot, QQBot):
+        return await _get_qq_official_info(bot, bot_id)
+    return await _get_onebot_info(bot, bot_id)
+
+
+async def _get_qq_official_info(bot: QQBot, default_id: str) -> tuple[str, str]:
+    """获取 QQ 官方机器人信息
+
+    优先复用 bot 已连接的自身信息（self_info，连接就绪后由 ReadyEvent
+    写入），缺失时回退调用适配器内置的 /users/@me 接口（bot.me()）。
+    头像 URL 由官方签名可直接访问。
+
+    参数:
+        bot: QQ 官方 Bot 实例
+        default_id: 无法获取时的默认ID
+
+    返回:
+        tuple[str, str]: (昵称, 头像URL)
+    """
+    try:
+        user = bot.self_info
+    except RuntimeError:
+        user = None
+    if user is None:
+        try:
+            user = await bot.me()
+        except Exception as e:
+            logger.warning("获取QQ官方机器人信息失败", command="WebUi", e=e)
+            return default_id, ""
+    return user.username or default_id, user.avatar or ""
+
+
+async def _get_onebot_info(bot: Bot, default_id: str) -> tuple[str, str]:
+    """获取 OneBot 机器人信息
+
+    参数:
+        bot: NoneBot Bot 实例
+        default_id: 无法获取时的默认ID
+
+    返回:
+        tuple[str, str]: (昵称, 头像URL)
+    """
+    platform = PlatformUtils.get_platform(bot) or ""
+    nickname = default_id
+    ava_url = ""
+    if platform == "qq" and hasattr(bot, "get_login_info"):
+        try:
+            login_info = await bot.get_login_info()
+            nickname = login_info.get("nickname") or default_id
+        except Exception as e:
+            logger.warning("调用接口get_login_info失败", command="WebUi", e=e)
+    try:
+        ava_url = (
+            PlatformUtils.get_user_avatar_url(
+                default_id, "qq", BotConfig.get_qbot_uid(default_id)
+            )
+            or ""
+        )
+    except Exception as e:
+        logger.warning("获取bot头像失败", command="WebUi", e=e)
+    return nickname, ava_url

@@ -7,7 +7,7 @@ from nonebot.adapters import Bot
 from nonebot.drivers import Driver
 from sqlalchemy import func
 
-from liuying.configs.config import BotConfig
+from liuying.liuying_plugins.web_ui.utils import get_bot_login_info
 from liuying.models._log.bot_connect_log import BotConnectLog
 from liuying.models.chat_history import ChatHistory
 from liuying.models.statistics import Statistics
@@ -49,24 +49,7 @@ class ApiDataSource:
             BotInfo: Bot信息
         """
         platform = PlatformUtils.get_platform(bot) or ""
-        nickname = bot.self_id
-        ava_url = ""
-        if platform == "qq":
-            if hasattr(bot, "get_login_info"):
-                try:
-                    login_info = await bot.get_login_info()
-                    nickname = login_info.get("nickname") or bot.self_id
-                except Exception as e:
-                    logger.warning("调用接口get_login_info失败", command="WebUi", e=e)
-            try:
-                ava_url = (
-                    PlatformUtils.get_user_avatar_url(
-                        bot.self_id, "qq", BotConfig.get_qbot_uid(bot.self_id)
-                    )
-                    or ""
-                )
-            except Exception as e:
-                logger.warning("获取bot头像失败", command="WebUi", e=e)
+        nickname, ava_url = await get_bot_login_info(bot, bot.self_id)
         bot_info = BotInfo(
             self_id=bot.self_id, nickname=nickname, ava_url=ava_url, platform=platform
         )

@@ -12,7 +12,7 @@ dependencies = [
     "nonebot2[fastapi]>=2.5.0,<2.6.0",
     # nonebot-adapter-mail # 邮件适配器
     "nonebot-adapter-onebot", # OneBot V11 V12 适配器
-    "nonebot-adapter-qq==1.7.1", # QQ适配器
+    "nonebot-adapter-qq==1.7.2", # QQ适配器
     "nonebot-adapter-minecraft==1.8.2", # Minecraft适配器
     "nonebot-plugin-apscheduler==0.5.0",
     "httpx",

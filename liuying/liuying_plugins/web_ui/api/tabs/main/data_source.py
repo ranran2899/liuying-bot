@@ -7,6 +7,7 @@ import nonebot
 from nonebot.adapters import Bot
 from nonebot.drivers import Driver
 
+from liuying.liuying_plugins.web_ui.utils import get_bot_login_info
 from liuying.models._bot import BotConsole
 from liuying.models._group import GroupConsole
 from liuying.models._log.bot_connect_log import BotConnectLog
@@ -19,7 +20,7 @@ from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
 
-from ....config import AVA_URL, GROUP_AVA_URL, QueryDateType
+from ....config import GROUP_AVA_URL, QueryDateType
 from .model import (
     ActiveGroup,
     BaseInfo,
@@ -71,17 +72,12 @@ class ApiDataSource:
         返回:
             TemplateBaseInfo: bot信息
         """
-        login_info = None
-        if hasattr(bot, "get_login_info"):
-            try:
-                login_info = await bot.get_login_info()
-            except Exception as e:
-                logger.warning("调用接口get_login_info失败", command="WebUi", e=e)
+        nickname, ava_url = await get_bot_login_info(bot, bot.self_id)
         return TemplateBaseInfo(
             bot=bot,
             self_id=bot.self_id,
-            nickname=login_info["nickname"] if login_info else bot.self_id,
-            ava_url=AVA_URL.format(bot.self_id),
+            nickname=nickname,
+            ava_url=ava_url,
         )
 
     @classmethod

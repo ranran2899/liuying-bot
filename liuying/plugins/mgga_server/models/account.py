@@ -242,6 +242,17 @@ class GameAccount(Model):
         }
 
     @classmethod
+    def _run_script(cls) -> list[str]:
+        """数据库迁移脚本sql。
+
+        
+        """
+        return [
+            # "DROP TABLE IF EXISTS mgga_account;",
+        ]
+
+
+    @classmethod
     async def leaderboard(cls, limit: int = 10) -> list[Self]:
         """按逃脱次数取排行榜。
 

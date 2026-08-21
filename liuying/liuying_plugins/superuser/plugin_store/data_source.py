@@ -20,6 +20,7 @@ from liuying.utils.utils import is_number, win_on_rm_error
 from .config import (
     BASE_PATH,
     DEFAULT_GITEE_URL,
+    DEFAULT_VERSION,
     EXTRA_GITEE_URL,
     LOG_COMMAND,
 )
@@ -73,7 +74,9 @@ class StoreManager:
         ], extra_plugin_list
 
     @classmethod
-    def version_check(cls, plugin_info: StorePluginInfo, suc_plugin: dict[str, str]):
+    def version_check(
+        cls, plugin_info: StorePluginInfo, suc_plugin: dict[str, str]
+    ) -> str:
         """版本检查
 
         参数:
@@ -81,7 +84,7 @@ class StoreManager:
             suc_plugin: 模块名: 版本号
 
         返回:
-            str: 版本号
+            str: 版本号，有更新时附带新版本提示
         """
         module = plugin_info.module
         if suc_plugin.get(module) and not cls.check_version_is_new(
@@ -93,7 +96,7 @@ class StoreManager:
     @classmethod
     def check_version_is_new(
         cls, plugin_info: StorePluginInfo, suc_plugin: dict[str, str]
-    ):
+    ) -> bool:
         """检查版本是否有更新
 
         参数:
@@ -101,17 +104,19 @@ class StoreManager:
             suc_plugin: 模块名: 版本号
 
         返回:
-            bool: 是否有更新
+            bool: 商店版本是否与已安装版本一致
         """
-        module = plugin_info.module
-        return suc_plugin.get(module) and plugin_info.version == suc_plugin[module]
+        return plugin_info.version == suc_plugin.get(plugin_info.module)
 
     @classmethod
-    async def get_loaded_plugins(cls, *args) -> list[tuple[str, str]]:
+    async def get_loaded_plugins(cls, *args: str) -> list[tuple[str, ...]]:
         """获取已加载的插件
 
+        参数:
+            *args: 需要返回的字段名
+
         返回:
-            list[str]: 已加载的插件
+            list[tuple[str, ...]]: 已加载插件的字段值列表
         """
         return await PluginInfo.filter(load_status=True).values_list(*args)
 
@@ -125,7 +130,7 @@ class StoreManager:
         plugin_list, extra_plugin_list = await cls.get_data()
         column_name = ["-", "ID", "名称", "简介", "作者", "版本", "类型"]
         db_plugin_list = await cls.get_loaded_plugins("module", "version")
-        suc_plugin = {p[0]: (p[1] or "0.1") for p in db_plugin_list}
+        suc_plugin = {p[0]: (p[1] or DEFAULT_VERSION) for p in db_plugin_list}
         index = 0
         data_list = []
         extra_data_list = []
@@ -155,22 +160,26 @@ class StoreManager:
                 ]
             )
             index += 1
-        return [
+        images = [
             await ImageTemplate.table_page(
                 "原生插件列表",
                 "通过添加/移除插件 ID 来管理插件",
                 column_name,
                 data_list,
                 text_style=row_style,
-            ),
-            await ImageTemplate.table_page(
-                "第三方插件列表",
-                "通过添加/移除插件 ID 来管理插件",
-                column_name,
-                extra_data_list,
-                text_style=row_style,
-            ),
+            )
         ]
+        if extra_data_list:
+            images.append(
+                await ImageTemplate.table_page(
+                    "第三方插件列表",
+                    "通过添加/移除插件 ID 来管理插件",
+                    column_name,
+                    extra_data_list,
+                    text_style=row_style,
+                )
+            )
+        return images
 
     @classmethod
     async def get_plugin_by_value(
@@ -242,7 +251,8 @@ class StoreManager:
         """添加插件
 
         参数:
-            plugin_id: 插件id或模块名
+            index_or_module: 插件索引、模块名或名称
+            source: 下载源，ali 或 git
 
         返回:
             str: 返回消息
@@ -344,12 +354,14 @@ class StoreManager:
                     LOG_COMMAND,
                 )
                 await VirtualEnvPackageManager.install_requirement(requirement_path)
+                requirement_path.unlink(missing_ok=True)
             if requirements_path.exists():
                 logger.info(
                     f"开始安装插件 {module_path} 依赖文件: {requirements_path}",
                     LOG_COMMAND,
                 )
                 await VirtualEnvPackageManager.install_requirement(requirements_path)
+                requirements_path.unlink(missing_ok=True)
 
     @classmethod
     async def remove_plugin(cls, index_or_module: str) -> str:
@@ -371,7 +383,7 @@ class StoreManager:
             return f"插件 {plugin_info.name} 不存在..."
         logger.debug(f"尝试移除插件 {plugin_info.name} 文件: {path}", LOG_COMMAND)
         if plugin_info.is_dir:
-            shutil.rmtree(path, onerror=win_on_rm_error)
+            shutil.rmtree(path, onexc=win_on_rm_error)
         else:
             path.unlink()
         await PluginInitManager.remove(module_path)
@@ -390,10 +402,10 @@ class StoreManager:
         plugin_list, extra_plugin_list = await cls.get_data()
         all_plugin_list = plugin_list + extra_plugin_list
         db_plugin_list = await cls.get_loaded_plugins("module", "version")
-        suc_plugin = {p[0]: (p[1] or "Unknown") for p in db_plugin_list}
+        suc_plugin = {p[0]: (p[1] or DEFAULT_VERSION) for p in db_plugin_list}
         filtered_data = [
-            (id, plugin_info)
-            for id, plugin_info in enumerate(all_plugin_list)
+            (idx, plugin_info)
+            for idx, plugin_info in enumerate(all_plugin_list)
             if plugin_name_or_author.lower() in plugin_info.name.lower()
             or plugin_name_or_author.lower() in plugin_info.author.lower()
         ]
@@ -401,14 +413,14 @@ class StoreManager:
         data_list = [
             [
                 "已安装" if plugin_info.module in suc_plugin else "",
-                id,
+                idx,
                 plugin_info.name,
                 plugin_info.description,
                 plugin_info.author,
                 cls.version_check(plugin_info, suc_plugin),
                 plugin_info.plugin_type_name,
             ]
-            for id, plugin_info in filtered_data
+            for idx, plugin_info in filtered_data
         ]
         if not data_list:
             return "未找到相关插件..."
@@ -434,7 +446,7 @@ class StoreManager:
         plugin_info, is_external = await cls.get_plugin_by_value(index_or_module, True)
         logger.info(f"尝试更新插件 {plugin_info.name}", LOG_COMMAND)
         db_plugin_list = await cls.get_loaded_plugins("module", "version")
-        suc_plugin = {p[0]: (p[1] or "Unknown") for p in db_plugin_list}
+        suc_plugin = {p[0]: (p[1] or DEFAULT_VERSION) for p in db_plugin_list}
         logger.debug(f"当前插件列表: {suc_plugin}", LOG_COMMAND)
         if cls.check_version_is_new(plugin_info, suc_plugin):
             return f"插件 {plugin_info.name} 已是最新版本"
@@ -448,10 +460,7 @@ class StoreManager:
 
     @classmethod
     async def update_all_plugin(cls) -> str:
-        """更新插件
-
-        参数:
-            plugin_id: 插件id
+        """更新全部已安装且有新版本的插件
 
         返回:
             str: 返回消息
@@ -463,11 +472,11 @@ class StoreManager:
         update_success_list = []
         result = "--已更新{}个插件 {}个失败 {}个成功--"
         logger.info(f"尝试更新全部插件 {plugin_name_list}", LOG_COMMAND)
+        db_plugin_list = await cls.get_loaded_plugins("module", "version")
+        suc_plugin = {p[0]: (p[1] or DEFAULT_VERSION) for p in db_plugin_list}
         for plugin_info in all_plugin_list:
             try:
-                db_plugin_list = await cls.get_loaded_plugins("module", "version")
-                suc_plugin = {p[0]: (p[1] or "Unknown") for p in db_plugin_list}
-                if plugin_info.module not in [p[0] for p in db_plugin_list]:
+                if plugin_info.module not in suc_plugin:
                     logger.debug(
                         f"插件 {plugin_info.name}({plugin_info.module}) 未安装，跳过",
                         LOG_COMMAND,

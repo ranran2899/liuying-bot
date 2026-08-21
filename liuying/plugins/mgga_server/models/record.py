@@ -42,3 +42,12 @@ class GameRecord(Model):
         DateTime, default=datetime.now, index=True, comment="结算时间"
     )
     """结算时间"""
+
+    @classmethod
+    def _run_script(cls) -> list[str]:
+        """数据库迁移sql脚本。
+
+        """
+        return [
+           # "DROP TABLE IF EXISTS mgga_record;",
+        ]

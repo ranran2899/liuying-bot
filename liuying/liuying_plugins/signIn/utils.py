@@ -16,6 +16,10 @@ from liuying.utils.log import logger
 from liuying.utils.user import UserSign
 
 SIGN_IN_IMAGE_PATH = TEMP_PATH / "signIn"
+# 不存在则创建
+if not SIGN_IN_IMAGE_PATH.exists():
+    SIGN_IN_IMAGE_PATH.mkdir(parents=True)
+
 driver = get_driver()
 
 SIGNIN_ITEMS = [
