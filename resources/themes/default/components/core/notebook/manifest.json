@@ -1,7 +1,0 @@
-{
-  "name": "笔记本样式页面",
-  "entrypoint": "main.html",
-  "render_options": {
-    "viewport": { "width": 700, "height": 10 }
-  }
-}

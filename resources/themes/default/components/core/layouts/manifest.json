@@ -1,7 +1,0 @@
-{
-  "name": "通用布局组件",
-  "entrypoint": "main.html",
-  "render_options": {
-    "viewport": { "width": 800, "height": 10 }
-  }
-}

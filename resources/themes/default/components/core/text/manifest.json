@@ -1,7 +1,0 @@
-{
-  "name": "轻量级富文本组件",
-  "entrypoint": "main.html",
-  "render_options": {
-    "viewport": { "width": 500, "height": 10 }
-  }
-}

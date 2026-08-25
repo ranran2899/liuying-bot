@@ -1,6 +1,0 @@
-{
-  "name": "LLM状态卡片",
-  "description": "LLM 配置与 Token 消耗状态展示卡片",
-  "feature": "llm_status",
-  "feature_label": "LLM状态"
-}
