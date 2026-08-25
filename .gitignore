@@ -13,11 +13,6 @@ resources/
 wiki/
 
 
-# 忽略资源目录(字体/图片等大文件)
-resources/temp/
-# resources/themes/
-
-
 # 忽略编译后的Python文件
 *.pyc
 __pycache__/

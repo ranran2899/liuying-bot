@@ -15,10 +15,10 @@ nonebot.init()
 
 # 导入并注册适配器
 driver = nonebot.get_driver()
-driver.register_adapter(OneBotV11Adapter)
-driver.register_adapter(OneBotV12Adapter)
-driver.register_adapter(QQAdapter)
-driver.register_adapter(MinecraftAdapter)
+driver.register_adapter(adapter=OneBotV11Adapter)
+driver.register_adapter(adapter=OneBotV12Adapter)
+driver.register_adapter(adapter=QQAdapter)
+driver.register_adapter(adapter=MinecraftAdapter)
 # driver.register_adapter(MailAdapter)
 
 from liuying.services.liuying_db import session_manager
@@ -41,3 +41,4 @@ if __name__ == "__main__":
 
 
 # 想你了流萤小姐
+
