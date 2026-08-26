@@ -57,11 +57,11 @@ _matcher.shortcut(
 async def _auto_download():
     """启动时自动下载资源包（优先级 2，晚于数据库与渲染服务）
 
-    仅当资源文件夹不存在时才下载安装，已存在则跳过更新。
+    仅当资源包尚未安装（无版本记录）时才下载安装，已安装则跳过更新。
     """
     for meta in RESOURCE_PACKS:
-        if meta.target_path.exists():
-            logger.info(f"资源包 {meta.name} 已存在，跳过更新", LOG_COMMAND)
+        if ResourcePackManager.is_installed(meta):
+            logger.info(f"资源包 {meta.name} 已安装，跳过更新", LOG_COMMAND)
             continue
         try:
             result = await ResourcePackManager.install(meta)

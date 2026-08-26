@@ -42,6 +42,21 @@ class ResourcePackManager:
         return ResourcePackInfo(**json.loads(content))
 
     @classmethod
+    def is_installed(cls, meta: ResourcePackMeta) -> bool:
+        """判断资源包是否已安装
+
+        以目标目录内的版本记录文件是否存在为准，避免目标目录
+        被 path_config 预创建导致 exists() 误判。
+
+        参数:
+            meta: 资源包元信息
+
+        返回:
+            bool: 是否已安装
+        """
+        return (meta.target_path / _VERSION_FILE).exists()
+
+    @classmethod
     def get_local_version(cls, meta: ResourcePackMeta) -> str:
         """获取本地已安装版本号
 
