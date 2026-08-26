@@ -165,11 +165,12 @@ class ResourcePackManager:
                 zf.extractall(target_path)
 
     @classmethod
-    async def install(cls, meta: ResourcePackMeta) -> str:
+    async def install(cls, meta: ResourcePackMeta, force: bool = False) -> str:
         """安装或更新资源包
 
         参数:
             meta: 资源包元信息
+            force: 是否强制覆盖安装，忽略版本比对
 
         返回:
             str: 安装结果描述
@@ -177,7 +178,7 @@ class ResourcePackManager:
         logger.info(f"开始安装资源包 {meta.name}...", LOG_COMMAND)
         info = await cls.get_remote_info(meta)
         local_version = cls.get_local_version(meta)
-        if info.version == local_version:
+        if not force and info.version == local_version:
             return f"资源包 {meta.name} 已是最新版本 {info.version}"
         archive_path = await cls._download_archive(info)
         await asyncio.to_thread(cls._extract_archive, archive_path, meta.target_path)
@@ -213,8 +214,11 @@ class ResourcePackManager:
         return result
 
     @classmethod
-    async def update_all(cls) -> str:
+    async def update_all(cls, force: bool = False) -> str:
         """更新全部资源包
+
+        参数:
+            force: 是否强制覆盖安装，忽略版本比对
 
         返回:
             str: 更新结果汇总
@@ -223,7 +227,7 @@ class ResourcePackManager:
         failed = []
         for meta in RESOURCE_PACKS:
             try:
-                result = await cls.install(meta)
+                result = await cls.install(meta, force=force)
                 success.append(result)
             except Exception as e:
                 logger.error(f"更新资源包 {meta.name} 失败", LOG_COMMAND, e=e)

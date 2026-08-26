@@ -16,9 +16,9 @@ __plugin_meta__ = PluginMetadata(
     name="资源包管理",
     description="机器人资源包与 WebUI 资源管理",
     usage="""
-    资源包管理        : 查看资源包安装状态
-    资源包更新 [名称] : 更新指定资源包
-    资源包更新全部    : 更新全部资源包
+    资源包管理              : 查看资源包安装状态
+    资源包更新 [名称]       : 更新指定资源包
+    资源包全部更新 [强制]   : 更新全部资源包，加"强制"覆盖当前资源包
     """.strip(),
     extra=PluginExtraData(
         author="liuying",
@@ -31,7 +31,7 @@ _matcher = on_alconna(
     Alconna(
         "资源包管理",
         Subcommand("update", Args["name", str]),
-        Subcommand("update_all"),
+        Subcommand("update_all", Args["force?", str]),
     ),
     permission=SUPERUSER,
     priority=1,
@@ -46,17 +46,23 @@ _matcher.shortcut(
 )
 
 _matcher.shortcut(
-    r"资源包更新全部",
+    r"资源包全部更新",
     command="资源包管理",
-    arguments=["update_all"],
+    arguments=["update_all", "{%0}"],
     prefix=True,
 )
 
 
 @PriorityLifecycle.on_startup(priority=2)
 async def _auto_download():
-    """启动时自动下载资源包（优先级 2，晚于数据库与渲染服务）"""
+    """启动时自动下载资源包（优先级 2，晚于数据库与渲染服务）
+
+    仅当资源文件夹不存在时才下载安装，已存在则跳过更新。
+    """
     for meta in RESOURCE_PACKS:
+        if meta.target_path.exists():
+            logger.info(f"资源包 {meta.name} 已存在，跳过更新", LOG_COMMAND)
+            continue
         try:
             result = await ResourcePackManager.install(meta)
             logger.info(result, LOG_COMMAND)
@@ -90,10 +96,12 @@ async def _(session: Uninfo, name: str):
 
 
 @_matcher.assign("update_all")
-async def _(session: Uninfo):
+async def _(session: Uninfo, force: str | None = None):
+    is_force = force == "强制"
     try:
-        await MessageUtils.build_message("正在更新全部资源包").send()
-        result = await ResourcePackManager.update_all()
+        tip = "正在强制覆盖更新全部资源包" if is_force else "正在更新全部资源包"
+        await MessageUtils.build_message(tip).send()
+        result = await ResourcePackManager.update_all(force=is_force)
         logger.info("更新全部资源包", LOG_COMMAND, session=session)
         await MessageUtils.build_message(result).send()
     except Exception as e:
