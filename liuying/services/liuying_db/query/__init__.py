@@ -17,7 +17,7 @@
 from typing import Any, Generic
 
 from .builder import QueryBuilderMixin
-from .conditions import Q, T, build_filter_statement
+from .conditions import Q, T, build_filter_statement, query_cache_namespace
 from .executor import QueryExecutorMixin
 
 
@@ -110,4 +110,5 @@ __all__ = [
     "Q",
     "QueryWrapper",
     "build_filter_statement",
+    "query_cache_namespace",
 ]

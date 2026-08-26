@@ -73,16 +73,36 @@ async def _stop_monitor_task(task: asyncio.Task | None) -> None:
             pass
 
 
-async def _run_monitor_loop(interval: float, callback: Callable[[], None]) -> None:
+async def _run_monitor_loop(interval: float, callback) -> None:
     """通用监控循环
 
     参数:
         interval: 检查间隔（秒）
-        callback: 每次循环执行的回调
+        callback: 每次循环执行的回调（支持同步和异步）
     """
     while True:
         await asyncio.sleep(interval)
-        callback()
+        if asyncio.iscoroutinefunction(callback):
+            await callback()
+        else:
+            callback()
+
+
+async def _safe_call_callback(callback, *args) -> None:
+    """安全执行用户回调，同步回调放入线程池避免阻塞事件循环
+
+    参数:
+        callback: 用户回调函数
+        *args: 回调参数
+    """
+    try:
+        if asyncio.iscoroutinefunction(callback):
+            await callback(*args)
+        else:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, callback, *args)
+    except Exception as e:
+        logger.error(f"监控回调执行失败: {e}", LOG_COMMAND)
 
 
 class PoolMonitor:
@@ -208,7 +228,7 @@ class PoolMonitor:
         """
         self._alert_callbacks.append(callback)
 
-    def _check_all_pools(self):
+    async def _check_all_pools(self):
         """检查所有连接池状态"""
         for db_name in list(self._engines.keys()):
             metrics = self.collect_metrics(db_name)
@@ -224,10 +244,7 @@ class PoolMonitor:
             )
             log_func(f"连接池告警 [{alert.level}]: {alert.message}", LOG_COMMAND)
             for callback in self._alert_callbacks:
-                try:
-                    callback(alert)
-                except Exception as e:
-                    logger.error(f"告警回调执行失败: {e}", LOG_COMMAND)
+                await _safe_call_callback(callback, alert)
 
     async def start_monitoring(self) -> None:
         """启动连接池监控"""
@@ -382,7 +399,7 @@ class ConnectionLeakDetector:
         """
         self._leak_callbacks.append(callback)
 
-    def _check_leaks(self):
+    async def _check_leaks(self):
         """执行泄漏检查并触发回调"""
         for db_name, session_id, age, trace_info in self.detect_leaks():
             logger.warning(
@@ -391,10 +408,7 @@ class ConnectionLeakDetector:
                 LOG_COMMAND,
             )
             for callback in self._leak_callbacks:
-                try:
-                    callback(db_name, session_id, age)
-                except Exception as e:
-                    logger.error(f"泄漏回调执行失败: {e}", LOG_COMMAND)
+                await _safe_call_callback(callback, db_name, session_id, age)
 
     async def start_monitoring(self) -> None:
         """启动泄漏监控"""

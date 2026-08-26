@@ -36,16 +36,28 @@ from sqlalchemy.sql.selectable import Select
 
 from liuying.services.cache import Cache
 
-from ..config import QUERY_TIMEOUT_SECONDS
+from ..config import RETRY_CONFIG
 
 if TYPE_CHECKING:
     from ..base_model import Model
 
 T = TypeVar("T", bound="Model")
 
-_MAX_RETRIES = QUERY_TIMEOUT_SECONDS.max_retries
-_BASE_DELAY = QUERY_TIMEOUT_SECONDS.base_delay
-_QUERY_CACHE = Cache("LIUYING_DB_QUERY")
+_MAX_RETRIES = RETRY_CONFIG.max_retries
+_BASE_DELAY = RETRY_CONFIG.base_delay
+_QUERY_CACHE = Cache("LIUYING_DB_QUERY", result_type=object)
+
+
+def query_cache_namespace(model_class: type) -> str:
+    """构建查询缓存命名空间，按模型隔离缓存失效范围
+
+    参数:
+        model_class: 模型类
+
+    返回:
+        str: 缓存命名空间
+    """
+    return f"dbq_{model_class.__name__}"
 
 _RETRYABLE_ERRORS = (OperationalError, DisconnectionError, InterfaceError, DBAPIError)
 _NON_RETRYABLE_KEYWORDS = (

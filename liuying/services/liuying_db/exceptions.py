@@ -86,6 +86,6 @@ class DbConnectError(Exception):
                 user = auth.split(":", 1)[0]
                 return f"{protocol}://{user}:***@{host_part}"
             case [protocol, rest]:
-                return f"{protocol}://***@{rest}"
+                return f"{protocol}://{rest}"
             case _:
                 return "***"

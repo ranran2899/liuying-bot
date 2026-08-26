@@ -19,6 +19,7 @@ from .base_model import Base
 from .config import (
     DB_CONNECT_MAX_RETRIES,
     DB_CONNECT_RETRY_DELAY,
+    LOG_COMMAND,
     db_model,
     get_config,
     prompt,
@@ -77,7 +78,9 @@ class LifecycleManager:
                         scripts_by_db.setdefault(db_name, []).extend(sql)
                 except Exception as e:
                     logger.debug(
-                        f"{module} 在数据库 {db_name} 执行脚本方法出错...", e=e
+                        f"{module} 在数据库 {db_name} 执行脚本方法出错...",
+                        LOG_COMMAND,
+                        e=e,
                     )
 
         for db_name, sql_list in scripts_by_db.items():
@@ -154,6 +157,9 @@ class LifecycleManager:
         last_error = None
         for attempt in range(1, DB_CONNECT_MAX_RETRIES + 1):
             try:
+                # 重试前清理上一次失败可能残留的引擎，避免连接泄漏
+                if attempt > 1 and session_manager.engines:
+                    await session_manager.disconnect()
                 await session_manager.init(BotConfig.db_url, get_config())
                 await LifecycleManager._init_extra_databases()
                 await LifecycleManager._run_script_methods()

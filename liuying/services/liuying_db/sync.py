@@ -1,10 +1,18 @@
 """数据库同步模块，负责将主数据库的数据同步到副数据库"""
 
 import asyncio
-import datetime
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, inspect, select, table
+from sqlalchemy import (
+    Date,
+    DateTime,
+    MetaData,
+    Table,
+    delete,
+    inspect,
+    select,
+)
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from liuying.utils.log import logger
@@ -56,16 +64,18 @@ class DBSyncManager:
                         LOG_COMMAND,
                     )
 
-    def _get_table_obj(self, tbl_name: str) -> Any:
-        """获取表对象
+    def _reflect_table(self, sync_conn, tbl_name: str) -> Table:
+        """从数据库反射表结构，获取包含列类型信息的 Table 对象
 
         参数:
+            sync_conn: 同步数据库连接
             tbl_name: 表名
 
         返回:
-            表对象
+            Table: 包含完整列定义的表对象
         """
-        return table(tbl_name)
+        metadata = MetaData()
+        return Table(tbl_name, metadata, autoload_with=sync_conn)
 
     async def _get_table_names(self, conn: AsyncConnection) -> list[str]:
         """获取数据库中的所有表名
@@ -119,21 +129,29 @@ class DBSyncManager:
         return result.scalar()
 
     @staticmethod
-    def _convert_time_fields(row: dict[str, Any]) -> dict[str, Any]:
-        """转换行中的时间字段为datetime对象
+    def _convert_time_fields(
+        row: dict[str, Any], tbl: Any
+    ) -> dict[str, Any]:
+        """仅对日期/时间类型的列，将字符串值解析为对应对象
+
+        基于表 metadata 列类型精准转换，避免对每行每列盲目尝试多种时间格式，
+        也避免误转非时间字段中的日期文本。非字符串或无法解析的值原样保留。
 
         参数:
             row: 原始数据行
+            tbl: 表对象（含列类型信息）
 
         返回:
             dict: 转换后的数据行
         """
         converted = {}
         for key, value in row.items():
-            if isinstance(value, str):
+            col_type = tbl.c[key].type if key in tbl.c else None
+            if isinstance(value, str) and isinstance(col_type, (DateTime, Date)):
                 for fmt in _TIME_FORMATS:
                     try:
-                        value = datetime.datetime.strptime(value, fmt)
+                        parsed = datetime.strptime(value, fmt)
+                        value = parsed.date() if isinstance(col_type, Date) else parsed
                         break
                     except (ValueError, TypeError):
                         continue
@@ -150,6 +168,11 @@ class DBSyncManager:
     ):
         """同步单个表
 
+        有主键的表采用「按最大主键增量同步」策略，前提是主从库主键单调递增且
+        连续（副库不应被外部直接修改、主库删除行后主键不重用）。该假设不成立
+        时（如人工改从库、主键缺口）可能导致数据不一致，此时应改用全量同步或
+        基于 ``updated_at`` 的 CDC 方案。
+
         参数:
             master_session: 主数据库会话
             slave_session: 副数据库会话
@@ -158,7 +181,8 @@ class DBSyncManager:
             slave_db_name: 副数据库名称
         """
         pk = await self._get_primary_key(master_conn, tbl_name)
-        tbl = self._get_table_obj(tbl_name)
+        # 反射表结构以获取列类型信息，用于时间字段转换
+        tbl = await master_conn.run_sync(self._reflect_table, tbl_name)
 
         if not pk:
             logger.debug(f"表 {tbl_name} 没有主键，执行全量同步", LOG_COMMAND)
@@ -196,7 +220,7 @@ class DBSyncManager:
             logger.debug(f"表 {tbl_name} 没有新增数据，跳过同步", LOG_COMMAND)
             return
 
-        rows_to_insert = [self._convert_time_fields(dict(row)) for row in rows]
+        rows_to_insert = [self._convert_time_fields(dict(row), tbl) for row in rows]
         insert_stmt = tbl.insert().values(rows_to_insert)
         await slave_session.execute(insert_stmt)
 
@@ -249,7 +273,7 @@ class DBSyncManager:
         """
         return {
             "last_sync_time": {
-                k: datetime.datetime.fromtimestamp(v).isoformat()
+                k: datetime.fromtimestamp(v).isoformat()
                 for k, v in self.last_sync_time.items()
             },
             "sync_errors": dict(self.sync_errors),

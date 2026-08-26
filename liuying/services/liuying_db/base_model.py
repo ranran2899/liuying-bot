@@ -22,8 +22,8 @@ from liuying.utils.enum import DbLockType
 from liuying.utils.log import logger
 
 from .config import LOG_COMMAND, db_model
-from .query import QueryWrapper, build_filter_statement
-from .session import session_manager
+from .query import QueryWrapper, build_filter_statement, query_cache_namespace
+from .session import nested_transaction, session_manager
 from .utils import DbUtils
 
 
@@ -49,8 +49,6 @@ class Model(Base):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        if cls.__module__ not in db_model.models:
-            db_model.models.append(cls.__module__)
         if func := getattr(cls, "_run_script", None):
             db_model.script_methods.append((cls.__module__, func))
         cls._register_cache_type()
@@ -221,6 +219,9 @@ class Model(Base):
     ) -> tuple[Self | None, bool]:
         """处理完整性错误，用于 get_or_create 和 update_or_create
 
+        插入操作已在 nested_transaction（savepoint）中执行，
+        IntegrityError 仅回滚保存点，外部事务仍然可用，可直接查询。
+
         参数:
             session: 数据库会话
             kwargs: 查询条件
@@ -228,7 +229,6 @@ class Model(Base):
         返回:
             tuple[Self | None, bool]: 模型实例和是否为新创建
         """
-        await session.rollback()
         stmt = build_filter_statement(cls, **kwargs)
         result = await session.execute(stmt)
         return result.scalars().first(), False
@@ -238,18 +238,22 @@ class Model(Base):
         """使缓存失效
 
         统一的缓存失效入口，写操作（create/update/delete）后调用。
-        当模型声明了 ``cache_type`` 时，按 ``cache_key_field`` 删除对应缓存键。
+        当模型声明了 ``cache_type`` 时，按 ``cache_key_field`` 删除对应缓存键；
+        同时按模型命名空间失效该模型的查询结果缓存（``QueryWrapper`` 查询缓存）。
 
         参数:
             instance: 模型实例
         """
-        if not (cache_type := cls.get_cache_type()):
-            return
-        cache_key = cls.get_cache_key(instance)
-        if cache_key is None:
-            return
-        cache = Cache(cache_type, result_type=cls)
-        await cache.delete(cache_key)
+        if cache_type := cls.get_cache_type():
+            cache_key = cls.get_cache_key(instance)
+            if cache_key is not None:
+                cache = Cache(cache_type, result_type=cls)
+                await cache.delete(cache_key)
+        # 按模型命名空间清空查询缓存，避免读到已删除/未变更的数据
+        try:
+            await CacheRoot.invalidate_namespace(query_cache_namespace(cls))
+        except Exception as e:
+            logger.debug(f"清除查询缓存失败: {e}", LOG_COMMAND)
 
     @classmethod
     async def create(
@@ -301,16 +305,17 @@ class Model(Base):
             tuple[Self, bool]: 模型实例和是否为新创建
         """
         async with cls._managed_session(session, db_name) as sess:
+            stmt = build_filter_statement(cls, **kwargs)
+            result = await sess.execute(stmt)
+            instance = result.scalars().first()
+            if instance:
+                return instance, False
             try:
-                stmt = build_filter_statement(cls, **kwargs)
-                result = await sess.execute(stmt)
-                instance = result.scalars().first()
-                if instance:
-                    return instance, False
-                instance = cls(**kwargs, **(defaults or {}))
-                sess.add(instance)
-                await sess.flush()
-                await sess.refresh(instance)
+                async with nested_transaction(sess):
+                    instance = cls(**kwargs, **(defaults or {}))
+                    sess.add(instance)
+                    await sess.flush()
+                    await sess.refresh(instance)
                 await cls._invalidate_cache(instance)
                 return instance, True
             except IntegrityError:
@@ -347,10 +352,11 @@ class Model(Base):
                         await sess.flush()
                         created = False
                     else:
-                        instance = cls(**kwargs, **(defaults or {}))
-                        sess.add(instance)
-                        await sess.flush()
-                        await sess.refresh(instance)
+                        async with nested_transaction(sess):
+                            instance = cls(**kwargs, **(defaults or {}))
+                            sess.add(instance)
+                            await sess.flush()
+                            await sess.refresh(instance)
                         created = True
                     await cls._invalidate_cache(instance)
                     return instance, created
@@ -369,9 +375,9 @@ class Model(Base):
 
         参数:
             session: 可选的数据库会话
-            update_fields: 要更新的字段列表
-            force_create: 强制创建
-            force_update: 强制更新
+            update_fields: 要更新的字段列表（仅对已存在的记录有效）
+            force_create: 强制创建（即使主键已存在也执行 INSERT）
+            force_update: 强制更新（保留参数，主键存在时自动走 UPDATE 路径）
             db_name: 数据库名称
         """
         async with self._managed_session(session, db_name) as sess:
@@ -381,11 +387,13 @@ class Model(Base):
             lock_type = DbLockType.CREATE if is_new else DbLockType.UPDATE
 
             async with self._lock_context(lock_type):
-                if is_new or force_create:
+                if force_create or is_new:
+                    # 新记录或强制创建：执行 INSERT
                     sess.add(self)
                     await sess.flush()
                     await sess.refresh(self)
                 elif update_fields:
+                    # 已存在的记录，仅更新指定字段
                     update_data = {
                         f: getattr(self, f) for f in update_fields if hasattr(self, f)
                     }
@@ -404,6 +412,7 @@ class Model(Base):
                         if self in sess:
                             await sess.refresh(self)
                 else:
+                    # 已存在的记录，全字段更新
                     merged = await sess.merge(self)
                     await sess.flush()
                     await sess.refresh(merged)
@@ -453,10 +462,11 @@ class Model(Base):
             if instance:
                 return instance, False
             try:
-                instance = cls(**kwargs, **(defaults or {}))
-                sess.add(instance)
-                await sess.flush()
-                await sess.refresh(instance)
+                async with nested_transaction(sess):
+                    instance = cls(**kwargs, **(defaults or {}))
+                    sess.add(instance)
+                    await sess.flush()
+                    await sess.refresh(instance)
                 await cls._invalidate_cache(instance)
                 return instance, True
             except IntegrityError:
@@ -467,7 +477,7 @@ class Model(Base):
         cls,
         *args,
         session: AsyncSession | None = None,
-        clean_duplicates: bool = True,
+        clean_duplicates: bool = False,
         db_name: str = "default",
         **kwargs: Any,
     ) -> Self | None:
@@ -476,7 +486,8 @@ class Model(Base):
         参数:
             *args: SQLAlchemy 过滤表达式
             session: 可选的数据库会话
-            clean_duplicates: 是否删除重复记录
+            clean_duplicates: 是否删除重复记录（默认 False，仅记录告警）。
+                              设为 True 时会删除多余的重复记录，请谨慎使用。
             db_name: 数据库名称
             **kwargs: 查询参数，值为 None 时生成 IS NULL 条件
 
@@ -496,30 +507,31 @@ class Model(Base):
                     case []:
                         return None
                     case [single]:
-                        await sess.refresh(single)
                         return single
                     case _ if hasattr(cls, "id"):
                         records.sort(key=lambda x: getattr(x, "id", 0), reverse=True)
+                        logger.warning(
+                            f"{cls.__name__} 发现 {len(records)} 条重复记录，"
+                            f"返回最新一条 (id={getattr(records[0], 'id', None)})，"
+                            f"建议检查数据唯一性约束",
+                            LOG_COMMAND,
+                        )
                         if clean_duplicates:
-                            for record in records[1:]:
-                                try:
+                            async with nested_transaction(sess):
+                                for record in records[1:]:
                                     await sess.delete(record)
-                                    await sess.flush()
                                     logger.info(
                                         f"{cls.__name__} 删除重复记录: "
                                         f"id={getattr(record, 'id', None)}",
                                         LOG_COMMAND,
                                     )
-                                except Exception as del_e:
-                                    logger.error(f"删除重复记录失败: {del_e}")
-                                    await sess.rollback()
-                        await sess.refresh(records[0])
                         return records[0]
                     case _:
                         return records[0]
             except TimeoutError:
                 logger.error(
-                    f"数据库操作超时: {cls.__name__}.safe_get_or_none", LOG_COMMAND
+                    f"数据库操作超时: {cls.__name__}.safe_get_or_none",
+                    LOG_COMMAND,
                 )
                 return None
             except Exception as e:

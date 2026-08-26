@@ -11,7 +11,10 @@ from liuying.configs.config import BotConfig
 
 from .exceptions import DbUrlIsNone
 
-DB_TIMEOUT_SECONDS = 3.0
+# 查询超时下限需与 SQLite busy_timeout(30000ms) 对齐：
+# 并发写时 SQLite 会阻塞等待锁直至 busy_timeout，若查询超时短于该值，
+# 会在锁释放前主动放弃并回滚，导致后续请求持续等待。PostgreSQL/MySQL 不受影响。
+DB_TIMEOUT_SECONDS = 30.0
 SLOW_QUERY_THRESHOLD = 0.5
 LOG_COMMAND = "db_liuying"
 ENABLE_SESSION_TRACING = False
@@ -20,8 +23,8 @@ DB_CONNECT_RETRY_DELAY = 5.0
 
 
 @dataclass(frozen=True, slots=True)
-class QueryTimeoutConfig:
-    """查询超时配置"""
+class RetryConfig:
+    """查询重试配置"""
 
     max_retries: int = 5
     base_delay: float = 1.0
@@ -54,13 +57,13 @@ class SQLiteConfig:
     """
 
     timeout: int = 30
-    pool_size: int = 20
-    max_overflow: int = 10
+    pool_size: int = 5
+    max_overflow: int = 5
     pool_recycle: int = 3600
     pool_pre_ping: bool = True
 
 
-QUERY_TIMEOUT_SECONDS = QueryTimeoutConfig()
+RETRY_CONFIG = RetryConfig()
 POSTGRESQL_CONFIG = PostgreSQLConfig()
 MYSQL_CONFIG = MySQLConfig()
 SQLITE_CONFIG = SQLiteConfig()
@@ -119,14 +122,14 @@ def get_config(db_url: str | None = None) -> dict:
                     "pool_recycle": POSTGRESQL_CONFIG.pool_recycle,
                 }
             )
-        case "mysql":
+        case s if s.startswith("mysql"):
             config_params.update(
                 {
                     "pool_size": MYSQL_CONFIG.max_connections,
                     "connect_args": {"connect_timeout": MYSQL_CONFIG.connect_timeout},
                 }
             )
-        case "sqlite":
+        case s if s.startswith("sqlite"):
             config_params.update(
                 {
                     "pool_size": SQLITE_CONFIG.pool_size,

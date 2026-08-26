@@ -37,7 +37,9 @@ class QueryBuilderMixin:
         参数:
             *args: 过滤条件，支持 SQLAlchemy 表达式或 Q 对象
             skip_none: 为True时忽略值为None的kwargs条件
-            **kwargs: 过滤条件，支持 Django 风格双下划线语法
+            **kwargs: 过滤条件，支持 Django 风格双下划线语法。
+                      重复键以最后一次调用的值为准（覆盖语义），
+                      args 表达式始终叠加。
 
         返回:
             QueryWrapper[T]: 返回自身以支持链式调用
@@ -45,7 +47,8 @@ class QueryBuilderMixin:
         self.args = self.args + args
         if skip_none:
             kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        self.kwargs.update(kwargs)
+        # 后调用覆盖前值，避免 model.filter(a=1).filter(a=2) 生成永假条件
+        self.kwargs = {**self.kwargs, **kwargs}
         return self
 
     def exclude(self, *args: Any, **kwargs: Any) -> "QueryWrapper[T]":
