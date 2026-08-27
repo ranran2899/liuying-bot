@@ -221,9 +221,8 @@ async def reduce_gold(user_id: str, module: str, cost_gold: int, session: Uninfo
             name="reduce_gold",
         )
     except InsufficientGold:
-        if u := await UserConsole.get_user(user_id):
-            u.gold = 0
-            await u.save(update_fields=["gold"])
+        # 余额异常时清零，使用原子 UPDATE 避免读-改-写覆盖其他并发变更
+        await UserConsole.filter(user_id=user_id).update(gold=0)
     except TimeoutError:
         logger.error(
             f"扣除金币超时，用户: {user_id}, 金币: {cost_gold}",

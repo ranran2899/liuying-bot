@@ -3,12 +3,12 @@
 """
 
 from enum import StrEnum
-from typing import Any, TypeAlias
+from typing import Any
 
 import nonebot
 from pydantic import BaseModel
 
-KeyType: TypeAlias = str | dict[str, Any]
+type KeyType = str | dict[str, Any]
 """缓存键类型，支持字符串或字典参数"""
 
 LOG_COMMAND = "CacheRoot"

@@ -49,8 +49,11 @@ class Model(Base):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        if func := getattr(cls, "_run_script", None):
-            db_model.script_methods.append((cls.__module__, func))
+        # 仅在定义了 _run_script 的类上注册，子类继承同名方法不重复注册。
+        # 注意 __dict__ 中存的是 classmethod 描述符对象（不可直接调用），
+        # 必须经 cls 属性访问走描述符协议取绑定的方法
+        if "_run_script" in cls.__dict__:
+            db_model.script_methods.append((cls.__module__, cls._run_script))
         cls._register_cache_type()
 
     @classmethod
@@ -234,6 +237,18 @@ class Model(Base):
         return result.scalars().first(), False
 
     @classmethod
+    async def _invalidate_query_cache(cls):
+        """清除该模型的查询结果缓存命名空间
+
+        模型实例写操作与 ``QueryWrapper`` 批量写操作的共用失效入口，
+        避免 namespace 计算与异常处理逻辑重复。
+        """
+        try:
+            await CacheRoot.invalidate_namespace(query_cache_namespace(cls))
+        except Exception as e:
+            logger.debug(f"清除查询缓存失败: {e}", LOG_COMMAND)
+
+    @classmethod
     async def _invalidate_cache(cls, instance):
         """使缓存失效
 
@@ -249,11 +264,7 @@ class Model(Base):
             if cache_key is not None:
                 cache = Cache(cache_type, result_type=cls)
                 await cache.delete(cache_key)
-        # 按模型命名空间清空查询缓存，避免读到已删除/未变更的数据
-        try:
-            await CacheRoot.invalidate_namespace(query_cache_namespace(cls))
-        except Exception as e:
-            logger.debug(f"清除查询缓存失败: {e}", LOG_COMMAND)
+        await cls._invalidate_query_cache()
 
     @classmethod
     async def create(
@@ -493,50 +504,41 @@ class Model(Base):
 
         返回:
             Self | None: 查询结果
+
+        异常:
+            TimeoutError: 数据库操作超时（与其他方法一致向上传播，不静默返回 None）
         """
         async with cls._managed_session(session, db_name) as sess:
             base_stmt = build_filter_statement(cls, *args, **kwargs)
-            try:
-                result = await DbUtils.with_db_timeout(
-                    sess.execute(base_stmt),
-                    operation=f"{cls.__name__}.safe_get_or_none",
-                    source="DataBaseModel",
-                )
-                records = result.scalars().all()
-                match records:
-                    case []:
-                        return None
-                    case [single]:
-                        return single
-                    case _ if hasattr(cls, "id"):
-                        records.sort(key=lambda x: getattr(x, "id", 0), reverse=True)
-                        logger.warning(
-                            f"{cls.__name__} 发现 {len(records)} 条重复记录，"
-                            f"返回最新一条 (id={getattr(records[0], 'id', None)})，"
-                            f"建议检查数据唯一性约束",
-                            LOG_COMMAND,
-                        )
-                        if clean_duplicates:
-                            async with nested_transaction(sess):
-                                for record in records[1:]:
-                                    await sess.delete(record)
-                                    logger.info(
-                                        f"{cls.__name__} 删除重复记录: "
-                                        f"id={getattr(record, 'id', None)}",
-                                        LOG_COMMAND,
-                                    )
-                        return records[0]
-                    case _:
-                        return records[0]
-            except TimeoutError:
-                logger.error(
-                    f"数据库操作超时: {cls.__name__}.safe_get_or_none",
-                    LOG_COMMAND,
-                )
-                return None
-            except Exception as e:
-                logger.error(
-                    f"数据库操作异常: {cls.__name__}.safe_get_or_none: {e!s}",
-                    LOG_COMMAND,
-                )
-                raise
+            result = await DbUtils.with_db_timeout(
+                sess.execute(base_stmt),
+                operation=f"{cls.__name__}.safe_get_or_none",
+            )
+            records = result.scalars().all()
+            match records:
+                case []:
+                    return None
+                case [single]:
+                    return single
+                case _ if hasattr(cls, "id"):
+                    records.sort(key=lambda x: getattr(x, "id", 0), reverse=True)
+                    logger.warning(
+                        f"{cls.__name__} 发现 {len(records)} 条重复记录，"
+                        f"返回最新一条 (id={getattr(records[0], 'id', None)})，"
+                        f"建议检查数据唯一性约束",
+                        LOG_COMMAND,
+                    )
+                    if clean_duplicates:
+                        async with nested_transaction(sess):
+                            for record in records[1:]:
+                                await sess.delete(record)
+                                logger.info(
+                                    f"{cls.__name__} 删除重复记录: "
+                                    f"id={getattr(record, 'id', None)}",
+                                    LOG_COMMAND,
+                                )
+                        # 删除操作影响查询结果，需失效该模型查询缓存
+                        await cls._invalidate_query_cache()
+                    return records[0]
+                case _:
+                    return records[0]

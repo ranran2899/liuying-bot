@@ -75,7 +75,10 @@ class LifecycleManager:
                     else:
                         sql = await func() if is_coroutine_callable(func) else func()
                     if sql:
-                        scripts_by_db.setdefault(db_name, []).extend(sql)
+                        # 归一化为列表，防止脚本方法误返回字符串被逐字符拆开
+                        scripts_by_db.setdefault(db_name, []).extend(
+                            [sql] if isinstance(sql, str) else sql
+                        )
                 except Exception as e:
                     logger.debug(
                         f"{module} 在数据库 {db_name} 执行脚本方法出错...",

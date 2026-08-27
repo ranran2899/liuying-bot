@@ -6,14 +6,12 @@
 """
 
 import asyncio
-from collections.abc import Callable
 import contextlib
 import re
 import traceback
-from typing import Any
 from urllib.parse import urlparse
 
-from sqlalchemy import event, text
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -46,6 +44,25 @@ def _normalize_db_name(name: str) -> str:
     return normalized or "default"
 
 
+_SQLITE_PRAGMAS = (
+    "PRAGMA journal_mode=WAL",
+    "PRAGMA busy_timeout=30000",
+    "PRAGMA synchronous=NORMAL",
+    "PRAGMA foreign_keys=ON",
+)
+
+
+async def _apply_sqlite_pragmas(driver_conn) -> None:
+    """对原始驱动连接逐条执行 PRAGMA
+
+    由 ``AdaptedConnection.run_async`` 调用，参数为原始
+    aiosqlite 连接；操作经其内部队列提交到后台线程执行。
+    """
+    for pragma in _SQLITE_PRAGMAS:
+        cursor = await driver_conn.execute(pragma)
+        await cursor.close()
+
+
 def _register_sqlite_pragma(engine: AsyncEngine) -> None:
     """注册 SQLite PRAGMA 事件监听器
 
@@ -53,23 +70,20 @@ def _register_sqlite_pragma(engine: AsyncEngine) -> None:
     - ``journal_mode=WAL``：允许多读单写并发，避免读写互斥
     - ``busy_timeout=30000``：写锁竞争时等待 30 秒而非立即失败
     - ``synchronous=NORMAL``：WAL 模式下的推荐同步级别
+    - ``foreign_keys=ON``：启用外键约束强制检查
+
+    实现说明：同步事件回调中直接调用 aiosqlite 协程不会生效，
+    因此使用 SQLAlchemy 公开的 ``AdaptedConnection.run_async``
+    （自 1.4.30 起文档化的 API，专为连接池事件处理程序设计）
+    执行全部 PRAGMA，不依赖适配器或驱动的任何私有属性。
     """
 
     @event.listens_for(engine.sync_engine, "connect")
     def _set_sqlite_pragma(dbapi_conn, connection_record) -> None:
-        """连接建立时设置 PRAGMA"""
-        underlying = dbapi_conn
-        while hasattr(underlying, "_connection") and underlying._connection is not None:
-            underlying = underlying._connection
         try:
-            underlying.execute("PRAGMA journal_mode=WAL")
-            underlying.execute("PRAGMA busy_timeout=30000")
-            underlying.execute("PRAGMA synchronous=NORMAL")
+            dbapi_conn.run_async(_apply_sqlite_pragmas)
         except Exception as e:
-            logger.debug(
-                f"设置 SQLite PRAGMA 失败（连接仍可用）: {e}",
-                LOG_COMMAND,
-            )
+            logger.warning(f"设置 SQLite PRAGMA 失败: {e}", LOG_COMMAND)
 
 
 def _create_engine(db_url: str, config_params: dict) -> AsyncEngine:
@@ -95,7 +109,8 @@ def _create_engine(db_url: str, config_params: dict) -> AsyncEngine:
 class SessionManager:
     """数据库会话管理器，支持多个数据库连接
 
-    负责会话创建、连接池监控、健康检查与泄漏检测等能力，
+    负责引擎与会话工厂的创建、表结构按需创建与连接生命周期管理，
+    并委托 ``monitoring`` 模块执行连接池/泄漏监控的启停注册，
     通过单例 ``session_manager`` 暴露，外部统一通过该单例调用。
     """
 
@@ -152,54 +167,71 @@ class SessionManager:
     async def ensure_tables_created(self, db_name: str = "default"):
         """确保指定数据库的表已创建（按需创建）
 
+        db_name 会经过规范化处理，与 ``init`` 的键保持一致。
+
         参数:
             db_name: 数据库名称
         """
-        if db_name == "default":
+        normalized_name = _normalize_db_name(db_name)
+        if normalized_name == "default":
             return
-        if self.db_tables_created.get(db_name, False):
+        if self.db_tables_created.get(normalized_name, False):
             return
         async with self._table_creation_lock:
-            if self.db_tables_created.get(db_name, False):
+            if self.db_tables_created.get(normalized_name, False):
                 return
-            if db_name in self.engines:
+            if normalized_name in self.engines:
                 # 循环依赖：base_model 导入 session_manager，session 按需导入 Base
                 from .base_model import Base
 
-                logger.debug(f"为数据库 {db_name} 按需创建表结构...", LOG_COMMAND)
-                async with self.engines[db_name].begin() as conn:
+                logger.debug(
+                    f"为数据库 {normalized_name} 按需创建表结构...", LOG_COMMAND
+                )
+                async with self.engines[normalized_name].begin() as conn:
                     await conn.run_sync(Base.metadata.create_all)
-                self.db_tables_created[db_name] = True
-                logger.debug(f"数据库 {db_name} 表结构创建完成", LOG_COMMAND)
+                self.db_tables_created[normalized_name] = True
+                logger.debug(f"数据库 {normalized_name} 表结构创建完成", LOG_COMMAND)
 
     def get_session(self, db_name: str = "default") -> "DatabaseSessionManager":
         """获取指定数据库的会话管理器
+
+        db_name 会经过规范化处理，与 ``init`` 注册的键保持一致，
+        因此传入 ``"Log_DB"`` 与 ``"log_db"`` 等价。
 
         参数:
             db_name: 数据库名称
 
         返回:
             DatabaseSessionManager: 会话管理器
+
+        异常:
+            RuntimeError: 数据库尚未初始化
         """
-        if db_name not in self.sessionmakers:
-            raise RuntimeError(f"数据库 {db_name} 尚未初始化")
-        return DatabaseSessionManager(self.sessionmakers[db_name], db_name, self)
+        normalized_name = _normalize_db_name(db_name)
+        if normalized_name not in self.sessionmakers:
+            raise RuntimeError(f"数据库 {normalized_name} 尚未初始化")
+        return DatabaseSessionManager(
+            self.sessionmakers[normalized_name], normalized_name, self
+        )
 
     async def disconnect(self, db_name: str | None = None):
         """关闭数据库连接，如果未指定则关闭所有连接
+
+        db_name 会经过规范化处理，与 ``init`` 的键保持一致。
 
         参数:
             db_name: 数据库名称，为None时关闭所有
         """
         if db_name is not None:
-            if db_name not in self.engines:
+            normalized_name = _normalize_db_name(db_name)
+            if normalized_name not in self.engines:
                 return
-            pool_monitor.unregister_engine(db_name)
-            await self.engines[db_name].dispose()
-            del self.engines[db_name]
-            del self.sessionmakers[db_name]
-            self.db_tables_created.pop(db_name, None)
-            logger.info(f"数据库 {db_name} 已成功断开连接", LOG_COMMAND)
+            pool_monitor.unregister_engine(normalized_name)
+            await self.engines[normalized_name].dispose()
+            del self.engines[normalized_name]
+            del self.sessionmakers[normalized_name]
+            self.db_tables_created.pop(normalized_name, None)
+            logger.info(f"数据库 {normalized_name} 已成功断开连接", LOG_COMMAND)
             return
 
         await sync_manager.stop_sync()
@@ -214,112 +246,6 @@ class SessionManager:
         self.sessionmakers.clear()
         self.db_tables_created.clear()
         logger.info("所有数据库已成功断开连接", LOG_COMMAND)
-
-    def _get_pool_info(self, db_name: str) -> dict | None:
-        """获取指定数据库连接池信息
-
-        参数:
-            db_name: 数据库名称
-
-        返回:
-            dict | None: 连接池信息
-        """
-        if db_name not in self.engines:
-            return None
-        pool = self.engines[db_name].pool
-        return {
-            "db_name": db_name,
-            "pool_size": pool.size(),
-            "checked_in": pool.checkedin(),
-            "checked_out": pool.checkedout(),
-            "overflow": pool.overflow(),
-            "is_valid": pool.status() if hasattr(pool, "status") else None,
-        }
-
-    def get_pool_status(self, db_name: str = "default") -> dict | None:
-        """获取指定数据库的连接池状态
-
-        参数:
-            db_name: 数据库名称
-
-        返回:
-            dict | None: 连接池状态信息
-        """
-        return self._get_pool_info(db_name)
-
-    def get_all_pool_status(self) -> dict[str, dict]:
-        """获取所有数据库的连接池状态
-
-        返回:
-            dict[str, dict]: 各数据库连接池状态信息
-        """
-        return {name: self._get_pool_info(name) for name in self.engines}
-
-    async def health_check(self, db_name: str = "default") -> dict[str, Any]:
-        """检查指定数据库的健康状态
-
-        参数:
-            db_name: 数据库名称
-
-        返回:
-            dict: 健康检查结果
-        """
-        result: dict[str, Any] = {"db_name": db_name, "healthy": False, "error": None}
-        if db_name not in self.engines:
-            result["error"] = f"数据库 {db_name} 尚未初始化"
-            return result
-        try:
-            async with self.get_session(db_name) as session:
-                await session.execute(text("SELECT 1"))
-            result["healthy"] = True
-            result["health_score"] = pool_monitor.get_health_score(db_name)
-        except Exception as e:
-            result["error"] = str(e)
-            logger.warning(f"数据库 {db_name} 健康检查失败: {e}", LOG_COMMAND)
-        return result
-
-    async def health_check_all(self) -> dict[str, dict[str, Any]]:
-        """检查所有数据库的健康状态
-
-        返回:
-            dict[str, dict]: 各数据库健康检查结果
-        """
-        return {name: await self.health_check(name) for name in self.engines}
-
-    def get_leak_stats(self) -> dict:
-        """获取连接泄漏检测统计信息
-
-        返回:
-            dict: 统计信息
-        """
-        return leak_detector.get_stats()
-
-    def get_recent_alerts(self, count: int = 10) -> list:
-        """获取最近的连接池告警
-
-        参数:
-            count: 获取数量
-
-        返回:
-            list: 告警列表
-        """
-        return pool_monitor.get_recent_alerts(count)
-
-    def add_alert_callback(self, callback: Callable):
-        """添加连接池告警回调
-
-        参数:
-            callback: 回调函数
-        """
-        pool_monitor.add_alert_callback(callback)
-
-    def add_leak_callback(self, callback: Callable):
-        """添加连接泄漏回调
-
-        参数:
-            callback: 回调函数
-        """
-        leak_detector.add_leak_callback(callback)
 
 
 class DatabaseSessionManager:
@@ -361,7 +287,11 @@ class DatabaseSessionManager:
         return self.session
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """退出异步上下文时处理会话"""
+        """退出异步上下文时处理会话
+
+        正常退出时提交，异常时回滚。提交失败必须向上抛出，
+        避免调用方误认为写操作成功。
+        """
         try:
             match exc_type:
                 case None:
@@ -373,8 +303,11 @@ class DatabaseSessionManager:
                         f"原因: {exc_type.__name__}: {exc_val}",
                         LOG_COMMAND,
                     )
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
-            logger.warning(f"数据库会话提交/回滚异常: {self.db_name}, {e}", LOG_COMMAND)
+            logger.error(f"数据库会话提交失败: {self.db_name}, {e}", LOG_COMMAND)
+            raise
         finally:
             if self._session_id:
                 leak_detector.unregister_session(self._session_id)

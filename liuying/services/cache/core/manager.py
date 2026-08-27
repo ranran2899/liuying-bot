@@ -71,11 +71,11 @@ class CacheManager:
                         instance._backend_mgr,
                         instance._registry,
                         instance._batch_executor,
+                        cls._monitor,
                     )
                     instance._warmup_executor = WarmupExecutor(
                         instance._cache_ops,
                         instance._registry,
-                        enabled=True,
                     )
                     instance._dict_caches: dict[str, CacheDict] = {}
                     instance._list_caches: dict[str, CacheList] = {}
@@ -122,30 +122,6 @@ class CacheManager:
     def namespace(self, value: str) -> None:
         """设置命名空间"""
         self._registry.namespace = value
-
-    def enable(self) -> None:
-        """启用缓存"""
-        self._enabled = True
-        logger.info("缓存功能已启用", LOG_COMMAND)
-
-    def disable(self) -> None:
-        """禁用缓存"""
-        self._enabled = False
-        logger.info("缓存功能已禁用", LOG_COMMAND)
-
-    def set_namespace(self, namespace: str) -> None:
-        """设置命名空间（用于运行时切换租户）
-
-        参数:
-            namespace: 命名空间
-        """
-        self._registry.set_namespace(namespace)
-        logger.info(f"缓存命名空间已设置为: {namespace}", LOG_COMMAND)
-
-    def clear_namespace(self) -> None:
-        """清除命名空间"""
-        self._registry.clear_namespace()
-        logger.info("缓存命名空间已清除", LOG_COMMAND)
 
     def _check_enabled_and_mode(self) -> bool:
         """检查缓存是否启用且不是NONE模式"""
@@ -309,7 +285,8 @@ class CacheManager:
             try:
                 loaded = await loader()
                 return loaded if loaded is not None else default
-            except Exception:
+            except Exception as e:
+                logger.warning("击穿防护loader执行失败", LOG_COMMAND, e=e)
                 return default
         return await self._cache_ops.get_with_stampede(
             cache_type, key, loader, expire, default, namespace
@@ -443,10 +420,12 @@ class CacheManager:
         total_cleared = sum(1 for r in results if r is True)
 
         self._registry.clear_namespace_keys(namespace)
-        logger.info(
-            f"已清除命名空间 {namespace} 的 {total_cleared} 个缓存",
-            LOG_COMMAND,
-        )
+        # 写操作会高频触发本方法，多数时候无键可清；仅在实际清除时记录debug
+        if total_cleared:
+            logger.debug(
+                f"已清除命名空间 {namespace} 的 {total_cleared} 个缓存",
+                LOG_COMMAND,
+            )
         return total_cleared
 
     async def multi_get(self, cache_type: str, keys: list[KeyType]) -> BatchResult:
@@ -519,9 +498,13 @@ class CacheManager:
         batch_size: int | None = None,
     ) -> WarmupResult:
         """缓存预热"""
-        self._warmup_executor.set_enabled(self._check_enabled_and_mode())
         return await self._warmup_executor.warmup(
-            cache_type, loader, keys, expire, batch_size
+            cache_type,
+            loader,
+            keys,
+            expire,
+            batch_size,
+            enabled=self._check_enabled_and_mode(),
         )
 
     @property
@@ -561,9 +544,6 @@ class CacheManager:
             task.cancel()
         if self._background_tasks:
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
-        # 同步任务管理器的依赖（dict_caches/list_caches 可能已被动态扩展）
-        self._task_manager.sync_dict_caches(self._dict_caches)
-        self._task_manager.sync_list_caches(self._list_caches)
         self._background_tasks = await self._task_manager.start_all()
 
 

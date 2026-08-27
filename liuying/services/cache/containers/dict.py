@@ -12,15 +12,13 @@ from dataclasses import dataclass
 import heapq
 import threading
 import time
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from ..locks import AsyncRLock
 
-T = TypeVar("T")
-
 
 @dataclass(slots=True)
-class CacheData(Generic[T]):
+class CacheData[T]:
     """缓存数据类，存储数据和过期时间"""
 
     value: T

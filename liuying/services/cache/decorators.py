@@ -12,6 +12,20 @@ from .config import DEFAULT_EXPIRE, LOG_COMMAND, CacheMode, cache_config
 from .core.manager import CacheRoot
 
 
+def _ensure_registered(cache_type: str, expire: int = DEFAULT_EXPIRE) -> None:
+    """确保缓存类型已注册，未注册时自动注册
+
+    缓存操作内部会校验类型是否注册，未注册时静默返回默认值，
+    因此装饰器必须在装饰阶段完成注册，避免缓存功能失效。
+
+    参数:
+        cache_type: 缓存类型
+        expire: 过期时间（秒），cache_evict 场景仅用于占位
+    """
+    if not CacheRoot.is_valid(cache_type):
+        CacheRoot.register(cache_type, expire=expire)
+
+
 class CacheKeyBuilder:
     """缓存键构建器
 
@@ -105,6 +119,8 @@ def cached(
         ```
     """
     def decorator(func: Callable) -> Callable:
+        _ensure_registered(cache_type, expire)
+
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             if cache_config.cache_mode == CacheMode.NONE:
@@ -150,6 +166,8 @@ def cache_evict(
         ```
     """
     def decorator(func: Callable) -> Callable:
+        _ensure_registered(cache_type)
+
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             result = await func(*args, **kwargs)
@@ -194,6 +212,8 @@ def cache_put(
         ```
     """
     def decorator(func: Callable) -> Callable:
+        _ensure_registered(cache_type, expire)
+
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             result = await func(*args, **kwargs)
@@ -232,6 +252,8 @@ def cache_all(cache_type: str, expire: int = DEFAULT_EXPIRE) -> Callable:
         ```
     """
     def decorator(func: Callable) -> Callable:
+        _ensure_registered(cache_type, expire)
+
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             if cache_config.cache_mode == CacheMode.NONE:

@@ -4,14 +4,12 @@
 提供带缓存的数据访问接口，支持自动缓存管理和批量操作优化。
 """
 
-from typing import Any, ClassVar, Generic, TypeVar, cast
+from typing import Any, ClassVar, cast
 
 from liuying.services.cache import CacheRoot, cache_config
 from liuying.services.cache.config import COMPOSITE_KEY_SEPARATOR, CacheMode
 from liuying.services.liuying_db import DbUtils, Model
 from liuying.utils.log import logger
-
-T = TypeVar("T", bound=Model)
 
 
 class CacheStats:
@@ -48,7 +46,7 @@ class CacheStats:
         self.deletes = 0
 
 
-class DataAccess(Generic[T]):
+class DataAccess[T: Model]:
     """数据访问层，根据配置决定是否使用缓存
 
     使用示例:
@@ -292,7 +290,7 @@ class DataAccess(Generic[T]):
             if hit:
                 if is_null:
                     stats.null_hits += 1
-                    return None if allow_not_exist else None
+                    return None
                 stats.hits += 1
                 return cast(T, data)
 

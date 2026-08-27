@@ -51,26 +51,6 @@ class BackgroundTaskManager:
         self._backend_mgr = backend_mgr
         self._registry = registry
 
-    def sync_dict_caches(self, dict_caches: dict[str, CacheDict]) -> None:
-        """同步缓存字典集合
-
-        用于运行时动态扩展的缓存字典能够被后台清理任务识别。
-
-        参数:
-            dict_caches: 最新的缓存字典集合
-        """
-        self._dict_caches = dict_caches
-
-    def sync_list_caches(self, list_caches: dict[str, CacheList]) -> None:
-        """同步缓存列表集合
-
-        用于运行时动态扩展的缓存列表能够被后台清理任务识别。
-
-        参数:
-            list_caches: 最新的缓存列表集合
-        """
-        self._list_caches = list_caches
-
     async def _run_periodic(
         self,
         interval: int,
@@ -128,6 +108,9 @@ class BackgroundTaskManager:
             )
             if recovered:
                 self._backend_mgr.reset_backend()
+                # 旧分布式锁持有失效的Redis客户端，重置为本地锁后按新后端重建
+                self._lock_mgr.set_redis_client(None)
+                self._lock_mgr.init_from_backend(self._backend_mgr.cache_backend)
 
     async def _cleanup_loop(self) -> None:
         """定时清理过期数据和无效锁的后台任务"""

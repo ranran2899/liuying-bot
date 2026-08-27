@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime
+import time
 from typing import Any
 
 from sqlalchemy import (
@@ -23,6 +24,11 @@ _SYNC_MAX_RETRIES = 3
 _SYNC_RETRY_DELAY = 5.0
 
 _TIME_FORMATS = ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d")
+
+# 单条 INSERT 语句的参数上限基准（SQLite 默认变量上限约 999），
+# 按列数换算每批行数，避免宽表大批量插入时超出数据库参数上限；
+# 该值同时作为主库游标的流式读取分区大小
+_SYNC_PARAM_BUDGET = 900
 
 
 class DBSyncManager:
@@ -158,6 +164,32 @@ class DBSyncManager:
             converted[key] = value
         return converted
 
+    async def _copy_rows(self, master_session, slave_session, tbl, stmt) -> int:
+        """流式读取主库数据并分块写入副库，返回写入总行数
+
+        以 ``yield_per`` 流式遍历主库游标，避免整表加载进内存；
+        写入块大小按列数换算，防止单条 INSERT 超出 SQLite 参数上限。
+
+        参数:
+            master_session: 主数据库会话
+            slave_session: 副数据库会话
+            tbl: 表对象
+            stmt: 主库查询语句
+
+        返回:
+            int: 实际写入的行数
+        """
+        chunk_size = max(1, _SYNC_PARAM_BUDGET // max(1, len(tbl.columns)))
+        result = await master_session.stream(
+            stmt, execution_options={"yield_per": chunk_size}
+        )
+        total = 0
+        async for partition in result.mappings().partitions():
+            rows = [self._convert_time_fields(dict(row), tbl) for row in partition]
+            await slave_session.execute(tbl.insert().values(rows))
+            total += len(rows)
+        return total
+
     async def _sync_table(
         self,
         master_session,
@@ -184,11 +216,13 @@ class DBSyncManager:
         # 反射表结构以获取列类型信息，用于时间字段转换
         tbl = await master_conn.run_sync(self._reflect_table, tbl_name)
 
+        # 待同步的主库查询语句；None 表示无需同步
+        stmt = None
+
         if not pk:
             logger.debug(f"表 {tbl_name} 没有主键，执行全量同步", LOG_COMMAND)
             await slave_session.execute(delete(tbl))
-            result = await master_session.execute(select(tbl))
-            rows = result.mappings().all()
+            stmt = select(tbl)
         else:
             pk_col = tbl.c[pk]
             slave_max_pk = await self._fetch_max_pk(slave_session, tbl, pk_col)
@@ -196,11 +230,9 @@ class DBSyncManager:
 
             match (slave_max_pk, master_max_pk):
                 case (None, _):
-                    result = await master_session.execute(select(tbl))
-                    rows = result.mappings().all()
+                    stmt = select(tbl)
                 case (_, None):
                     await slave_session.execute(delete(tbl))
-                    rows = []
                 case (s_max, m_max) if m_max < s_max:
                     logger.warning(
                         f"主数据库表 {tbl_name} 的最大主键值 {m_max} "
@@ -208,25 +240,22 @@ class DBSyncManager:
                         LOG_COMMAND,
                     )
                     await slave_session.execute(delete(tbl))
-                    result = await master_session.execute(select(tbl))
-                    rows = result.mappings().all()
+                    stmt = select(tbl)
                 case _:
-                    result = await master_session.execute(
-                        select(tbl).where(pk_col > slave_max_pk)
-                    )
-                    rows = result.mappings().all()
+                    stmt = select(tbl).where(pk_col > slave_max_pk)
 
-        if not rows:
+        if stmt is None:
             logger.debug(f"表 {tbl_name} 没有新增数据，跳过同步", LOG_COMMAND)
             return
 
-        rows_to_insert = [self._convert_time_fields(dict(row), tbl) for row in rows]
-        insert_stmt = tbl.insert().values(rows_to_insert)
-        await slave_session.execute(insert_stmt)
+        total = await self._copy_rows(master_session, slave_session, tbl, stmt)
+        if not total:
+            logger.debug(f"表 {tbl_name} 没有新增数据，跳过同步", LOG_COMMAND)
+            return
 
         sync_type = "同步" if pk else "全量同步"
         logger.debug(
-            f"表 {tbl_name} {sync_type}完成，共插入 {len(rows)} 条数据",
+            f"表 {tbl_name} {sync_type}完成，共插入 {total} 条数据",
             LOG_COMMAND,
         )
 
@@ -262,7 +291,8 @@ class DBSyncManager:
                 )
 
             await slave_session.flush()
-            self.last_sync_time[slave_db_name] = asyncio.get_running_loop().time()
+            # 记录 Unix 时间戳（get_sync_status 按 epoch 格式化展示）
+            self.last_sync_time[slave_db_name] = time.time()
             logger.info(f"副数据库 {slave_db_name} 同步完成", LOG_COMMAND)
 
     def get_sync_status(self) -> dict[str, Any]:

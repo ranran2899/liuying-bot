@@ -283,38 +283,6 @@ class PoolMonitor:
         """
         return list(self._alerts)[-count:] if self._alerts else []
 
-    def get_health_score(self, db_name: str) -> dict:
-        """获取健康评分
-
-        参数:
-            db_name: 数据库名称
-
-        返回:
-            dict: 健康评分信息
-        """
-        history = self._metrics_history.get(db_name)
-        if not history:
-            return {"score": 0, "status": "unknown", "message": "无历史数据"}
-        recent = list(history)[-10:]
-        avg_usage = sum(m.usage_rate for m in recent) / len(recent)
-        max_usage = max(m.usage_rate for m in recent)
-        match avg_usage:
-            case r if r < 0.5:
-                score, status, message = 100, "healthy", "连接池状态良好"
-            case r if r < 0.7:
-                score, status, message = 80, "normal", "连接池状态正常"
-            case r if r < 0.9:
-                score, status, message = 60, "warning", "连接池压力较大"
-            case _:
-                score, status, message = 30, "critical", "连接池压力过大"
-        return {
-            "score": score,
-            "status": status,
-            "message": message,
-            "avg_usage": avg_usage,
-            "max_usage": max_usage,
-        }
-
 
 class ConnectionLeakDetector:
     """连接泄漏检测器

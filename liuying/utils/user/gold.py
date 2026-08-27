@@ -85,6 +85,5 @@ class UserGold:
             int: 用户当前金币数量
         """
         user, _ = await UserInfo.get_or_create(user_id=str(user_id))
-        user.gold = amount
-        await user.save()
-        return user.gold
+        await UserInfo.filter(user_id=user.user_id).update(gold=amount)
+        return amount

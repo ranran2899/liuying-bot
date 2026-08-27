@@ -26,7 +26,7 @@ from sqlalchemy import exists as sqlalchemy_exists
 from sqlalchemy.orm import defer, joinedload, selectinload
 from sqlalchemy.sql.selectable import Select
 
-from liuying.services.cache import Cache, CacheRoot
+from liuying.services.cache import Cache
 from liuying.utils.log import logger
 
 from ..config import LOG_COMMAND, SLOW_QUERY_THRESHOLD
@@ -60,11 +60,7 @@ class QueryExecutorMixin:
 
     async def _invalidate_write_cache(self) -> None:
         """写操作后失效缓存：按模型命名空间清除查询缓存，并清除模型主键缓存"""
-        namespace = query_cache_namespace(self.model_class)
-        try:
-            await CacheRoot.invalidate_namespace(namespace)
-        except Exception as e:
-            logger.warning(f"清除查询缓存失败: {e}", LOG_COMMAND)
+        await self.model_class._invalidate_query_cache()
         cache_type = getattr(self.model_class, "cache_type", None)
         if cache_type:
             try:
@@ -130,8 +126,6 @@ class QueryExecutorMixin:
             stmt = stmt.limit(self._limit)
         if self._offset is not None:
             stmt = stmt.offset(self._offset)
-        if self._lock_mode:
-            stmt = stmt.with_for_update()
         if self._for_update_options:
             stmt = stmt.with_for_update(
                 nowait=self._for_update_options["nowait"],
@@ -200,7 +194,14 @@ class QueryExecutorMixin:
 
         cache_key = self._cache_key
         if cache_key is None and self._cache_enabled:
-            stmt_hash = hashlib.md5(str(stmt).encode("utf-8")).hexdigest()
+            # 编译产物文本 + 绑定参数共同生成摘要：
+            # 仅凭 str(stmt) 不同参数值的语句文本相同，会导致不同查询
+            # 互相命中对方缓存结果
+            compiled = stmt.compile()
+            param_repr = repr(
+                sorted(compiled.params.items(), key=lambda kv: kv[0])
+            )
+            stmt_hash = hashlib.md5(f"{compiled}\n{param_repr}".encode()).hexdigest()
             cache_key = (
                 f"{self._db_name}:{self.model_class.__name__}:"
                 f"{fetch_type}:{stmt_hash}"
@@ -257,32 +258,23 @@ class QueryExecutorMixin:
                     LOG_COMMAND,
                 )
                 await asyncio.sleep(delay)
+        # 理论不可达：最后一次重试失败时已在上方抛出，兜底防止隐式返回 None
+        raise RuntimeError(f"查询重试流程异常退出: {self.model_class.__name__}")
 
     # ========== 查询执行方法 ==========
 
-    async def first(
-        self, defaults: dict[str, Any] | None = None
-    ) -> Any | None:
-        """获取查询结果的第一条记录，不存在则创建
+    async def first(self) -> Any | None:
+        """获取查询结果的第一条记录
 
-        行为与 ``Model.first_or_create`` 一致：先查询第一条匹配记录，
-        未找到时使用当前过滤条件与 ``defaults`` 自动创建新记录。
-
-        参数:
-            defaults: 记录不存在时用于创建新记录的默认值字典
+        如需"不存在则创建"，请使用 ``Model.first_or_create``，
+        此处不再自动创建（避免忽略链上 args/exclude 条件产生错误数据）。
 
         返回:
-            第一条记录；如果未找到且未提供 defaults，则返回 None
+            第一条记录，不存在时返回 None
         """
         stmt = self._build_base_query().limit(1)
         fetch = "first_row" if self._returns_rows() else "first"
-        result = await self._execute_query(stmt, fetch)
-        if result is not None or defaults is None:
-            return result
-        instance, _ = await self.model_class.first_or_create(
-            defaults=defaults, db_name=self._db_name, **self.kwargs
-        )
-        return instance
+        return await self._execute_query(stmt, fetch)
 
     async def one(self) -> Any:
         """获取唯一记录，不存在或存在多条时抛出异常
@@ -336,10 +328,6 @@ class QueryExecutorMixin:
             所有记录的列表
         """
         stmt = self._build_base_query()
-        if self._limit:
-            stmt = stmt.limit(self._limit)
-        if self._offset:
-            stmt = stmt.offset(self._offset)
         fetch = "fetchall" if self._returns_rows() else "all"
         return await self._execute_query(stmt, fetch)
 
@@ -348,14 +336,19 @@ class QueryExecutorMixin:
 
         参数:
             include_deleted: 是否包含软删除记录（仅当模型含 deleted_at 字段时有效），
-                             默认 False 沿用软删除过滤
+                             默认 False 沿用软删除过滤。仅影响本次调用，
+                             不会改变 wrapper 的后续查询状态。
 
         返回:
             记录数量
         """
+        prev_with_deleted = self._with_deleted
         if include_deleted and hasattr(self.model_class, "deleted_at"):
             self._with_deleted = True
-        base = self._apply_filters(select(self.model_class))
+        try:
+            base = self._apply_filters(select(self.model_class))
+        finally:
+            self._with_deleted = prev_with_deleted
         stmt = select(func.count()).select_from(base.subquery())
         return await self._execute_query(stmt, "count")
 
@@ -700,10 +693,6 @@ class QueryExecutorMixin:
             AsyncGenerator: 每次产生一条记录
         """
         stmt = self._build_base_query()
-        if self._limit:
-            stmt = stmt.limit(self._limit)
-        if self._offset:
-            stmt = stmt.offset(self._offset)
         stmt = stmt.execution_options(yield_per=chunk_size)
         async with self.model_class.get_session(db_name=self._db_name) as session:
             result = await session.execute(stmt)
@@ -974,11 +963,15 @@ class QueryExecutorMixin:
             raise AttributeError(
                 f"模型 {self.model_class.__name__} 没有 deleted_at 字段，无法执行恢复"
             )
+        prev_with_deleted = self._with_deleted
         self._with_deleted = True
-        async with self.model_class.get_session(db_name=self._db_name) as session:
-            stmt = self._apply_filters(update(self.model_class))
-            stmt = stmt.values(deleted_at=None)
-            result = await session.execute(stmt)
-            await session.flush()
-            await self._invalidate_write_cache()
-            return result.rowcount
+        try:
+            async with self.model_class.get_session(db_name=self._db_name) as session:
+                stmt = self._apply_filters(update(self.model_class))
+                stmt = stmt.values(deleted_at=None)
+                result = await session.execute(stmt)
+                await session.flush()
+        finally:
+            self._with_deleted = prev_with_deleted
+        await self._invalidate_write_cache()
+        return result.rowcount

@@ -7,17 +7,15 @@
 import asyncio
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any, TypeAlias
+from typing import Any
 
 from ..config import KeyType, cache_config
 from .operations import CacheOperations
 from .registry import TypeRegistry
 
-GetFunc: TypeAlias = Callable[[str, KeyType], Coroutine[Any, Any, Any]]
-SetFunc: TypeAlias = Callable[
-    [str, KeyType, Any, int | None], Coroutine[Any, Any, bool]
-]
-DeleteFunc: TypeAlias = Callable[[str, KeyType], Coroutine[Any, Any, bool]]
+type GetFunc = Callable[[str, KeyType], Coroutine[Any, Any, Any]]
+type SetFunc = Callable[[str, KeyType, Any, int | None], Coroutine[Any, Any, bool]]
+type DeleteFunc = Callable[[str, KeyType], Coroutine[Any, Any, bool]]
 
 
 @dataclass(slots=True)
@@ -42,27 +40,24 @@ class BatchExecutor:
     """缓存批量操作执行器
 
     封装批量获取、设置、删除缓存数据的功能，带并发控制。
-    持有注册器、单条操作执行器和信号量依赖。
+    调用方可显式传入信号量；未传入时（如 Pipeline 回退路径）
+    使用按配置并发上限创建的内部信号量。
     """
 
     def __init__(
         self,
         registry: TypeRegistry,
         cache_ops: CacheOperations,
-        semaphore: asyncio.Semaphore | None = None,
     ) -> None:
         """初始化批量操作执行器
 
         参数:
             registry: 类型注册器
             cache_ops: 单条操作执行器
-            semaphore: 并发控制信号量
         """
         self._registry = registry
         self._cache_ops = cache_ops
-        self._semaphore = semaphore or asyncio.Semaphore(
-            cache_config.batch_concurrency_limit
-        )
+        self._default_sem: asyncio.Semaphore | None = None
 
     @staticmethod
     def make_disabled_result(total: int, reason: str) -> BatchResult:
@@ -84,18 +79,21 @@ class BatchExecutor:
             errors={"all": reason},
         )
 
-    def _get_semaphore(
-        self, semaphore: asyncio.Semaphore | None
-    ) -> asyncio.Semaphore:
+    def _get_semaphore(self, semaphore: asyncio.Semaphore | None) -> asyncio.Semaphore:
         """获取批量操作信号量
 
         参数:
-            semaphore: 外部传入的信号量，为None时使用默认信号量
+            semaphore: 外部传入的信号量，为None时使用内部默认信号量
 
         返回:
             asyncio.Semaphore: 信号量实例
         """
-        return semaphore or self._semaphore
+        if semaphore is None:
+            semaphore = self._default_sem or asyncio.Semaphore(
+                cache_config.batch_concurrency_limit
+            )
+            self._default_sem = semaphore
+        return semaphore
 
     def _aggregate_results(
         self,
@@ -165,7 +163,7 @@ class BatchExecutor:
             cache_type: 缓存类型
             keys: 键列表
             get_func: 单条获取函数
-            semaphore: 并发控制信号量
+            semaphore: 并发控制信号量，为None时使用内部默认信号量
 
         返回:
             BatchResult: 批量操作结果
@@ -204,7 +202,7 @@ class BatchExecutor:
             items: 键值对字典
             set_func: 单条设置函数
             expire: 过期时间（秒）
-            semaphore: 并发控制信号量
+            semaphore: 并发控制信号量，为None时使用内部默认信号量
 
         返回:
             BatchResult: 批量操作结果
@@ -241,7 +239,7 @@ class BatchExecutor:
             cache_type: 缓存类型
             keys: 键列表
             delete_func: 单条删除函数
-            semaphore: 并发控制信号量
+            semaphore: 并发控制信号量，为None时使用内部默认信号量
 
         返回:
             BatchResult: 批量操作结果

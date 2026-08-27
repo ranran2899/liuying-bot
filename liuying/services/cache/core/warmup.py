@@ -48,26 +48,15 @@ class WarmupExecutor:
         self,
         cache_ops: CacheOperations,
         registry: TypeRegistry,
-        enabled: bool,
     ) -> None:
         """初始化预热执行器
 
         参数:
             cache_ops: 缓存单条操作执行器
             registry: 类型注册器
-            enabled: 缓存是否启用
         """
         self._cache_ops = cache_ops
         self._registry = registry
-        self._enabled = enabled
-
-    def set_enabled(self, enabled: bool) -> None:
-        """设置预热启用状态
-
-        参数:
-            enabled: 是否启用
-        """
-        self._enabled = enabled
 
     async def _warmup_single(
         self,
@@ -105,6 +94,7 @@ class WarmupExecutor:
         keys: list[KeyType] | None = None,
         expire: int | None = None,
         batch_size: int | None = None,
+        enabled: bool = True,
     ) -> WarmupResult:
         """缓存预热
 
@@ -116,11 +106,12 @@ class WarmupExecutor:
             keys: 要预热的键列表，为None时由loader自行决定加载哪些数据
             expire: 过期时间（秒）
             batch_size: 批量大小，为None时使用配置值
+            enabled: 缓存是否启用
 
         返回:
             WarmupResult: 预热结果
         """
-        if not self._enabled or cache_config.cache_mode == CacheMode.NONE:
+        if not enabled or cache_config.cache_mode == CacheMode.NONE:
             return WarmupResult(total=0, succeeded=0, failed=0, errors=["缓存未启用"])
 
         resolved_type = cache_type.upper()

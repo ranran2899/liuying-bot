@@ -25,21 +25,21 @@ class ChatHistory(Model):
     )
     """自增id"""
     user_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="用户id"
+        String(255), nullable=True, index=True, comment="用户id"
     )
     """用户id"""
     group_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="群组id"
+        String(255), nullable=True, index=True, comment="群组id"
     )
     """群组id"""
     bot_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Bot ID"
+        String(255), nullable=True, index=True, comment="Bot ID"
     )
     """Bot ID"""
     message: Mapped[str | None] = mapped_column(Text, nullable=True, comment="消息内容")
     """消息内容"""
     create_time: Mapped[datetime | None] = mapped_column(
-        DateTime, default=datetime.now, comment="创建时间"
+        DateTime, default=datetime.now, index=True, comment="创建时间"
     )
     """创建时间"""
 
@@ -152,7 +152,20 @@ class ChatHistory(Model):
     def _run_script(cls):
         """数据库迁移脚本
 
+        为旧库补齐消息列与高频查询字段的索引（新库由列定义自动创建），
+        名称与 SQLAlchemy 自动生成的 ix_<table>_<column> 一致，幂等可重复执行。
+
         返回:
             list: SQL语句列表，用于数据库表结构更新
         """
-        return ["ALTER TABLE chat_history ADD message TEXT;"]
+        return [
+            "ALTER TABLE chat_history ADD message TEXT;",
+            "CREATE INDEX IF NOT EXISTS ix_chat_history_user_id "
+            "ON chat_history (user_id);",
+            "CREATE INDEX IF NOT EXISTS ix_chat_history_group_id "
+            "ON chat_history (group_id);",
+            "CREATE INDEX IF NOT EXISTS ix_chat_history_bot_id "
+            "ON chat_history (bot_id);",
+            "CREATE INDEX IF NOT EXISTS ix_chat_history_create_time "
+            "ON chat_history (create_time);",
+        ]

@@ -5,7 +5,7 @@
 """
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any
 
 from .config import KeyType
 from .core.manager import CacheRoot
@@ -14,10 +14,8 @@ if TYPE_CHECKING:
     from .core.batch import BatchResult
     from .core.warmup import WarmupResult
 
-T = TypeVar("T")
 
-
-class Cache(Generic[T]):
+class Cache[T]:
     """类型化缓存访问接口
 
     示例:

@@ -249,18 +249,6 @@ class QueryBuilderMixin:
         }
         return self
 
-    def lock(self, mode: str = "FOR UPDATE") -> "QueryWrapper[T]":
-        """添加行级锁（兼容旧 API）
-
-        参数:
-            mode: 锁模式，默认为"FOR UPDATE"
-
-        返回:
-            QueryWrapper[T]: 返回自身以支持链式调用
-        """
-        self._lock_mode = mode
-        return self
-
     def using(self, db_name: str) -> "QueryWrapper[T]":
         """指定要使用的数据库名称
 
@@ -308,20 +296,6 @@ class QueryBuilderMixin:
         """
         self._cache_key = key
         self._cache_ttl = ttl
-        return self
-
-    def preload(self, *relationships, **options) -> "QueryWrapper[T]":
-        """预加载关联关系
-
-        参数:
-            *relationships: 要预加载的关系名称
-            **options: 预加载选项
-
-        返回:
-            QueryWrapper[T]: 返回自身以支持链式调用
-        """
-        for rel in relationships:
-            self._load_relationships.append((rel, options))
         return self
 
     def select_related(self, *relationships) -> "QueryWrapper[T]":

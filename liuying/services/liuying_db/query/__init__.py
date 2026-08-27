@@ -14,14 +14,17 @@
     - ``executor``: QueryExecutorMixin，查询执行、聚合与批量操作
 """
 
-from typing import Any, Generic
+from typing import TYPE_CHECKING, Any
 
 from .builder import QueryBuilderMixin
-from .conditions import Q, T, build_filter_statement, query_cache_namespace
+from .conditions import Q, build_filter_statement, query_cache_namespace
 from .executor import QueryExecutorMixin
 
+if TYPE_CHECKING:
+    from ..base_model import Model
 
-class QueryWrapper(QueryBuilderMixin, QueryExecutorMixin, Generic[T]):
+
+class QueryWrapper[T: Model](QueryBuilderMixin, QueryExecutorMixin):
     """链式查询构建器
 
     提供完整的查询构建、执行、聚合与批量修改能力。
@@ -53,7 +56,6 @@ class QueryWrapper(QueryBuilderMixin, QueryExecutorMixin, Generic[T]):
         "_join_conditions",
         "_limit",
         "_load_relationships",
-        "_lock_mode",
         "_offset",
         "_order_by",
         "_values",
@@ -93,7 +95,6 @@ class QueryWrapper(QueryBuilderMixin, QueryExecutorMixin, Generic[T]):
         self._group_by: tuple[Any, ...] | None = None
         self._having: Any = None
         self._values: tuple[Any, ...] | None = None
-        self._lock_mode: str | None = None
         self._db_name: str = "default"
         self._with_deleted: bool = False
         self._cache_key: str | None = None

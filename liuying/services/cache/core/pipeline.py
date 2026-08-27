@@ -9,6 +9,7 @@ from typing import Any
 from liuying.utils.log import logger
 
 from ..config import LOG_COMMAND, CacheMode, KeyType, cache_config
+from ..monitor import CacheMonitor
 from ..serializer import CacheSerializer
 from .backend import BackendManager
 from .batch import BatchExecutor, BatchResult
@@ -20,7 +21,7 @@ class PipelineExecutor:
     """Pipeline 批量操作执行器
 
     仅在 Redis 模式下使用 Pipeline 优化批量获取和设置，
-    其他模式回退到普通批量操作。持有后端、注册器、批量执行器依赖。
+    其他模式回退到普通批量操作。持有后端、注册器、监控、批量执行器依赖。
     """
 
     def __init__(
@@ -28,6 +29,7 @@ class PipelineExecutor:
         backend_mgr: BackendManager,
         registry: TypeRegistry,
         batch_executor: BatchExecutor,
+        monitor: CacheMonitor,
     ) -> None:
         """初始化 Pipeline 执行器
 
@@ -35,10 +37,12 @@ class PipelineExecutor:
             backend_mgr: 后端管理器
             registry: 类型注册器
             batch_executor: 批量操作执行器（回退时使用）
+            monitor: 缓存监控器（对齐单条操作的指标记录）
         """
         self._backend_mgr = backend_mgr
         self._registry = registry
         self._batch_executor = batch_executor
+        self._monitor = monitor
 
     @staticmethod
     def _check_available() -> bool:
@@ -115,9 +119,11 @@ class PipelineExecutor:
                             errors[cache_key] = str(value)
                             failed += 1
                         case None:
+                            self._monitor.record_miss(resolved_type)
                             results[cache_key] = None
                             succeeded += 1
                         case _:
+                            self._monitor.record_hit(resolved_type)
                             results[cache_key] = CacheSerializer.deserialize(
                                 value,
                                 result_type,
@@ -206,6 +212,7 @@ class PipelineExecutor:
                     cache_key = batch_keys[idx]
                     if result:
                         self._registry.add_key(resolved_type, cache_key, base_ttl)
+                        self._monitor.record_set(resolved_type)
                         results[cache_key] = True
                         succeeded += 1
                     else:

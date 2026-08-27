@@ -56,18 +56,6 @@ class TypeRegistry:
         """
         self._namespace = value
 
-    def set_namespace(self, namespace: str) -> None:
-        """设置命名空间（用于运行时切换租户）
-
-        参数:
-            namespace: 命名空间
-        """
-        self._namespace = namespace
-
-    def clear_namespace(self) -> None:
-        """清除命名空间"""
-        self._namespace = ""
-
     def register(
         self,
         name: str,
