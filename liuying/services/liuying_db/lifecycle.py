@@ -87,6 +87,10 @@ class LifecycleManager:
                     )
 
         for db_name, sql_list in scripts_by_db.items():
+            # 额外数据库的表结构为惰性创建，执行脚本前必须确保表已存在，
+            # 避免 ALTER/CREATE INDEX 等依赖既有表的 DDL 静默失败；
+            # 默认库在 initialize 中已提前建表，此处直接短路返回
+            await session_manager.ensure_tables_created(db_name)
             async with session_manager.get_session(db_name) as session:
                 for sql in sql_list:
                     logger.debug(f"执行SQL: {sql}")
@@ -146,8 +150,9 @@ class LifecycleManager:
     async def initialize():
         """执行完整的数据库初始化流程
 
-        包含主数据库连接、额外数据库连接、脚本执行、表结构创建、
+        包含主数据库连接、额外数据库连接、表结构创建、脚本执行、
         监控启动与同步任务启动，带自动重试机制。
+        表结构创建先于脚本执行，保证迁移 DDL 依赖的表已存在。
 
         异常:
             DbUrlIsNone: 数据库连接字符串为空
@@ -165,8 +170,10 @@ class LifecycleManager:
                     await session_manager.disconnect()
                 await session_manager.init(BotConfig.db_url, get_config())
                 await LifecycleManager._init_extra_databases()
-                await LifecycleManager._run_script_methods()
+                # 必须先建表再执行脚本：模型脚本均为 ALTER TABLE / CREATE INDEX
+                # 等依赖既有表的 DDL，全新数据库上先执行会因表不存在静默失败
                 await LifecycleManager._create_default_tables()
+                await LifecycleManager._run_script_methods()
 
                 db_count = len(session_manager.engines)
                 logger.info(f"数据库加载成功！共初始化 {db_count} 个数据库连接")

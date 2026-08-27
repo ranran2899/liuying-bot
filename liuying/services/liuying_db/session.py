@@ -251,7 +251,13 @@ class SessionManager:
 class DatabaseSessionManager:
     """数据库会话管理器，支持异步上下文管理器模式"""
 
-    __slots__ = ("_session_id", "db_name", "session", "session_manager", "sessionmaker")
+    __slots__ = (
+        "_session_id",
+        "db_name",
+        "session",
+        "session_manager",
+        "sessionmaker",
+    )
 
     def __init__(
         self,

@@ -417,8 +417,10 @@ class QueryBuilderMixin:
         """
         col = DbUtils.get_column(self.model_class, column)
         pattern = f"%{_escape_like(substring)}%"
-        cond = col.like(pattern, escape="\\") if case_sensitive else col.ilike(
-            pattern, escape="\\"
+        cond = (
+            col.like(pattern, escape="\\")
+            if case_sensitive
+            else col.ilike(pattern, escape="\\")
         )
         return self._add_condition(cond)
 

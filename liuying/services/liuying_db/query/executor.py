@@ -222,7 +222,13 @@ class QueryExecutorMixin:
                     db_name=self._db_name
                 ) as session:
                     start = time.perf_counter()
-                    result = await session.execute(stmt)
+                    # 主查询路径统一套用超时控制，下限与 SQLite
+                    # busy_timeout 对齐（见 config.DB_TIMEOUT_SECONDS）
+                    result = await DbUtils.with_db_timeout(
+                        session.execute(stmt),
+                        operation=f"{self.model_class.__name__}.{fetch_type}",
+                        source=self._db_name,
+                    )
                     elapsed = time.perf_counter() - start
                     if elapsed > SLOW_QUERY_THRESHOLD:
                         logger.warning(
@@ -543,14 +549,16 @@ class QueryExecutorMixin:
         """获取指定列的值列表
 
         参数:
-            *fields: 列名列表
+            *fields: 列名列表，为空时查询全部列
             flat: 如果为True且只指定一个字段，则返回扁平列表
         """
-        if not fields:
-            stmt = self._build_base_query()
-        else:
+        if fields:
             cols = [DbUtils.get_column(self.model_class, f) for f in fields]
-            stmt = self._build_base_query(select(*cols))
+        else:
+            # 按表列查询而非 select(Model)：mappings/fetchall 对 ORM 实体
+            # 只会产生 {模型名: 实例} 的单元素行，无法按列取值
+            cols = list(self.model_class.__table__.columns)
+        stmt = self._build_base_query(select(*cols))
         result = await self._execute_query(stmt, "fetchall")
         if flat and len(fields) == 1:
             return [row[0] for row in result]
@@ -570,9 +578,11 @@ class QueryExecutorMixin:
         """
         if fields:
             cols = [DbUtils.get_column(self.model_class, f) for f in fields]
-            stmt = self._build_base_query(select(*cols))
         else:
-            stmt = self._build_base_query()
+            # select(Model) 的 mappings() 行键是实体标签而非列名，
+            # 必须显式展开为表列才能得到正确的列字典
+            cols = list(self.model_class.__table__.columns)
+        stmt = self._build_base_query(select(*cols))
         rows = await self._execute_query(stmt, "mappings")
         return [dict(row) for row in rows]
 

@@ -138,26 +138,27 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-# 短操作符映射，供 where_or 等条件方法复用，避免在各处重复定义
+# 短操作符映射，供 where_or 等条件方法复用；
+# 与 _LOOKUPS 语义等价的条目直接引用，避免重复定义 lambda
 _COMPARISON_OPS: dict[str, Callable[[Any, Any], ColumnElement[bool]]] = {
-    "eq": lambda c, v: c == v,
-    "ne": lambda c, v: c != v,
-    "gt": lambda c, v: c > v,
-    "gte": lambda c, v: c >= v,
-    "lt": lambda c, v: c < v,
-    "lte": lambda c, v: c <= v,
+    "eq": _LOOKUPS["exact"],
+    "ne": _LOOKUPS["ne"],
+    "gt": _LOOKUPS["gt"],
+    "gte": _LOOKUPS["gte"],
+    "lt": _LOOKUPS["lt"],
+    "lte": _LOOKUPS["lte"],
     "like": lambda c, v: c.like(v),
     "ilike": lambda c, v: c.ilike(v),
-    "contains": lambda c, v: c.like(f"%{_escape_like(str(v))}%", escape="\\"),
-    "icontains": lambda c, v: c.ilike(f"%{_escape_like(str(v))}%", escape="\\"),
-    "startswith": lambda c, v: c.like(f"{_escape_like(str(v))}%", escape="\\"),
-    "endswith": lambda c, v: c.like(f"%{_escape_like(str(v))}", escape="\\"),
-    "in": lambda c, v: c.in_(v),
-    "not_in": lambda c, v: c.notin_(v),
+    "contains": _LOOKUPS["contains"],
+    "icontains": _LOOKUPS["icontains"],
+    "startswith": _LOOKUPS["startswith"],
+    "endswith": _LOOKUPS["endswith"],
+    "in": _LOOKUPS["in"],
+    "not_in": _LOOKUPS["not_in"],
     "is_null": lambda c, v: c.is_(None),
     "is_not_null": lambda c, v: c.isnot(None),
-    "between": lambda c, v: c.between(v[0], v[1]),
-    "regex": lambda c, v: c.regexp_match(v),
+    "between": _LOOKUPS["between"],
+    "regex": _LOOKUPS["regex"],
 }
 
 
@@ -403,16 +404,18 @@ class Q:
         返回:
             ColumnElement[bool] | None: 编译后的条件表达式，空 Q 返回 None
         """
+        # 绝不能对表达式对象做真值过滤（filter(None, ...) 或 if clause）：
+        # 部分 SQLAlchemy 版本中 Comparison/BinaryExpression 布尔求值为 False，
+        # 会静默丢弃全部 Q 条件导致查询退化为全表
         if self._children:
-            clauses = list(
-                filter(
-                    None,
-                    (
-                        child.compile(model_class, build_conditions_fn)
-                        for child in self._children
-                    ),
+            clauses = [
+                child
+                for child in (
+                    child_.compile(model_class, build_conditions_fn)
+                    for child_ in self._children
                 )
-            )
+                if child is not None
+            ]
             if not clauses:
                 return None
             clause = and_(*clauses) if self._operator == "AND" else or_(*clauses)

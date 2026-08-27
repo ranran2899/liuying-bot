@@ -9,7 +9,6 @@ import asyncio
 from collections.abc import Iterable
 import contextlib
 from typing import Any, ClassVar, Self
-import weakref
 
 from sqlalchemy import and_, update
 from sqlalchemy.exc import IntegrityError
@@ -45,7 +44,6 @@ class Model(Base):
 
     _locks: ClassVar[dict[str, asyncio.Lock]] = {}
     _current_locks: ClassVar[dict[int, DbLockType]] = {}
-    _task_refs: ClassVar[weakref.WeakSet[asyncio.Task]] = weakref.WeakSet()
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -178,8 +176,6 @@ class Model(Base):
         need_lock = cls._require_lock(lock_type)
         if need_lock and (lock := cls._get_lock(lock_type)):
             cls._current_locks[task_id] = lock_type
-            if task:
-                cls._task_refs.add(task)
             try:
                 async with lock:
                     yield
@@ -235,6 +231,30 @@ class Model(Base):
         stmt = build_filter_statement(cls, **kwargs)
         result = await session.execute(stmt)
         return result.scalars().first(), False
+
+    @classmethod
+    async def _create_within_savepoint(
+        cls, sess: AsyncSession, kwargs: dict, defaults: dict | None
+    ) -> Self:
+        """在保存点中插入一条新记录
+
+        IntegrityError 仅回滚保存点，外部事务不受影响，
+        调用方随后可直接在原会话中查询既有记录。
+
+        参数:
+            sess: 当前数据库会话
+            kwargs: 查询条件字段
+            defaults: 额外的默认值字段
+
+        返回:
+            Self: 新创建的模型实例
+        """
+        async with nested_transaction(sess):
+            instance = cls(**kwargs, **(defaults or {}))
+            sess.add(instance)
+            await sess.flush()
+            await sess.refresh(instance)
+        return instance
 
     @classmethod
     async def _invalidate_query_cache(cls):
@@ -322,11 +342,9 @@ class Model(Base):
             if instance:
                 return instance, False
             try:
-                async with nested_transaction(sess):
-                    instance = cls(**kwargs, **(defaults or {}))
-                    sess.add(instance)
-                    await sess.flush()
-                    await sess.refresh(instance)
+                instance = await cls._create_within_savepoint(
+                    sess, kwargs, defaults
+                )
                 await cls._invalidate_cache(instance)
                 return instance, True
             except IntegrityError:
@@ -363,11 +381,9 @@ class Model(Base):
                         await sess.flush()
                         created = False
                     else:
-                        async with nested_transaction(sess):
-                            instance = cls(**kwargs, **(defaults or {}))
-                            sess.add(instance)
-                            await sess.flush()
-                            await sess.refresh(instance)
+                        instance = await cls._create_within_savepoint(
+                            sess, kwargs, defaults
+                        )
                         created = True
                     await cls._invalidate_cache(instance)
                     return instance, created
@@ -473,11 +489,9 @@ class Model(Base):
             if instance:
                 return instance, False
             try:
-                async with nested_transaction(sess):
-                    instance = cls(**kwargs, **(defaults or {}))
-                    sess.add(instance)
-                    await sess.flush()
-                    await sess.refresh(instance)
+                instance = await cls._create_within_savepoint(
+                    sess, kwargs, defaults
+                )
                 await cls._invalidate_cache(instance)
                 return instance, True
             except IntegrityError:
