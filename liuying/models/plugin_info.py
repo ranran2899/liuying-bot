@@ -243,3 +243,10 @@ class PluginInfo(Model):
             return {}
         plugins = await cls.filter(module__in=module_list).all()
         return {p.module: p.name for p in plugins}
+
+    @classmethod
+    def _run_script(cls):
+        """数据库迁移脚本"""
+        return [
+            "ALTER TABLE plugin_info DROP COLUMN impression", 
+        ]
