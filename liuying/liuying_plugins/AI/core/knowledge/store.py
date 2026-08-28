@@ -15,7 +15,6 @@ import nonebot
 
 from liuying.models.plugin_info import PluginInfo
 from liuying.services.cache import CacheDict
-from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 
 from ...models.knowledge_query_log import KnowledgeQueryLog
@@ -107,14 +106,11 @@ class KnowledgeStore:
         cached = self._cache_get(cache_key)
         if cached is not None:
             return cached
-        info = await PluginInfo.filter(
-            module=plugin_name
-        ).first()
-        if info is None:
-            return None
-        view = await self._build_view(info)
-        self._cache_set(cache_key, view)
-        return view
+        if info := await PluginInfo.get_by_module(plugin_name):
+            view = await self._build_view(info)
+            self._cache_set(cache_key, view)
+            return view
+        return None
 
     async def list_enabled(
         self,
@@ -134,11 +130,7 @@ class KnowledgeStore:
         cached = self._cache_get(cache_key)
         if cached is not None:
             return cached
-        query = PluginInfo.filter(
-            load_status=True,
-            is_show=True,
-            is_delete=False,
-        ).filter(PluginInfo.plugin_type != PluginType.PARENT)
+        query = PluginInfo.visible_query()
         infos = await query.limit(limit).all()
         views: list[PluginView] = []
         for info in infos:
@@ -475,10 +467,7 @@ class KnowledgeStore:
             plugin_name: 插件模块名
             enabled: 是否启用
         """
-        info = await PluginInfo.filter(
-            module=plugin_name
-        ).first()
-        if info is None:
+        if not (info := await PluginInfo.get_by_module(plugin_name)):
             return
         info.status = enabled
         await info.save(update_fields=["status"])

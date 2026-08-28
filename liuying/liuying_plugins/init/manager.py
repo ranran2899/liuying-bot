@@ -277,7 +277,9 @@ class Manager:
 
         commented_data = CommentedMap()
         commented_data[config.type_name] = temp_data
-        commented_data.yaml_set_comment_before_after_key(after=config.comment, key=config.type_name)
+        commented_data.yaml_set_comment_before_after_key(
+            after=config.comment, key=config.type_name
+        )
 
         with file_path.open("w", encoding="utf8") as f:
             _yaml.dump(commented_data, f)
@@ -528,10 +530,7 @@ class Manager:
         """读取配置文件并加载到数据库"""
         create_list, update_list, delete_list = await self._set_all_limit()
 
-        for limit in create_list:
-            await limit.save()
-
-        for limit in update_list:
+        for limit in create_list + update_list:
             await limit.save()
 
         for limit_id in delete_list:

@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
@@ -52,20 +54,28 @@ async def _(
 async def _() -> Result[PluginCount]:
     try:
         plugin_count = PluginCount()
-        plugin_count.normal = await DbPluginInfo.filter(
-            plugin_type=PluginType.NORMAL, load_status=True
-        ).count()
-        plugin_count.admin = await DbPluginInfo.filter(
-            plugin_type__in=[PluginType.ADMIN, PluginType.SUPER_AND_ADMIN],
-            load_status=True,
-        ).count()
-        plugin_count.superuser = await DbPluginInfo.filter(
-            plugin_type__in=[PluginType.SUPERUSER, PluginType.SUPER_AND_ADMIN],
-            load_status=True,
-        ).count()
-        plugin_count.other = await DbPluginInfo.filter(
-            plugin_type__in=[PluginType.HIDDEN, PluginType.DEPENDANT], load_status=True
-        ).count()
+        (
+            plugin_count.normal,
+            plugin_count.admin,
+            plugin_count.superuser,
+            plugin_count.other,
+        ) = await asyncio.gather(
+            DbPluginInfo.filter(
+                plugin_type=PluginType.NORMAL, load_status=True
+            ).count(),
+            DbPluginInfo.filter(
+                plugin_type__in=[PluginType.ADMIN, PluginType.SUPER_AND_ADMIN],
+                load_status=True,
+            ).count(),
+            DbPluginInfo.filter(
+                plugin_type__in=[PluginType.SUPERUSER, PluginType.SUPER_AND_ADMIN],
+                load_status=True,
+            ).count(),
+            DbPluginInfo.filter(
+                plugin_type__in=[PluginType.HIDDEN, PluginType.DEPENDANT],
+                load_status=True,
+            ).count(),
+        )
         return Result.ok(plugin_count, "拿到信息啦!")
     except Exception as e:
         logger.error(f"{router.prefix}/get_plugin_count 调用错误", command="WebUi", e=e)

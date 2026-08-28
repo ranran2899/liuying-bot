@@ -26,11 +26,9 @@ async def classify_plugins_by_type(
     if plugin_types is None:
         plugin_types = [PluginType.NORMAL, PluginType.DEPENDANT]
 
-    plugins = await PluginInfo.filter(
+    plugins = await PluginInfo.visible_query(
         menu_type__ne="",
-        load_status=True,
         plugin_type__in=plugin_types,
-        is_show=True,
     ).all()
 
     classified: dict[str, list[PluginInfo]] = {}

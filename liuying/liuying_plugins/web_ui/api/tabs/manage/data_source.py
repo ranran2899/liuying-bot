@@ -114,8 +114,7 @@ class ApiDataSource:
         )
         like_plugin = {}
         module_list = [x[0] for x in like_plugin_list]
-        plugins = await PluginInfo.filter(module__in=module_list).all()
-        module2name = {p.module: p.name for p in plugins}
+        module2name = await PluginInfo.get_name_map(module_list)
         for module, count in like_plugin_list:
             name = module2name.get(module) or module
             like_plugin[name] = count
@@ -145,8 +144,9 @@ class ApiDataSource:
             group_id=group_id, limit=5
         )
         like_plugin = {}
-        plugins = await PluginInfo.get_plugins()
-        module2name = {p.module: p.name for p in plugins}
+        module2name = await PluginInfo.get_name_map(
+            [x[0] for x in like_plugin_list]
+        )
         for module, count in like_plugin_list:
             name = module2name.get(module) or module
             like_plugin[name] = count

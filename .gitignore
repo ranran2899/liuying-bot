@@ -4,14 +4,14 @@ venv/
 
 # 忽略数据目录
 data/
-
+docs/
 # 忽略日志目录
 log/
 
 resources/
 
 wiki/
-
+tests/
 
 # 忽略编译后的Python文件
 *.pyc

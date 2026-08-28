@@ -91,9 +91,9 @@ async def enable_plugin(
     bot_id: Match[str] = AlconnaMatch("bot_id"),
 ):
     if plugin_name.available:
-        plugin: PluginInfo | None = await PluginInfo.get_plugin(
-            name=plugin_name.result
-        ) or await PluginInfo.get_plugin(module=plugin_name.result)
+        plugin: PluginInfo | None = await PluginInfo.get_by_name_or_module(
+            plugin_name.result
+        )
         if not plugin:
             await MessageUtils.build_message("未找到该插件...").finish()
         if bot_id.available:
@@ -145,9 +145,7 @@ async def disable_plugin(
     bot_id: Match[str] = AlconnaMatch("bot_id"),
 ):
     if plugin_name.available:
-        plugin = await PluginInfo.get_plugin(
-            name=plugin_name.result
-        ) or await PluginInfo.get_plugin(module=plugin_name.result)
+        plugin = await PluginInfo.get_by_name_or_module(plugin_name.result)
         if not plugin:
             await MessageUtils.build_message("未找到该插件...").finish()
         if bot_id.available:

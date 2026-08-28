@@ -148,13 +148,9 @@ class PluginManager:
         返回:
             PluginInfo | None: 插件对象，不存在返回None
         """
-        if plugin_name.isdigit():
-            return await PluginInfo.filter(id=int(plugin_name)).first()
-        return await PluginInfo.filter(
-            name=plugin_name,
-            load_status=True,
-            plugin_type__ne=PluginType.PARENT,
-        ).first()
+        return await PluginInfo.get_by_id_or_name(
+            plugin_name, plugin_type__ne=PluginType.PARENT
+        )
 
     # ==================== 插件全局状态 ====================
 

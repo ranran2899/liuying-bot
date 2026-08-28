@@ -42,7 +42,6 @@ __plugin_meta__ = PluginMetadata(
             level=5,
             default_status=True,
             cost_gold=0,
-            impression=0.0,
         ),
         commands=[
             Command(

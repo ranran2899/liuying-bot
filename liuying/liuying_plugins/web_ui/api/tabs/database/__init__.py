@@ -39,10 +39,7 @@ async def _():
                 sql_list=sql_list,
             )
     if ApiDataSource.SQL_DICT:
-        result = await PluginInfo.filter(
-            module__in=ApiDataSource.SQL_DICT.keys()
-        ).values_list("module", "name")
-        module2name = {r[0]: r[1] for r in result}
+        module2name = await PluginInfo.get_name_map(ApiDataSource.SQL_DICT.keys())
         for s in ApiDataSource.SQL_DICT:
             sql_model = ApiDataSource.SQL_DICT[s]
             sql_model.name = module2name.get(sql_model.module, sql_model.module)

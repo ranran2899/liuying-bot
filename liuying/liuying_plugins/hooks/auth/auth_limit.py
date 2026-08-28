@@ -1,16 +1,17 @@
+"""插件限制检查"""
+
 import asyncio
 from contextlib import suppress
+from dataclasses import dataclass
 import time
 from typing import ClassVar
 
-import nonebot
 from nonebot_plugin_uninfo import Uninfo
-from pydantic import BaseModel
 
-from liuying.utils.limiters import CountLimiter, FreqLimiter, UserBlockLimiter
 from liuying.models.plugin_info import PluginInfo
 from liuying.models.plugin_limit import PluginLimit
 from liuying.utils.enum import LimitWatchType, PluginLimitType
+from liuying.utils.limiters import CountLimiter, FreqLimiter, UserBlockLimiter
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.message import MessageUtils
@@ -20,10 +21,9 @@ from .config import LOGGER_COMMAND, WARNING_THRESHOLD
 from .exception import SkipPluginException
 from .utils import get_group_channel_ids
 
-# driver = nonebot.get_driver()
-
 DB_TIMEOUT = 5.0
 UPDATE_TIMEOUT = 10.0
+SEND_TIMEOUT = 5.0
 
 
 @PriorityLifecycle.on_startup(priority=5)
@@ -32,21 +32,31 @@ async def _():
     await LimitManager.init_limit()
 
 
-class LimitModel(BaseModel):
+@dataclass(slots=True)
+class LimitModel:
+    """限制数据"""
+
     limit: PluginLimit
     limiter: FreqLimiter | UserBlockLimiter | CountLimiter
 
-    class Config:
-        arbitrary_types_allowed = True
+
+def _log_update_exception(task: asyncio.Task) -> None:
+    """记录后台限制刷新任务的异常
+
+    参数:
+        task: 已完成的后台任务
+    """
+    if not task.cancelled() and (exc := task.exception()):
+        logger.error(f"后台更新限制信息失败: {exc}", LOGGER_COMMAND)
 
 
 class LimitManager:
     """限制管理器"""
 
-    add_module: ClassVar[list[str]] = []
     last_update_time: ClassVar[float] = 0
     update_interval: ClassVar[float] = 6000
     is_updating: ClassVar[bool] = False
+    _update_task: ClassVar[asyncio.Task | None] = None
 
     cd_limit: ClassVar[dict[str, LimitModel]] = {}
     block_limit: ClassVar[dict[str, LimitModel]] = {}
@@ -64,7 +74,7 @@ class LimitManager:
 
     @classmethod
     async def update_limits(cls):
-        """更新限制信息"""
+        """从数据库全量更新限制信息，保留运行中的限制状态"""
         if cls.is_updating:
             return
 
@@ -79,14 +89,55 @@ class LimitManager:
                 logger.error("查询限制信息超时", LOGGER_COMMAND)
                 return
 
-            cls.add_module = []
-            cls.cd_limit = {}
-            cls.block_limit = {}
-            cls.count_limit = {}
-            for limit in limit_list:
-                cls.add_limit(limit)
+            old_cd = cls.cd_limit
+            old_block = cls.block_limit
+            old_count = cls.count_limit
 
+            new_cd: dict[str, LimitModel] = {}
+            new_block: dict[str, LimitModel] = {}
+            new_count: dict[str, LimitModel] = {}
+
+            for limit in limit_list:
+                module = limit.module
+                match limit.limit_type:
+                    case PluginLimitType.BLOCK:
+                        # 复用旧 limiter 实例，保留用户阻塞状态
+                        old = old_block.get(module)
+                        new_block[module] = LimitModel(
+                            limit=limit,
+                            limiter=old.limiter
+                            if old and isinstance(old.limiter, UserBlockLimiter)
+                            else UserBlockLimiter(),
+                        )
+                    case PluginLimitType.CD:
+                        # cd 配置未变化时复用旧实例，保留冷却状态
+                        old = old_cd.get(module)
+                        limiter = (
+                            old.limiter
+                            if old
+                            and isinstance(old.limiter, FreqLimiter)
+                            and old.limiter.default_cd == limit.cd
+                            else FreqLimiter(limit.cd)
+                        )
+                        new_cd[module] = LimitModel(limit=limit, limiter=limiter)
+                    case PluginLimitType.COUNT:
+                        # max_count 配置未变化时复用旧实例，保留当日计数
+                        old = old_count.get(module)
+                        limiter = (
+                            old.limiter
+                            if old
+                            and isinstance(old.limiter, CountLimiter)
+                            and old.limiter.max == limit.max_count
+                            else CountLimiter(limit.max_count)
+                        )
+                        new_count[module] = LimitModel(limit=limit, limiter=limiter)
+
+            cls.cd_limit = new_cd
+            cls.block_limit = new_block
+            cls.count_limit = new_count
+            cls.module_limit_cache.clear()
             cls.last_update_time = time.time()
+
             elapsed = time.time() - start_time
             if elapsed > WARNING_THRESHOLD:
                 logger.warning(f"更新限制信息耗时: {elapsed:.3f}s", LOGGER_COMMAND)
@@ -95,15 +146,11 @@ class LimitManager:
 
     @classmethod
     def add_limit(cls, limit: PluginLimit):
-        """添加限制
+        """添加限制，同一模块可存在多种限制类型
 
         参数:
             limit: PluginLimit
         """
-        if limit.module in cls.add_module:
-            return
-
-        cls.add_module.append(limit.module)
         match limit.limit_type:
             case PluginLimitType.BLOCK:
                 cls.block_limit[limit.module] = LimitModel(
@@ -209,11 +256,12 @@ class LimitManager:
             time.time() - cls.last_update_time > cls.update_interval
             and not cls.is_updating
         ):
-            _update_task = asyncio.create_task(cls.update_limits())
+            # 持有任务引用防止被 GC 中途回收，完成后记录异常
+            cls._update_task = asyncio.create_task(cls.update_limits())
+            cls._update_task.add_done_callback(_log_update_exception)
 
-        if module not in cls.add_module:
-            limits = await cls.get_module_limits(module)
-            for limit in limits:
+        if module not in cls.module_limit_cache:
+            for limit in await cls.get_module_limits(module):
                 cls.add_limit(limit)
 
         try:
@@ -240,10 +288,10 @@ class LimitManager:
         group_id: str | None,
         channel_id: str | None,
     ):
-        """检测限制
+        """检测单个限制
 
         参数:
-            limit_model: LimitModel
+            limit_model: 限制数据
             user_id: 用户id
             group_id: 群组id
             channel_id: 频道id
@@ -274,14 +322,13 @@ class LimitManager:
                 format_kwargs = {}
                 if isinstance(limiter, FreqLimiter):
                     left_time = limiter.left_time(key_type)
-                    cd_str = TimeUtils.format_duration(left_time)
-                    format_kwargs = {"cd": cd_str}
+                    format_kwargs = {"cd": TimeUtils.format_duration(left_time)}
                 try:
                     await asyncio.wait_for(
                         MessageUtils.build_message(
                             limit.result, format_args=format_kwargs
                         ).send(),
-                        timeout=DB_TIMEOUT,
+                        timeout=SEND_TIMEOUT,
                     )
                 except TimeoutError:
                     logger.error(f"发送限制消息超时: {limit.module}", LOGGER_COMMAND)

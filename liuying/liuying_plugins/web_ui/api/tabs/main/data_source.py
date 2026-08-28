@@ -264,8 +264,7 @@ class ApiDataSource:
             bot_id=bot_id, days=days, limit=5
         )
         module_list = [x[0] for x in data_list]
-        plugins = await PluginInfo.filter(module__in=module_list).all()
-        module2name = {p.module: p.name for p in plugins}
+        module2name = await PluginInfo.get_name_map(module_list)
         return [
             HotPlugin(
                 module=module,

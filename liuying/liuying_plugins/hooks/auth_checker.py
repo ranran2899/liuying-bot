@@ -133,16 +133,21 @@ async def get_plugin_and_user(
     user_dao = DataAccess(UserConsole)
     plugin_dao = DataAccess(PluginInfo)
 
-    plugin_task = plugin_dao.safe_get_or_none(module=module)
-    user_task = user_dao.get_by_func_or_none(
-        UserConsole.get_user, False, user_id=user_id
-    )
+    async def gather_queries():
+        """并行获取插件与用户数据"""
+        return await asyncio.gather(
+            plugin_dao.safe_get_or_none(module=module),
+            user_dao.get_by_func_or_none(
+                UserConsole.get_user, False, user_id=user_id
+            ),
+        )
 
     try:
         plugin, user = await with_timeout(
-            asyncio.gather(plugin_task, user_task), name="get_plugin_and_user"
+            gather_queries(), name="get_plugin_and_user"
         )
     except TimeoutError:
+        # 并行查询超时，降级为串行查询
         logger.warning("并行查询超时，尝试串行查询", LOGGER_COMMAND)
         plugin = await with_timeout(
             plugin_dao.safe_get_or_none(module=module), name="get_plugin"
@@ -151,13 +156,10 @@ async def get_plugin_and_user(
             user_dao.safe_get_or_none(user_id=user_id), name="get_user"
         )
     except IntegrityError:
+        # 并发写入冲突，短暂等待后重试一次
         await asyncio.sleep(0.5)
-        plugin_task = plugin_dao.safe_get_or_none(module=module)
-        user_task = user_dao.get_by_func_or_none(
-            UserConsole.get_user, False, user_id=user_id
-        )
         plugin, user = await with_timeout(
-            asyncio.gather(plugin_task, user_task), name="get_plugin_and_user"
+            gather_queries(), name="get_plugin_and_user"
         )
 
     match (plugin, user):
@@ -291,6 +293,16 @@ async def auth(
     ignore_flag = False
     entity = get_entity_ids(session)
     module = matcher.plugin_name or ""
+
+    # 隐藏/依赖插件跳过权限检查，避免无意义的数据库查询
+    if plugin := matcher.plugin:
+        metadata = plugin.metadata
+        extra = metadata.extra if metadata else None
+        if not metadata or extra.get("plugin_type") in {
+            PluginType.HIDDEN,
+            PluginType.DEPENDANT,
+        }:
+            return
 
     hook_times: dict[str, str] = {}
     hooks_time = 0
