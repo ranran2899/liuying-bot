@@ -74,7 +74,6 @@ class DbModel:
     """模型注册配置"""
 
     script_methods: list[tuple[str, Callable]] = field(default_factory=list)
-    models: list[str] = field(default_factory=list)
 
 
 db_model = DbModel()

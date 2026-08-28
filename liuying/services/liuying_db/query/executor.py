@@ -10,8 +10,9 @@ import asyncio
 from collections.abc import AsyncGenerator, Callable
 from datetime import datetime
 import hashlib
+import itertools
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     and_,
@@ -22,7 +23,6 @@ from sqlalchemy import (
     text,
     update,
 )
-from sqlalchemy import exists as sqlalchemy_exists
 from sqlalchemy.orm import defer, joinedload, selectinload
 from sqlalchemy.sql.selectable import Select
 
@@ -43,6 +43,9 @@ from .conditions import (
     _separate_kwargs,
     query_cache_namespace,
 )
+
+if TYPE_CHECKING:
+    from . import QueryWrapper
 
 
 class QueryExecutorMixin:
@@ -93,9 +96,7 @@ class QueryExecutorMixin:
             if regular:
                 stmt = stmt.filter_by(**regular)
             if django:
-                stmt = stmt.where(
-                    *_build_django_conditions(self.model_class, django)
-                )
+                stmt = stmt.where(*_build_django_conditions(self.model_class, django))
 
         # 应用 args 条件
         clauses = _compile_filter_args(self.model_class, self.args)
@@ -198,13 +199,10 @@ class QueryExecutorMixin:
             # 仅凭 str(stmt) 不同参数值的语句文本相同，会导致不同查询
             # 互相命中对方缓存结果
             compiled = stmt.compile()
-            param_repr = repr(
-                sorted(compiled.params.items(), key=lambda kv: kv[0])
-            )
+            param_repr = repr(sorted(compiled.params.items(), key=lambda kv: kv[0]))
             stmt_hash = hashlib.md5(f"{compiled}\n{param_repr}".encode()).hexdigest()
             cache_key = (
-                f"{self._db_name}:{self.model_class.__name__}:"
-                f"{fetch_type}:{stmt_hash}"
+                f"{self._db_name}:{self.model_class.__name__}:{fetch_type}:{stmt_hash}"
             )
 
         namespace = query_cache_namespace(self.model_class)
@@ -222,13 +220,7 @@ class QueryExecutorMixin:
                     db_name=self._db_name
                 ) as session:
                     start = time.perf_counter()
-                    # 主查询路径统一套用超时控制，下限与 SQLite
-                    # busy_timeout 对齐（见 config.DB_TIMEOUT_SECONDS）
-                    result = await DbUtils.with_db_timeout(
-                        session.execute(stmt),
-                        operation=f"{self.model_class.__name__}.{fetch_type}",
-                        source=self._db_name,
-                    )
+                    result = await session.execute(stmt)
                     elapsed = time.perf_counter() - start
                     if elapsed > SLOW_QUERY_THRESHOLD:
                         logger.warning(
@@ -272,7 +264,7 @@ class QueryExecutorMixin:
     async def first(self) -> Any | None:
         """获取查询结果的第一条记录
 
-        如需"不存在则创建"，请使用 ``Model.first_or_create``，
+        如需"不存在则创建"，请使用 ``Model.get_or_create``，
         此处不再自动创建（避免忽略链上 args/exclude 条件产生错误数据）。
 
         返回:
@@ -388,9 +380,7 @@ class QueryExecutorMixin:
         stmt = select(group_col, count_expr)
         stmt = self._apply_filters(stmt)
         stmt = stmt.group_by(group_col)
-        stmt = stmt.order_by(
-            count_expr.desc() if desc else count_expr.asc()
-        )
+        stmt = stmt.order_by(count_expr.desc() if desc else count_expr.asc())
         if limit is not None:
             stmt = stmt.limit(limit)
         if offset is not None:
@@ -432,11 +422,7 @@ class QueryExecutorMixin:
             bool: 如果存在记录返回True
         """
         stmt = self._build_base_query()
-        if stmt.whereclause is not None:
-            exists_stmt = select(sqlalchemy_exists().where(stmt.whereclause))
-        else:
-            exists_stmt = select(sqlalchemy_exists().select_from(self.model_class))
-        return await self._execute_query(exists_stmt, "scalar")
+        return await self._execute_query(select(stmt.exists()), "scalar")
 
     async def get(self, pk: Any) -> Any | None:
         """根据主键获取单个记录
@@ -462,9 +448,7 @@ class QueryExecutorMixin:
         stmt = stmt.where(getattr(self.model_class, pk_names[0]) == pk)
         return await self._execute_query(stmt.limit(1), "first")
 
-    async def find_by(
-        self, skip_none: bool = False, **kwargs: Any
-    ) -> Any | None:
+    async def find_by(self, skip_none: bool = False, **kwargs: Any) -> Any | None:
         """根据指定条件查找单个记录
 
         参数:
@@ -473,9 +457,7 @@ class QueryExecutorMixin:
         """
         return await self.filter(skip_none=skip_none, **kwargs).first()
 
-    async def find_all(
-        self, skip_none: bool = False, **kwargs: Any
-    ) -> list[Any]:
+    async def find_all(self, skip_none: bool = False, **kwargs: Any) -> list[Any]:
         """根据指定条件查找所有记录
 
         参数:
@@ -514,9 +496,7 @@ class QueryExecutorMixin:
             "pages": (total + per_page - 1) // per_page,
         }
 
-    async def aggregate(
-        self, *aggregations: Any, **named_aggregations: Any
-    ) -> Any:
+    async def aggregate(self, *aggregations: Any, **named_aggregations: Any) -> Any:
         """聚合查询
 
         参数:
@@ -549,16 +529,14 @@ class QueryExecutorMixin:
         """获取指定列的值列表
 
         参数:
-            *fields: 列名列表，为空时查询全部列
+            *fields: 列名列表
             flat: 如果为True且只指定一个字段，则返回扁平列表
         """
-        if fields:
-            cols = [DbUtils.get_column(self.model_class, f) for f in fields]
+        if not fields:
+            stmt = self._build_base_query()
         else:
-            # 按表列查询而非 select(Model)：mappings/fetchall 对 ORM 实体
-            # 只会产生 {模型名: 实例} 的单元素行，无法按列取值
-            cols = list(self.model_class.__table__.columns)
-        stmt = self._build_base_query(select(*cols))
+            cols = [DbUtils.get_column(self.model_class, f) for f in fields]
+            stmt = self._build_base_query(select(*cols))
         result = await self._execute_query(stmt, "fetchall")
         if flat and len(fields) == 1:
             return [row[0] for row in result]
@@ -578,43 +556,11 @@ class QueryExecutorMixin:
         """
         if fields:
             cols = [DbUtils.get_column(self.model_class, f) for f in fields]
+            stmt = self._build_base_query(select(*cols))
         else:
-            # select(Model) 的 mappings() 行键是实体标签而非列名，
-            # 必须显式展开为表列才能得到正确的列字典
-            cols = list(self.model_class.__table__.columns)
-        stmt = self._build_base_query(select(*cols))
+            stmt = self._build_base_query()
         rows = await self._execute_query(stmt, "mappings")
         return [dict(row) for row in rows]
-
-    async def to_dict(
-        self,
-        only: list[str] | None = None,
-        except_: list[str] | None = None,
-    ) -> list[dict[str, Any]]:
-        """将查询结果转换为字典列表
-
-        参数:
-            only: 只包含指定的字段列表
-            except_: 排除指定的字段列表
-        """
-        results = await self.all()
-        only_set = set(only) if only else None
-        except_set = set(except_) if except_ else None
-        dict_results: list[dict[str, Any]] = []
-        for result in results:
-            table = getattr(result, "__table__", None)
-            if table is None:
-                dict_results.append(result)
-                continue
-            data: dict[str, Any] = {}
-            for col in table.columns.keys():
-                if only_set and col not in only_set:
-                    continue
-                if except_set and col in except_set:
-                    continue
-                data[col] = getattr(result, col)
-            dict_results.append(data)
-        return dict_results
 
     async def explain(self, analyze: bool = False) -> list[Any]:
         """获取查询执行计划
@@ -630,9 +576,7 @@ class QueryExecutorMixin:
             result = await session.execute(text(prefix + compiled))
             return result.fetchall()
 
-    async def raw(
-        self, sql: str, params: dict[str, Any] | None = None
-    ) -> Any:
+    async def raw(self, sql: str, params: dict[str, Any] | None = None) -> Any:
         """执行原始SQL语句
 
         警告:
@@ -645,6 +589,19 @@ class QueryExecutorMixin:
         """
         async with self.model_class.get_session(db_name=self._db_name) as session:
             return await session.execute(text(sql), params or {})
+
+    def _spawn(self) -> "QueryWrapper":
+        """基于当前查询条件创建独立的 wrapper，不共享可变状态
+
+        供 ``find_in_batches`` 等需要重建查询链的方法复用，
+        完整保留 exclude 条件、软删除状态与目标数据库配置。
+        """
+        spawn = self.model_class.filter(*self.args, **self.kwargs)
+        spawn._exclude_args = self._exclude_args
+        spawn._exclude_kwargs = dict(self._exclude_kwargs)
+        spawn._with_deleted = self._with_deleted
+        spawn._db_name = self._db_name
+        return spawn
 
     async def find_in_batches(
         self, batch_size: int = 1000
@@ -662,12 +619,10 @@ class QueryExecutorMixin:
         """
         pk_names = DbUtils.get_primary_key_names(self.model_class)
         if not pk_names:
-            # 无主键，回退到 OFFSET 分页（创建新 wrapper 避免修改自身）
+            # 无主键，回退到 OFFSET 分页
             offset = 0
             while True:
-                batch = await self.model_class.filter(
-                    *self.args, **self.kwargs
-                ).limit(batch_size).offset(offset).all()
+                batch = await self._spawn().limit(batch_size).offset(offset).all()
                 if not batch:
                     break
                 yield batch
@@ -680,7 +635,7 @@ class QueryExecutorMixin:
         pk_col = DbUtils.get_column(self.model_class, pk_names[0])
         last_pk = None
         while True:
-            query = self.model_class.filter(*self.args, **self.kwargs)
+            query = self._spawn()
             if last_pk is not None:
                 query = query.filter(pk_col > last_pk)
             batch = await query.order_by(pk_col.asc()).limit(batch_size).all()
@@ -691,9 +646,7 @@ class QueryExecutorMixin:
                 break
             last_pk = getattr(batch[-1], pk_names[0])
 
-    async def iterator(
-        self, chunk_size: int = 1000
-    ) -> AsyncGenerator[Any]:
+    async def iterator(self, chunk_size: int = 1000) -> AsyncGenerator[Any]:
         """流式迭代查询结果
 
         参数:
@@ -762,9 +715,7 @@ class QueryExecutorMixin:
         """获取指定列的最大值"""
         return await self._aggregate_column(column, func.max)
 
-    async def avg(
-        self, column: str | Any, distinct: bool = False
-    ) -> float | None:
+    async def avg(self, column: str | Any, distinct: bool = False) -> float | None:
         """获取指定列的平均值
 
         参数:
@@ -773,9 +724,7 @@ class QueryExecutorMixin:
         """
         return await self._aggregate_column(column, func.avg, distinct)
 
-    async def sum(
-        self, column: str | Any, distinct: bool = False
-    ) -> Any:
+    async def sum(self, column: str | Any, distinct: bool = False) -> Any:
         """获取指定列的总和
 
         参数:
@@ -798,7 +747,6 @@ class QueryExecutorMixin:
         async with self.model_class.get_session(db_name=self._db_name) as session:
             stmt = self._apply_filters(update(self.model_class)).values(**values)
             result = await session.execute(stmt)
-            await session.flush()
             await self._invalidate_write_cache()
             return result.rowcount
 
@@ -811,7 +759,6 @@ class QueryExecutorMixin:
         async with self.model_class.get_session(db_name=self._db_name) as session:
             stmt = self._apply_filters(delete(self.model_class))
             result = await session.execute(stmt)
-            await session.flush()
             await self._invalidate_write_cache()
             return result.rowcount
 
@@ -819,10 +766,7 @@ class QueryExecutorMixin:
     def _build_mapping(obj: Any, fields: list[str] | None = None) -> dict:
         """构建对象映射字典"""
         if fields is None:
-            return {
-                col.name: getattr(obj, col.name)
-                for col in obj.__table__.columns
-            }
+            return {col.name: getattr(obj, col.name) for col in obj.__table__.columns}
         mapping = {f: getattr(obj, f) for f in fields if hasattr(obj, f)}
         for pk in DbUtils.get_primary_key_names(obj.__class__):
             if hasattr(obj, pk):
@@ -830,9 +774,7 @@ class QueryExecutorMixin:
         return mapping
 
     @staticmethod
-    def _iter_batches(
-        items: list[Any], batch_size: int | None
-    ) -> list[list[Any]]:
+    def _iter_batches(items: list[Any], batch_size: int | None) -> list[list[Any]]:
         """将列表切分为批次
 
         参数:
@@ -846,9 +788,7 @@ class QueryExecutorMixin:
             return []
         if not batch_size or batch_size <= 0:
             return [items]
-        return [
-            items[i : i + batch_size] for i in range(0, len(items), batch_size)
-        ]
+        return [list(batch) for batch in itertools.batched(items, batch_size)]
 
     async def bulk_create(
         self,
@@ -906,7 +846,6 @@ class QueryExecutorMixin:
                     lambda s: s.bulk_update_mappings(self.model_class, mappings)
                 )
                 updated += len(batch)
-                await session.flush()
                 if progress_callback:
                     progress_callback(updated, total)
             await self._invalidate_write_cache()
@@ -941,7 +880,6 @@ class QueryExecutorMixin:
             stmt = self._apply_filters(update(self.model_class))
             stmt = stmt.values({col: col + amount})
             result = await session.execute(stmt)
-            await session.flush()
             await self._invalidate_write_cache()
             return result.rowcount
 
@@ -963,7 +901,6 @@ class QueryExecutorMixin:
             stmt = self._apply_filters(update(self.model_class))
             stmt = stmt.values(deleted_at=datetime.now())
             result = await session.execute(stmt)
-            await session.flush()
             await self._invalidate_write_cache()
             return result.rowcount
 
@@ -980,7 +917,6 @@ class QueryExecutorMixin:
                 stmt = self._apply_filters(update(self.model_class))
                 stmt = stmt.values(deleted_at=None)
                 result = await session.execute(stmt)
-                await session.flush()
         finally:
             self._with_deleted = prev_with_deleted
         await self._invalidate_write_cache()

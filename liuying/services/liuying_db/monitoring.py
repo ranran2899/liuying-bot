@@ -15,6 +15,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+import inspect
 import time
 from typing import TYPE_CHECKING
 
@@ -82,7 +83,7 @@ async def _run_monitor_loop(interval: float, callback) -> None:
     """
     while True:
         await asyncio.sleep(interval)
-        if asyncio.iscoroutinefunction(callback):
+        if inspect.iscoroutinefunction(callback):
             await callback()
         else:
             callback()
@@ -96,7 +97,7 @@ async def _safe_call_callback(callback, *args) -> None:
         *args: 回调参数
     """
     try:
-        if asyncio.iscoroutinefunction(callback):
+        if inspect.iscoroutinefunction(callback):
             await callback(*args)
         else:
             loop = asyncio.get_running_loop()
@@ -238,9 +239,7 @@ class PoolMonitor:
             if not alert:
                 continue
             log_func = (
-                logger.error
-                if alert.level == AlertLevel.CRITICAL
-                else logger.warning
+                logger.error if alert.level == AlertLevel.CRITICAL else logger.warning
             )
             log_func(f"连接池告警 [{alert.level}]: {alert.message}", LOG_COMMAND)
             for callback in self._alert_callbacks:
@@ -357,9 +356,7 @@ class ConnectionLeakDetector:
             if now - t > self.leak_threshold
         ]
 
-    def add_leak_callback(
-        self, callback: Callable[[str, int, float], None]
-    ) -> None:
+    def add_leak_callback(self, callback: Callable[[str, int, float], None]) -> None:
         """添加泄漏回调函数
 
         参数:

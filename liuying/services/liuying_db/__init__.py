@@ -8,6 +8,7 @@
 - 工具集合: ``DbUtils``（``with_db_timeout``、``get_column`` 等）
 - 异常类: ``DbConnectError``、``DbUrlIsNone``
 """
+
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 
 from .base_model import Base, Model
@@ -26,6 +27,18 @@ async def init():
     委托 ``LifecycleManager.initialize`` 执行完整初始化流程。
     """
     await LifecycleManager.initialize()
+
+
+@PriorityLifecycle.on_shutdown(priority=10)
+async def shutdown():
+    """数据库关闭入口，由 NoneBot 关闭钩子调用
+
+    先停止同步任务，再停止监控并释放全部数据库连接。
+    priority=1 使其反向排序后在关闭流程最后执行，
+    确保依赖数据库的业务服务先完成清理。
+    """
+    await sync_manager.stop_sync()
+    await session_manager.disconnect()
 
 
 __all__ = [

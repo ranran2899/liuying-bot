@@ -456,9 +456,7 @@ class QueryBuilderMixin:
         """添加不等于条件查询"""
         return self._col_cond(column, lambda c: c != value)
 
-    def where_or(
-        self, *conditions: tuple[str | Any, str, Any]
-    ) -> "QueryWrapper[T]":
+    def where_or(self, *conditions: tuple[str | Any, str, Any]) -> "QueryWrapper[T]":
         """添加 OR 多条件组合查询
 
         参数:
@@ -480,9 +478,7 @@ class QueryBuilderMixin:
             self.args = (*self.args, or_(*clauses))
         return self
 
-    def _where_date_period(
-        self, column: str | Any, period: str
-    ) -> "QueryWrapper[T]":
+    def _where_date_period(self, column: str | Any, period: str) -> "QueryWrapper[T]":
         """添加日期范围查询的通用方法"""
         col = DbUtils.get_column(self.model_class, column)
         start, end = DbUtils.get_date_range(period)

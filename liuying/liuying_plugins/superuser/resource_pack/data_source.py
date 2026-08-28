@@ -15,9 +15,6 @@ from .config import DEFAULT_VERSION, LOG_COMMAND, RESOURCE_PACKS, ResourcePackMe
 from .exceptions import ResourcePackException
 from .models import ResourcePackInfo
 
-_VERSION_FILE = "version.json"
-"""目标目录内记录已安装版本号的文件名"""
-
 
 class ResourcePackManager:
     """资源包管理器
@@ -45,8 +42,9 @@ class ResourcePackManager:
     def is_installed(cls, meta: ResourcePackMeta) -> bool:
         """判断资源包是否已安装
 
-        以目标目录内的版本记录文件是否存在为准，避免目标目录
-        被 path_config 预创建导致 exists() 误判。
+        以目标目录内是否存在版本索引文件（如 resource.json）为准，
+        该文件随压缩包一同下载，避免目标目录被 path_config
+        预创建导致 exists() 误判。
 
         参数:
             meta: 资源包元信息
@@ -54,37 +52,25 @@ class ResourcePackManager:
         返回:
             bool: 是否已安装
         """
-        return (meta.target_path / _VERSION_FILE).exists()
+        return (meta.target_path / meta.json_file).exists()
 
     @classmethod
     def get_local_version(cls, meta: ResourcePackMeta) -> str:
         """获取本地已安装版本号
 
+        版本号从目标目录内的版本索引文件（如 resource.json）读取。
+
         参数:
             meta: 资源包元信息
 
         返回:
-            str: 本地版本号，未安装返回默认版本
+            str: 本地版本号，未安装或字段缺失返回默认版本
         """
-        version_file = meta.target_path / _VERSION_FILE
-        if not version_file.exists():
+        index_file = meta.target_path / meta.json_file
+        if not index_file.exists():
             return DEFAULT_VERSION
-        data = json.loads(version_file.read_text(encoding="utf8"))
+        data = json.loads(index_file.read_text(encoding="utf8"))
         return data.get("version", DEFAULT_VERSION)
-
-    @classmethod
-    def write_local_version(cls, meta: ResourcePackMeta, version: str) -> None:
-        """写入本地已安装版本号
-
-        参数:
-            meta: 资源包元信息
-            version: 版本号
-        """
-        version_file = meta.target_path / _VERSION_FILE
-        version_file.write_text(
-            json.dumps({"name": meta.name, "version": version}).decode("utf-8"),
-            encoding="utf8",
-        )
 
     @classmethod
     async def check_update(cls, meta: ResourcePackMeta) -> bool:
@@ -197,7 +183,6 @@ class ResourcePackManager:
             return f"资源包 {meta.name} 已是最新版本 {info.version}"
         archive_path = await cls._download_archive(info)
         await asyncio.to_thread(cls._extract_archive, archive_path, meta.target_path)
-        cls.write_local_version(meta, info.version)
         archive_path.unlink(missing_ok=True)
         logger.info(
             f"资源包 {meta.name} 安装成功: {local_version} -> {info.version}",
@@ -216,8 +201,12 @@ class ResourcePackManager:
         for meta in RESOURCE_PACKS:
             try:
                 remote = await cls.get_remote_info(meta)
-                local = cls.get_local_version(meta)
-                status = "已安装" if remote.version == local else "可更新"
+                if not cls.is_installed(meta):
+                    status = "未安装"
+                    local = "无"
+                else:
+                    local = cls.get_local_version(meta)
+                    status = "已安装" if remote.version == local else "可更新"
                 result.append(
                     f"{meta.name}: 本地 {local} / 远程 {remote.version} [{status}]"
                 )

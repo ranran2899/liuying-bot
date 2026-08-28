@@ -83,9 +83,7 @@ class QueryWrapper[T: Model](QueryBuilderMixin, QueryExecutorMixin):
         self.model_class = model_class
         self.args: tuple[Any, ...] = args
         self.kwargs: dict[str, Any] = (
-            {k: v for k, v in kwargs.items() if v is not None}
-            if skip_none
-            else kwargs
+            {k: v for k, v in kwargs.items() if v is not None} if skip_none else kwargs
         )
         self._limit: int | None = None
         self._offset: int | None = None

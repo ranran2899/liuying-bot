@@ -23,7 +23,6 @@ from liuying.utils.log import logger
 
 from .config import ENABLE_SESSION_TRACING, LOG_COMMAND
 from .monitoring import leak_detector, pool_monitor
-from .sync import sync_manager
 
 _NAME_NORMALIZE_PATTERN = re.compile(r"[^a-z0-9_]+")
 
@@ -217,6 +216,9 @@ class SessionManager:
     async def disconnect(self, db_name: str | None = None):
         """关闭数据库连接，如果未指定则关闭所有连接
 
+        仅负责引擎与会话工厂的释放，同步任务的停止由调用方
+        （``lifecycle`` 重试清理或关闭钩子）显式执行。
+
         db_name 会经过规范化处理，与 ``init`` 的键保持一致。
 
         参数:
@@ -234,8 +236,6 @@ class SessionManager:
             logger.info(f"数据库 {normalized_name} 已成功断开连接", LOG_COMMAND)
             return
 
-        await sync_manager.stop_sync()
-        logger.info("数据库同步任务已停止", LOG_COMMAND)
         await self.stop_monitoring()
 
         for name in self.engines:
@@ -251,13 +251,7 @@ class SessionManager:
 class DatabaseSessionManager:
     """数据库会话管理器，支持异步上下文管理器模式"""
 
-    __slots__ = (
-        "_session_id",
-        "db_name",
-        "session",
-        "session_manager",
-        "sessionmaker",
-    )
+    __slots__ = ("_session_id", "db_name", "session", "session_manager", "sessionmaker")
 
     def __init__(
         self,

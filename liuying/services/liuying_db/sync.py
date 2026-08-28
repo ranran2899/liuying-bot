@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from liuying.utils.log import logger
 
 from .config import LOG_COMMAND
+from .session import session_manager
 
 _SYNC_MAX_RETRIES = 3
 _SYNC_RETRY_DELAY = 5.0
@@ -135,9 +136,7 @@ class DBSyncManager:
         return result.scalar()
 
     @staticmethod
-    def _convert_time_fields(
-        row: dict[str, Any], tbl: Any
-    ) -> dict[str, Any]:
+    def _convert_time_fields(row: dict[str, Any], tbl: Any) -> dict[str, Any]:
         """仅对日期/时间类型的列，将字符串值解析为对应对象
 
         基于表 metadata 列类型精准转换，避免对每行每列盲目尝试多种时间格式，
@@ -159,7 +158,7 @@ class DBSyncManager:
                         parsed = datetime.strptime(value, fmt)
                         value = parsed.date() if isinstance(col_type, Date) else parsed
                         break
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         continue
             converted[key] = value
         return converted
@@ -266,9 +265,6 @@ class DBSyncManager:
             slave_db_name: 副数据库名称
         """
         logger.info(f"开始同步副数据库 {slave_db_name}...", LOG_COMMAND)
-
-        # 循环依赖：session 导入 sync_manager，sync 按需导入 session_manager
-        from .session import session_manager
 
         async with (
             session_manager.get_session() as master_session,

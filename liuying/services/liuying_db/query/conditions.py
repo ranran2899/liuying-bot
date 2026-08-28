@@ -59,6 +59,7 @@ def query_cache_namespace(model_class: type) -> str:
     """
     return f"dbq_{model_class.__name__}"
 
+
 _RETRYABLE_ERRORS = (OperationalError, DisconnectionError, InterfaceError, DBAPIError)
 _NON_RETRYABLE_KEYWORDS = (
     "syntax error",
@@ -138,27 +139,15 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-# 短操作符映射，供 where_or 等条件方法复用；
-# 与 _LOOKUPS 语义等价的条目直接引用，避免重复定义 lambda
+# 短操作符映射，供 where_or 等条件方法复用：
+# 与 Django lookup 命名一致的部分直接复用 _LOOKUPS，仅补充命名不同的别名
 _COMPARISON_OPS: dict[str, Callable[[Any, Any], ColumnElement[bool]]] = {
-    "eq": _LOOKUPS["exact"],
-    "ne": _LOOKUPS["ne"],
-    "gt": _LOOKUPS["gt"],
-    "gte": _LOOKUPS["gte"],
-    "lt": _LOOKUPS["lt"],
-    "lte": _LOOKUPS["lte"],
+    **_LOOKUPS,
+    "eq": lambda c, v: c == v,
     "like": lambda c, v: c.like(v),
     "ilike": lambda c, v: c.ilike(v),
-    "contains": _LOOKUPS["contains"],
-    "icontains": _LOOKUPS["icontains"],
-    "startswith": _LOOKUPS["startswith"],
-    "endswith": _LOOKUPS["endswith"],
-    "in": _LOOKUPS["in"],
-    "not_in": _LOOKUPS["not_in"],
     "is_null": lambda c, v: c.is_(None),
     "is_not_null": lambda c, v: c.isnot(None),
-    "between": _LOOKUPS["between"],
-    "regex": _LOOKUPS["regex"],
 }
 
 
@@ -175,9 +164,7 @@ def _is_django_lookup(key: str) -> bool:
     return "__" in key and not key.startswith("__") and not key.endswith("__")
 
 
-def _resolve_column_path(
-    model_class: type, key: str
-) -> tuple[Any, str, type]:
+def _resolve_column_path(model_class: type, key: str) -> tuple[Any, str, type]:
     """解析嵌套关系路径，返回最终列、lookup 类型和最终模型类
 
     参数:
@@ -279,7 +266,7 @@ def _compile_filter_args(
     clauses: list[ColumnElement[bool]] = []
     for arg in args:
         if isinstance(arg, Q):
-            compiled = arg.compile(model_class, _build_django_conditions)
+            compiled = arg.compile(model_class)
             if compiled is not None:
                 clauses.append(compiled)
         else:
@@ -388,47 +375,36 @@ class Q:
         q._children = [self, other]
         return q
 
-    def compile(
-        self,
-        model_class: type,
-        build_conditions_fn: Callable[
-            [type, dict[str, Any]], list[ColumnElement[bool]]
-        ],
-    ) -> ColumnElement[bool] | None:
+    def compile(self, model_class: type) -> ColumnElement[bool] | None:
         """将 Q 对象编译为 SQLAlchemy 条件表达式
 
         参数:
             model_class: 模型类，用于解析字段
-            build_conditions_fn: 将 kwargs 转换为条件列表的函数
 
         返回:
             ColumnElement[bool] | None: 编译后的条件表达式，空 Q 返回 None
         """
-        # 绝不能对表达式对象做真值过滤（filter(None, ...) 或 if clause）：
-        # 部分 SQLAlchemy 版本中 Comparison/BinaryExpression 布尔求值为 False，
-        # 会静默丢弃全部 Q 条件导致查询退化为全表
         if self._children:
+            # 不能用 filter(None, ...) 过滤子节点：SQLAlchemy 的
+            # BinaryExpression.__bool__ 对 eq/ne 做的是左右操作数同一性比较
+            # （为支持列对象哈希），bool(列 == 值) 恒为 False，
+            # 会把全部子条件静默丢弃，必须用 is not None 显式判空
             clauses = [
-                child
-                for child in (
-                    child_.compile(model_class, build_conditions_fn)
-                    for child_ in self._children
-                )
-                if child is not None
+                compiled
+                for child in self._children
+                if (compiled := child.compile(model_class)) is not None
             ]
             if not clauses:
                 return None
             clause = and_(*clauses) if self._operator == "AND" else or_(*clauses)
         else:
-            conditions = build_conditions_fn(model_class, self._kwargs)
+            # kwargs 与 args 统一收集后再判空，
+            # 避免仅有 SQLAlchemy 表达式参数的 Q 对象条件被静默丢弃
+            conditions: list[ColumnElement[bool]] = list(
+                _build_django_conditions(model_class, self._kwargs)
+            )
+            conditions.extend(_compile_filter_args(model_class, self._args))
             if not conditions:
                 return None
             clause = and_(*conditions)
-            for arg in self._args:
-                if isinstance(arg, Q):
-                    compiled = arg.compile(model_class, build_conditions_fn)
-                    if compiled is not None:
-                        clause = and_(clause, compiled)
-                else:
-                    clause = and_(clause, arg)
         return not_(clause) if self._negated else clause

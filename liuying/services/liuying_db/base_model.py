@@ -74,9 +74,7 @@ class Model(Base):
             case "all":
                 CacheRoot.register(cache_type, list[cls])
             case tuple(fields):
-                key_format = COMPOSITE_KEY_SEPARATOR.join(
-                    f"{{{f}}}" for f in fields
-                )
+                key_format = COMPOSITE_KEY_SEPARATOR.join(f"{{{f}}}" for f in fields)
                 CacheRoot.register(cache_type, cls, key_format=key_format)
             case str():
                 CacheRoot.register(cache_type, cls)
@@ -175,12 +173,17 @@ class Model(Base):
         task_id = id(task) if task else 0
         need_lock = cls._require_lock(lock_type)
         if need_lock and (lock := cls._get_lock(lock_type)):
+            # 保存外层锁记录，避免内层锁退出时误清外层的重入标记导致死锁
+            prev_lock_type = cls._current_locks.get(task_id)
             cls._current_locks[task_id] = lock_type
             try:
                 async with lock:
                     yield
             finally:
-                cls._cleanup_lock_record(task_id)
+                if prev_lock_type is None:
+                    cls._cleanup_lock_record(task_id)
+                else:
+                    cls._current_locks[task_id] = prev_lock_type
         else:
             yield
 
@@ -215,7 +218,7 @@ class Model(Base):
     @classmethod
     async def _handle_integrity_error(
         cls, session: AsyncSession, kwargs: dict
-    ) -> tuple[Self | None, bool]:
+    ) -> Self | None:
         """处理完整性错误，用于 get_or_create 和 update_or_create
 
         插入操作已在 nested_transaction（savepoint）中执行，
@@ -226,28 +229,28 @@ class Model(Base):
             kwargs: 查询条件
 
         返回:
-            tuple[Self | None, bool]: 模型实例和是否为新创建
+            Self | None: 冲突后回查到的模型实例；
+                        None 表示冲突并非唯一约束引起（如非空约束），
+                        调用方应重抛原异常而非静默返回 None
         """
-        stmt = build_filter_statement(cls, **kwargs)
+        stmt = build_filter_statement(cls, **kwargs).limit(1)
         result = await session.execute(stmt)
-        return result.scalars().first(), False
+        return result.scalars().first()
 
     @classmethod
-    async def _create_within_savepoint(
+    async def _create_in_nested(
         cls, sess: AsyncSession, kwargs: dict, defaults: dict | None
     ) -> Self:
-        """在保存点中插入一条新记录
-
-        IntegrityError 仅回滚保存点，外部事务不受影响，
-        调用方随后可直接在原会话中查询既有记录。
+        """在保存点中创建记录，供 get_or_create / update_or_create 复用，
+        冲突异常时仅回滚保存点而非整个事务
 
         参数:
-            sess: 当前数据库会话
-            kwargs: 查询条件字段
-            defaults: 额外的默认值字段
+            sess: 数据库会话
+            kwargs: 查询条件（作为创建字段）
+            defaults: 默认值字典
 
         返回:
-            Self: 新创建的模型实例
+            Self: 创建的模型实例
         """
         async with nested_transaction(sess):
             instance = cls(**kwargs, **(defaults or {}))
@@ -336,19 +339,21 @@ class Model(Base):
             tuple[Self, bool]: 模型实例和是否为新创建
         """
         async with cls._managed_session(session, db_name) as sess:
-            stmt = build_filter_statement(cls, **kwargs)
+            stmt = build_filter_statement(cls, **kwargs).limit(1)
             result = await sess.execute(stmt)
             instance = result.scalars().first()
             if instance:
                 return instance, False
             try:
-                instance = await cls._create_within_savepoint(
-                    sess, kwargs, defaults
-                )
+                instance = await cls._create_in_nested(sess, kwargs, defaults)
                 await cls._invalidate_cache(instance)
                 return instance, True
             except IntegrityError:
-                return await cls._handle_integrity_error(sess, kwargs)
+                instance = await cls._handle_integrity_error(sess, kwargs)
+                if instance is None:
+                    # 冲突非唯一约束引起（如非空约束），重抛原异常避免静默返回 None
+                    raise
+                return instance, False
 
     @classmethod
     async def update_or_create(
@@ -372,8 +377,8 @@ class Model(Base):
         async with cls._managed_session(session, db_name) as sess:
             async with cls._lock_context(DbLockType.UPSERT):
                 try:
-                    stmt = build_filter_statement(cls, **kwargs).with_for_update()
-                    result = await sess.execute(stmt)
+                    stmt = build_filter_statement(cls, **kwargs).limit(1)
+                    result = await sess.execute(stmt.with_for_update())
                     instance = result.scalars().first()
                     if instance:
                         for key, value in (defaults or {}).items():
@@ -381,21 +386,22 @@ class Model(Base):
                         await sess.flush()
                         created = False
                     else:
-                        instance = await cls._create_within_savepoint(
-                            sess, kwargs, defaults
-                        )
+                        instance = await cls._create_in_nested(sess, kwargs, defaults)
                         created = True
                     await cls._invalidate_cache(instance)
                     return instance, created
                 except IntegrityError:
-                    return await cls._handle_integrity_error(sess, kwargs)
+                    instance = await cls._handle_integrity_error(sess, kwargs)
+                    if instance is None:
+                        # 冲突非唯一约束引起（如非空约束），重抛原异常避免静默返回 None
+                        raise
+                    return instance, False
 
     async def save(
         self,
         session: AsyncSession | None = None,
         update_fields: Iterable[str] | None = None,
         force_create: bool = False,
-        force_update: bool = False,
         db_name: str = "default",
     ):
         """保存数据（根据操作类型自动选择锁）
@@ -404,7 +410,6 @@ class Model(Base):
             session: 可选的数据库会话
             update_fields: 要更新的字段列表（仅对已存在的记录有效）
             force_create: 强制创建（即使主键已存在也执行 INSERT）
-            force_update: 强制更新（保留参数，主键存在时自动走 UPDATE 路径）
             db_name: 数据库名称
         """
         async with self._managed_session(session, db_name) as sess:
@@ -459,43 +464,6 @@ class Model(Base):
             await sess.delete(self)
             await sess.flush()
             await self.__class__._invalidate_cache(self)
-
-    @classmethod
-    async def first_or_create(
-        cls,
-        session: AsyncSession | None = None,
-        defaults: dict | None = None,
-        db_name: str = "default",
-        **kwargs: Any,
-    ) -> tuple[Self, bool]:
-        """获取第一条匹配记录，不存在则创建
-
-        与 get_or_create 的区别：get_or_create 使用 filter_by 精确匹配，
-        而 first_or_create 支持更灵活的查询条件。
-
-        参数:
-            session: 可选的数据库会话
-            defaults: 创建时的默认值字典
-            db_name: 数据库名称
-            **kwargs: 查询条件
-
-        返回:
-            tuple[Self, bool]: 模型实例和是否为新创建
-        """
-        async with cls._managed_session(session, db_name) as sess:
-            stmt = build_filter_statement(cls, **kwargs).limit(1)
-            result = await sess.execute(stmt)
-            instance = result.scalars().first()
-            if instance:
-                return instance, False
-            try:
-                instance = await cls._create_within_savepoint(
-                    sess, kwargs, defaults
-                )
-                await cls._invalidate_cache(instance)
-                return instance, True
-            except IntegrityError:
-                return await cls._handle_integrity_error(sess, kwargs)
 
     @classmethod
     async def safe_get_or_none(

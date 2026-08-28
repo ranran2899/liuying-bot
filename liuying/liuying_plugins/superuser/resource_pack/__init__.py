@@ -57,7 +57,8 @@ _matcher.shortcut(
 async def _auto_download():
     """启动时自动下载资源包（优先级 2，晚于数据库与渲染服务）
 
-    仅当资源包尚未安装（无版本记录）时才下载安装，已安装则跳过更新。
+    仅在首次启动（目标目录缺少版本索引 json，如 resource.json）时
+    自动下载安装；已安装则跳过，后续更新由用户手动触发。
     """
     for meta in RESOURCE_PACKS:
         if ResourcePackManager.is_installed(meta):

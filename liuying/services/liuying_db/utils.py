@@ -58,8 +58,7 @@ class DbUtils:
         except TimeoutError:
             if operation:
                 logger.error(
-                    f"数据库操作超时: {operation} (>{timeout_seconds}s) "
-                    f"来源: {source}",
+                    f"数据库操作超时: {operation} (>{timeout_seconds}s) 来源: {source}",
                     LOG_COMMAND,
                 )
             raise
@@ -106,7 +105,7 @@ class DbUtils:
             tuple[datetime, datetime]: (起始时间, 结束时间)
         """
         if base_date is None:
-            base_date = datetime.today()
+            base_date = datetime.now()
 
         today_start = base_date.replace(**_MIDNIGHT)
 
