@@ -14,9 +14,14 @@ from nonebot.adapters.qq.config import BotInfo, Intents
 
 from liuying.utils.log import logger
 
+from ._intent import DEFAULT_INTENT
+
 
 def build_bot_info(config: dict[str, Any]) -> BotInfo:
     """从配置字典构建BotInfo对象
+
+    意图配置与DEFAULT_INTENT合并,数据库旧配置缺失的新字段
+    (如group_members)自动取默认值,用户显式配置优先
 
     参数:
         config: 配置字典
@@ -24,11 +29,12 @@ def build_bot_info(config: dict[str, Any]) -> BotInfo:
     返回:
         BotInfo: QQ适配器BotInfo对象
     """
+    intent = {**DEFAULT_INTENT, **config.get("intent", {})}
     return BotInfo(
         id=config["bot_id"],
         token=config["token"],
         secret=config["secret"],
-        intent=Intents(**config.get("intent", {})),
+        intent=Intents(**intent),
         use_websocket=config.get("use_websocket", True),
     )
 

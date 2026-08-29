@@ -1,6 +1,6 @@
 import asyncio
-import random
 from collections.abc import Awaitable, Callable
+import random
 from typing import cast
 
 import httpx
@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from liuying.configs.config import BotConfig
 from liuying.models._bot import BotFriend
-from liuying.models._group import GroupConsole
+from liuying.models._group import GroupConfig, GroupConsole
 from liuying.utils.exception import NotFindSuperuser
 from liuying.utils.http.http_utils import AsyncHttpx
 from liuying.utils.log import logger
@@ -606,7 +606,7 @@ class BroadcastEngine:
                 group_id=group.group_id,
             )
             return
-        if not await GroupConsole.is_proactive_allowed(group.group_id):
+        if not await GroupConfig.is_proactive_allowed(group.group_id):
             logger.debug(
                 "群聊已关闭主动消息, 跳过该群组...",
                 command=self.log_cmd,

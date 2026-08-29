@@ -11,7 +11,6 @@ import json
 from typing import Any
 
 from liuying.configs.config import Config
-from liuying.models._bot.qq_bot_config import QQBotConfig
 from liuying.models._user import UserLevel
 from liuying.services.cache import Cache
 from liuying.utils.log import logger
@@ -23,6 +22,7 @@ from ._intent import (
     VALID_INTENT_FIELDS,
 )
 from ._monitor import ReconnectMonitor
+from .model import QQBotConfig
 
 _CONFIG_MODULE = "qq_bot_config"
 """配置模块名"""

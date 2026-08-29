@@ -189,7 +189,6 @@ class QQBotConfig(Model):
         config = await cls.filter(user_id=user_id, bot_id=bot_id).first()
         if not config:
             return False
-
         await config.delete()
         return True
 

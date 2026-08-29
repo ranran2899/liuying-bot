@@ -59,9 +59,6 @@ class GroupConsole(Model):
     superuser_block_plugin: Mapped[str] = mapped_column(Text, default="", comment="超级用户禁用插件")
     block_task: Mapped[str] = mapped_column(Text, default="", comment="禁用被动技能")
     superuser_block_task: Mapped[str] = mapped_column(Text, default="", comment="超级用户禁用被动")
-    proactive_allowed: Mapped[bool] = mapped_column(
-        Boolean, default=True, comment="群聊是否允许机器人主动消息"
-    )
     platform: Mapped[str] = mapped_column(String(255), default="qq", comment="所属平台")
 
     cache_type = CacheType.GROUPS
@@ -365,36 +362,6 @@ class GroupConsole(Model):
             await group.save()
 
     @classmethod
-    async def is_proactive_allowed(cls, group_id: str) -> bool:
-        """检查群聊是否允许机器人主动消息
-
-        参数:
-            group_id: 群组id
-
-        返回:
-            bool: 是否允许主动消息，群组不存在时默认返回True
-        """
-        group = await cls.get_group(group_id)
-        return group.proactive_allowed if group else True
-
-    @classmethod
-    async def set_proactive_status(
-        cls, group_id: str, allowed: bool
-    ):
-        """设置群聊主动消息状态
-
-        参数:
-            group_id: 群组id
-            allowed: 是否允许主动消息
-        """
-        group, created = await cls.get_or_create(
-            group_id=group_id, channel_id=None
-        )
-        if not created or group.proactive_allowed != allowed:
-            group.proactive_allowed = allowed
-            await group.save()
-
-    @classmethod
     async def toggle_super_group(cls, group_id: str):
         """切换超级群组状态
 
@@ -459,5 +426,5 @@ class GroupConsole(Model):
             "ALTER TABLE group_console ADD superuser_block_plugin TEXT DEFAULT '';",
             "ALTER TABLE group_console ADD superuser_block_task TEXT DEFAULT '';",
             "ALTER TABLE group_console ADD block_task TEXT DEFAULT '';",
-            "ALTER TABLE group_console ADD proactive_allowed BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE group_console DROP proactive_allowed;",
         ]

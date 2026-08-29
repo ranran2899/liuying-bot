@@ -10,7 +10,7 @@ from nonebot_plugin_alconna import UniMessage
 from nonebot_plugin_alconna.uniseg import Receipt, Reference
 from nonebot_plugin_session import EventSession
 
-from liuying.models._group import GroupConsole
+from liuying.models._group import GroupConfig, GroupConsole
 from liuying.utils.common_utils import CommonUtils
 from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
@@ -295,7 +295,7 @@ class BroadcastManager:
         if await CommonUtils.task_is_block(bot, "broadcast", group.group_id):
             return False
 
-        if not await GroupConsole.is_proactive_allowed(group.group_id):
+        if not await GroupConfig.is_proactive_allowed(group.group_id):
             logger.debug(
                 f"群组 {group.group_id} 已关闭主动消息,跳过广播",
                 "广播",

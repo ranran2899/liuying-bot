@@ -1,6 +1,7 @@
 """QQ机器人意图字段定义"""
 
 from enum import StrEnum
+from typing import Self
 
 
 class IntentField(StrEnum):
@@ -24,6 +25,8 @@ class IntentField(StrEnum):
     """论坛事件(公开版)"""
     AUDIO_LIVE_MEMBER = "audio_live_member", "语音直播成员事件"
     """语音直播成员事件"""
+    GROUP_MEMBERS = "group_members", "群成员事件"
+    """群成员事件"""
     C2C_GROUP_AT_MESSAGES = "c2c_group_at_messages", "C2C和群@消息事件"
     """C2C和群@消息事件"""
     INTERACTION = "interaction", "互动事件"
@@ -40,7 +43,7 @@ class IntentField(StrEnum):
     description: str
     """字段中文描述"""
 
-    def __new__(cls, value: str, description: str) -> "IntentField":
+    def __new__(cls, value: str, description: str) -> Self:
         """构造枚举成员
 
         参数:
@@ -66,6 +69,7 @@ DEFAULT_INTENT: dict[str, bool] = {
     IntentField.DIRECT_MESSAGE: False,
     IntentField.OPEN_FORUM_EVENT: False,
     IntentField.AUDIO_LIVE_MEMBER: False,
+    IntentField.GROUP_MEMBERS: True,
     IntentField.C2C_GROUP_AT_MESSAGES: True,
     IntentField.INTERACTION: False,
     IntentField.MESSAGE_AUDIT: True,

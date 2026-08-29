@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from typing import ClassVar
 
-from sqlalchemy import BigInteger, DateTime, String
+from sqlalchemy import JSON, BigInteger, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.data_access import DataAccess
@@ -47,6 +47,22 @@ class GroupInfoUser(Model):
         DateTime, nullable=True, comment="用户入群时间"
     )
     """用户入群时间"""
+    group_description: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="群简介"
+    )
+    """群简介"""
+    group_category: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="群分类"
+    )
+    """群分类"""
+    group_tags: Mapped[list | None] = mapped_column(
+        JSON, nullable=True, comment="群标签列表"
+    )
+    """群标签列表"""
+    member_count: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, comment="群成员人数"
+    )
+    """群成员人数"""
     platform: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="平台"
     )
@@ -241,4 +257,12 @@ class GroupInfoUser(Model):
             "ALTER TABLE group_member_info ALTER COLUMN uid TYPE BIGINT;",
             "ALTER TABLE group_member_info "
             "ADD COLUMN platform VARCHAR(255) default 'qq';",
+            "ALTER TABLE group_member_info "
+            "ADD COLUMN group_description VARCHAR(255);",
+            "ALTER TABLE group_member_info "
+            "ADD COLUMN group_category VARCHAR(255);",
+            "ALTER TABLE group_member_info "
+            "ADD COLUMN group_tags JSON;",
+            "ALTER TABLE group_member_info "
+            "ADD COLUMN member_count INTEGER;",
         ]

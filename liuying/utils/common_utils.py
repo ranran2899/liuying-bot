@@ -5,9 +5,9 @@ from nonebot.adapters import Bot
 from nonebot_plugin_uninfo import Session, Uninfo
 
 from liuying.configs.config import BotConfig
-from liuying.models.ban_console import BanConsole
 from liuying.models._bot import BotConsole
-from liuying.models._group import GroupConsole
+from liuying.models._group import GroupConfig, GroupConsole
+from liuying.models.ban_console import BanConsole
 from liuying.models.task_info import TaskInfo
 from liuying.utils.log import logger
 
@@ -48,13 +48,13 @@ class CommonUtils:
             if g := await GroupConsole.get_group(group_id=group_id):
                 if g.level < 0:
                     return True
-                if not g.proactive_allowed:
-                    logger.debug(
-                        f"群 {group_id} 已关闭主动消息, "
-                        f"被动技能 {module} 被屏蔽",
-                        "被动技能",
-                    )
-                    return True
+            if not await GroupConfig.is_proactive_allowed(group_id):
+                logger.debug(
+                    f"群 {group_id} 已关闭主动消息, "
+                    f"被动技能 {module} 被屏蔽",
+                    "被动技能",
+                )
+                return True
             if await BanConsole.is_ban(None, group_id):
                 return True
 

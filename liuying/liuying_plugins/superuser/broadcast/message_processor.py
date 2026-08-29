@@ -21,7 +21,7 @@ from nonebot_plugin_alconna.uniseg.segment import (
 from nonebot_plugin_alconna.uniseg.tools import reply_fetch
 from nonebot_plugin_session import EventSession
 
-from liuying.models._group import GroupConsole
+from liuying.models._group import GroupConfig
 from liuying.utils.common_utils import CommonUtils
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
@@ -539,7 +539,7 @@ async def get_broadcast_target_groups(
     enabled_groups = []
     for group in target_groups:
         if not await CommonUtils.task_is_block(bot, "broadcast", group.group_id):
-            if await GroupConsole.is_proactive_allowed(group.group_id):
+            if await GroupConfig.is_proactive_allowed(group.group_id):
                 enabled_groups.append(group)
 
     if not enabled_groups:

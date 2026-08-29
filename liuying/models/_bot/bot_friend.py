@@ -158,14 +158,14 @@ class BotFriend(Model):
         await friend.delete()
         return True
 
-    # @classmethod
-    # def _run_script(cls):
-    #     """数据库迁移
+    @classmethod
+    def _run_script(cls):
+        """数据库迁移
 
-    #     返回:
-    #         list: SQL语句列表，用于数据库表结构更新
-    #     """
-    #     return [
-    #         "ALTER TABLE bot_friends "
-    #         "ALTER COLUMN user_id TYPE VARCHAR(255);",
-    #     ]
+        返回:
+            list: SQL语句列表，用于数据库表结构更新
+        """
+        return [
+            # "ALTER TABLE bot_friends "
+            # "ALTER COLUMN user_id TYPE VARCHAR(255);",
+        ]

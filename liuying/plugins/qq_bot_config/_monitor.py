@@ -14,10 +14,10 @@ import nonebot
 from nonebot.adapters import Bot
 
 from liuying.configs.config import Config
-from liuying.models._bot.qq_bot_config import QQBotConfig
 from liuying.utils.log import logger
 
 from ._adapter import QQAdapterManager
+from .model import QQBotConfig
 
 DeleteCallback = Callable[[str, str], Awaitable[tuple[bool, str]]]
 """自动删除回调签名: (user_id, bot_id) -> (是否成功, 消息)"""
