@@ -1,11 +1,11 @@
-"""漂流瓶管理 WebUI 路由"""
+"""漂流瓶管理 WebUI 路由（由 bottle 插件通过扩展接口自行注册）"""
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from liuying.liuying_plugins.web_ui.base_model import BaseResultModel, Result
+from liuying.liuying_plugins.web_ui.utils import authentication
 from liuying.utils.log import logger
 
-from ....base_model import BaseResultModel, Result
-from ....utils import authentication
 from .data_source import BottleReviewDataSource
 from .model import (
     BottleBatchDeletePayload,

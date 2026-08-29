@@ -1,0 +1,16 @@
+/*
+ * 漂流瓶管理页图片预览样式
+ * 通过 registry.register_page(css=[...]) 由 WebUI 自动注入
+ */
+
+/* 图片预览：悬浮轻微上浮并加深阴影 */
+.bottle-image {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.bottle-image:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 35%);
+}

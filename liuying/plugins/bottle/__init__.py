@@ -23,6 +23,7 @@ from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 
 from .handler import BottleHandler
+from .web import register as register_webui
 
 __plugin_meta__ = PluginMetadata(
     name="漂流瓶",
@@ -107,6 +108,9 @@ __plugin_meta__ = PluginMetadata(
         ],
     ).to_dict(),
 )
+
+# 注册漂流瓶管理页到流萤 WebUI（API 路由 + 静态资源 + 侧边栏页面）
+register_webui()
 
 throw_cmd = on_alconna(
     Alconna("扔瓶子", Args["content?", str], CommandMeta(strict=False)),

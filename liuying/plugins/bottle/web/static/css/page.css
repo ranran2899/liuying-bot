@@ -1,0 +1,15 @@
+/*
+ * 漂流瓶管理页通用样式
+ * 通过 registry.register_page(css=[...]) 由 WebUI 自动注入
+ * 半透明、无毛玻璃、高亮边框风格由本体变量统一提供，无需页面覆盖
+ */
+
+/* 页面标题下留出呼吸空间 */
+.page--bottle .grid--4 {
+  margin-bottom: 4px;
+}
+
+/* 表头吸顶时提高不透明度，避免滚动行内容穿透重叠 */
+.page--bottle .table th {
+  background-color: rgb(12 17 32 / 78%) !important;
+}

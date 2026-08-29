@@ -2,6 +2,7 @@ import asyncio
 import secrets
 
 from fastapi import APIRouter, FastAPI
+from fastapi.staticfiles import StaticFiles
 import nonebot
 from nonebot.log import default_filter, default_format
 from nonebot.plugin import PluginMetadata
@@ -17,7 +18,6 @@ from .api.logs import router as ws_log_routes
 from .api.logs.log_manager import LOG_STORAGE
 from .api.menu import router as menu_router
 from .api.tabs.ai import router as ai_router
-from .api.tabs.bottle import router as bottle_router
 from .api.tabs.dashboard import router as dashboard_router
 from .api.tabs.database import router as database_router
 from .api.tabs.main import router as main_router
@@ -29,6 +29,7 @@ from .api.tabs.plugin_manage.store import router as store_router
 from .api.tabs.system import router as system_router
 from .auth import router as auth_router
 from .public import init_public
+from .registry import registry
 
 __plugin_meta__ = PluginMetadata(
     name="web_ui",
@@ -87,7 +88,6 @@ BaseApiRouter.include_router(system_router)
 BaseApiRouter.include_router(menu_router)
 BaseApiRouter.include_router(configure_router)
 BaseApiRouter.include_router(ai_router)
-BaseApiRouter.include_router(bottle_router)
 
 WsApiRouter = APIRouter(prefix="/liuying/socket")
 
@@ -119,9 +119,30 @@ async def _():
         )
 
         app: FastAPI = nonebot.get_app()
+        # 挂载外部插件注册的 API 与 WS 路由（插件导入阶段完成注册）
+        for ext_router in registry.api_routers:
+            BaseApiRouter.include_router(ext_router)
+        for ext_router in registry.ws_routers:
+            WsApiRouter.include_router(ext_router)
+        # 清理已卸载插件残留的外部菜单项
+        registry.sync_menus()
         app.include_router(BaseApiRouter)
         app.include_router(WsApiRouter)
         await init_public(app)
+        # 挂载外部插件注册的静态资源目录
+        for mount_path, directory in registry.static_mounts:
+            if not directory.is_dir():
+                logger.warning(
+                    f"外部静态资源目录不存在，跳过挂载: {directory}",
+                    command="WebUI",
+                )
+                continue
+            app.mount(
+                mount_path,
+                StaticFiles(directory=directory, check_dir=True),
+                name=f"ext_{mount_path.strip('/') or 'root'}",
+            )
+            logger.debug(f"挂载外部静态资源: {mount_path}", command="WebUI")
         logger.info("<g>API启动成功</g>", command="WebUi")
     except Exception as e:
         logger.error("<g>API启动失败</g>", command="WebUi", e=e)

@@ -3,6 +3,7 @@ import ujson as json
 from liuying.configs.path_config import DATA_PATH
 from liuying.utils.log import logger
 
+from ...public import get_version
 from .model import MenuData, MenuItem
 
 default_menus = [
@@ -22,12 +23,6 @@ default_menus = [
     MenuItem(name="插件列表", module="plugin", router="/plugin", icon="plugin"),
     MenuItem(name="插件商店", module="store", router="/store", icon="store"),
     MenuItem(name="好友/群组", module="manage", router="/manage", icon="user"),
-    MenuItem(
-        name="漂流瓶管理",
-        module="bottle",
-        router="/bottle",
-        icon="bottle",
-    ),
     MenuItem(
         name="数据库管理",
         module="database",
@@ -75,7 +70,21 @@ class MenuManager:
         ]
 
     def get_menus(self):
-        return MenuData(menus=self.menu)
+        return MenuData(version=get_version(), menus=self.menu)
+
+    def add_external(self, item: MenuItem):
+        """新增外部插件注册的菜单项（按 module 去重）"""
+        if any(m.module == item.module for m in self.menu):
+            return
+        self.menu.append(item)
+        self.save()
+
+    def keep_modules(self, modules: set[str]):
+        """仅保留指定 module 的菜单项（同步清理已卸载插件的残留菜单）"""
+        temp = [m for m in self.menu if m.module in modules]
+        if len(temp) != len(self.menu):
+            self.menu = temp
+            self.save()
 
     def save(self):
         self.file.parent.mkdir(parents=True, exist_ok=True)
