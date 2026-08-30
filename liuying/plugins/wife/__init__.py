@@ -1,19 +1,23 @@
 """每日wife插件 - 随机抽取二次元老婆"""
 
-from nonebot import on_command
-from nonebot.adapters import Message
-from nonebot.matcher import Matcher
-from nonebot.params import Arg, ArgPlainText, CommandArg
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
-from nonebot_plugin_alconna import Alconna, Args, UniMsg, on_alconna
+from nonebot_plugin_alconna import (
+    Alconna,
+    Args,
+    CommandMeta,
+    Match,
+    UniMsg,
+    on_alconna,
+)
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.utils import Command, PluginExtraData, RegisterConfig
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
+from liuying.utils.message import MessageUtils
 
-from .wife import WifeHandler
+from ._data_source import WifeManage
 
 __plugin_meta__ = PluginMetadata(
     name="每日wife",
@@ -28,7 +32,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     extra=PluginExtraData(
         author="liuying",
-        version="0.1",
+        version="0.2",
         plugin_type=PluginType.NORMAL,
         menu_type="娱乐",
         is_show=True,
@@ -41,20 +45,6 @@ __plugin_meta__ = PluginMetadata(
             Command(command="重置wife库", description="重置wife库到初始状态"),
         ],
         configs=[
-            RegisterConfig(
-                key="MAX_WIFE_COUNT",
-                value=1000,
-                help="wife库最大数量限制",
-                default_value=1000,
-                type=int,
-            ),
-            RegisterConfig(
-                key="ENABLE_MULTI_ADAPTER",
-                value=True,
-                help="是否启用多适配器支持",
-                default_value=True,
-                type=bool,
-            ),
             RegisterConfig(
                 key="ENABLE_GOLD",
                 value=20,
@@ -89,8 +79,8 @@ search_wife_cmd = on_alconna(
     block=True,
 )
 
-add_wife_cmd = on_command(
-    "添加wife",
+add_wife_cmd = on_alconna(
+    Alconna("添加wife", Args["wife_name?", str], CommandMeta(strict=False)),
     aliases={"添加老婆"},
     permission=SUPERUSER,
     priority=50,
@@ -126,62 +116,52 @@ reset_wife_cmd = on_alconna(
 async def _(session: Uninfo):
     """抽wife"""
     logger.info("用户抽wife请求", command="抽wife", session=session)
-    await WifeHandler.draw_wife(session.user.id)
+    result = await WifeManage.draw_wife(session.user.id)
+    await MessageUtils.build_message(result).finish(reply_to=True)
 
 
 @search_wife_cmd.handle()
 async def _(session: Uninfo, wife_name: str):
     """查找wife"""
     logger.info(f"查找wife: {wife_name}", command="查找wife", session=session)
-    await WifeHandler.search_wife(wife_name)
+    await MessageUtils.build_message(await WifeManage.search_wife(wife_name)).finish()
 
 
 @add_wife_cmd.handle()
-async def _(
-    matcher: Matcher,
-    message: UniMsg,
-    args: Message = CommandArg(),
-):
-    """添加wife - 第一步"""
-    if args.extract_plain_text().strip():
-        matcher.state["ARGS"] = args
-    image_urls = [
-        seg.data.get("url", "") or seg.data.get("file", "")
+async def _(session: Uninfo, message: UniMsg, wife_name: Match[str]):
+    """添加wife"""
+    name = wife_name.result.strip() if wife_name.available else ""
+    if not name:
+        await MessageUtils.build_message("名字呢?").finish()
+
+    urls = [
+        url
         for seg in message
-        if seg.type == "image"
+        if seg.type == "image" and (url := seg.data.get("url") or seg.data.get("file"))
     ]
-    if image_urls:
-        matcher.state["IMAGES"] = image_urls
+    if not urls:
+        await MessageUtils.build_message("图呢?").finish()
 
-
-@add_wife_cmd.got("ARGS", prompt="名字呢?")
-@add_wife_cmd.got("IMAGES", prompt="图呢?")
-async def _(
-    session: Uninfo,
-    wife_name: str = ArgPlainText("ARGS"),
-    image_urls: list = Arg("IMAGES"),
-):
-    """添加wife - 第二步"""
-    logger.info(f"添加wife: {wife_name}", command="添加wife", session=session)
-    await WifeHandler.add_wife(wife_name, image_urls)
+    logger.info(f"添加wife: {name}", command="添加wife", session=session)
+    await MessageUtils.build_message(await WifeManage.add_wife(name, urls)).finish()
 
 
 @del_wife_cmd.handle()
 async def _(session: Uninfo, wife_name: str):
     """删除wife"""
     logger.info(f"删除wife: {wife_name}", command="删除wife", session=session)
-    await WifeHandler.del_wife(wife_name)
+    await MessageUtils.build_message(await WifeManage.del_wife(wife_name)).finish()
 
 
 @clear_wife_cmd.handle()
 async def _(session: Uninfo):
     """清空wife库"""
     logger.info("清空wife库请求", command="清空wife库", session=session)
-    await WifeHandler.clear_wife()
+    await MessageUtils.build_message(await WifeManage.clear_wife()).finish()
 
 
 @reset_wife_cmd.handle()
 async def _(session: Uninfo):
     """重置wife库"""
     logger.info("重置wife库请求", command="重置wife库", session=session)
-    await WifeHandler.reset_wife()
+    await MessageUtils.build_message(await WifeManage.reset_wife()).finish()

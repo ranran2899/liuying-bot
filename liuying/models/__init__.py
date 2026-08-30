@@ -9,7 +9,6 @@ from .bottle import BottleComment, BottleImage, BottleLike, BottleRecord
 from .plugin_info import PluginInfo
 from .plugin_limit import PluginLimit
 from .tarot import TarotCollection, TarotDailyRecord
-from .wife_image import WifeImageRecord
 
 __all__ = [
     "BottleComment",
@@ -25,5 +24,4 @@ __all__ = [
     "TarotCollection",
     "TarotDailyRecord",
     "TokenUsage",
-    "WifeImageRecord",
 ]

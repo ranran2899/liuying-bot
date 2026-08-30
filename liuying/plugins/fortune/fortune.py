@@ -6,7 +6,6 @@ import random
 from nonebot_plugin_alconna import Button
 from nonebot_plugin_uninfo import Uninfo
 
-from .model import UserFortuneRecord
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.bed_layout import BedLayout
 from liuying.utils.enum import StorageType
@@ -14,6 +13,8 @@ from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.platform import PlatformUtils
 from liuying.utils.rules import ensure_group
+
+from .model import UserFortuneRecord
 
 # 运势数据: (运势名称, 运势文案)，从低到高排列
 FORTUNE_DATA: list[tuple[str, str]] = [
@@ -63,7 +64,7 @@ class FortuneHandler:
         返回:
             bytes | None: 图片字节数据，不存在返回None
         """
-        from liuying.models.wife_image import WifeImageRecord
+        from liuying.plugins.wife.models import WifeImageRecord
 
         image_record = await WifeImageRecord.get_random_image()
         if not image_record:
