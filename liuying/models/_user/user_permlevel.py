@@ -23,7 +23,7 @@ class UserPermLevel(Model):
     支持记录用户所在平台，超级用户固定返回 10 级。
     """
 
-    __tablename__ = "level_user"
+    __tablename__ = "user_perm_level"
     __table_args__ = (
         UniqueConstraint("user_id", "group_id", "bot_id"),
         {"comment": "用户权限等级表，用于管理用户的权限等级"},
