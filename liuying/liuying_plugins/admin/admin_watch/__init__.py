@@ -4,7 +4,7 @@ from nonebot.plugin import PluginMetadata
 
 from liuying.configs.config import Config
 from liuying.configs.utils.models import PluginExtraData, RegisterConfig
-from liuying.models._user import UserLevel
+from liuying.models._user import UserPermLevel
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.rules import notice_rule
@@ -44,7 +44,7 @@ async def _(event: GroupAdminNoticeEvent):
         case "set":
             admin_default_auth = base_config.get("ADMIN_DEFAULT_AUTH")
             if admin_default_auth is not None:
-                await UserLevel.set_level(
+                await UserPermLevel.set_level(
                     str(event.user_id),
                     str(event.group_id),
                     admin_default_auth,
@@ -61,7 +61,7 @@ async def _(event: GroupAdminNoticeEvent):
                     " KEY: [<u><y>ADMIN_DEFAULT_AUTH</y></u>] 为空"
                 )
         case "unset":
-            await UserLevel.delete_level(str(event.user_id), str(event.group_id))
+            await UserPermLevel.delete_level(str(event.user_id), str(event.group_id))
             logger.info(
                 "撤销群管理员, 取消权限等级",
                 "群管理员变动监测",

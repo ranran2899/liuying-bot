@@ -1,6 +1,6 @@
 """AI ACL 检查器
 
-封装流萤本体 ACL 体系（超级用户/UserLevel等级/BanConsole黑名单），
+封装流萤本体 ACL 体系（超级用户/UserPermLevel等级/BanConsole黑名单），
 为 AI 插件提供统一的只读权限检查接口。
 
 注意：本模块仅提供权限检查，不提供管理操作（ban/unban/授权等）。
@@ -11,7 +11,7 @@
 
 权限层级：
 1. 超级用户（bot.config.superusers） - 最高权限，绕过所有检查
-2. 管理员（UserLevel.user_level >= level） - 等级鉴权
+2. 管理员（UserPermLevel.user_perm >= level） - 等级鉴权
 3. 普通用户 - 默认权限
 
 黑名单检查：
@@ -21,7 +21,7 @@
 
 from dataclasses import dataclass
 
-from liuying.models._user import UserLevel
+from liuying.models._user import UserPermLevel
 from liuying.models.ban_console import BanConsole
 
 __all__ = ["AclChecker", "PermissionResult", "acl_checker"]
@@ -72,7 +72,7 @@ class AclChecker:
         返回:
             bool: 是否超级用户
         """
-        return UserLevel.is_superuser(str(user_id))
+        return UserPermLevel.is_superuser(str(user_id))
 
     @staticmethod
     async def get_user_level(
@@ -90,7 +90,7 @@ class AclChecker:
         返回:
             int: 权限等级（0为普通用户）
         """
-        return await UserLevel.get_level(user_id, bot_id, group_id)
+        return await UserPermLevel.get_level(user_id, bot_id, group_id)
 
     @staticmethod
     async def check_admin(

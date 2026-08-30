@@ -7,7 +7,7 @@ import nonebot
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.utils import PluginExtraData
-from liuying.models._user import UserLevel
+from liuying.models._user import UserPermLevel
 from liuying.models.plugin_info import PluginInfo
 from liuying.models.statistics import Statistics
 from liuying.utils.enum import PluginType
@@ -76,8 +76,8 @@ async def get_user_allowed_types(user_id: str) -> list[PluginType]:
     """
     types = [PluginType.NORMAL, PluginType.DEPENDANT]
 
-    user_levels = await UserLevel.filter(
-        user_id=user_id, user_level__gt=0
+    user_levels = await UserPermLevel.filter(
+        user_id=user_id, user_perm__gt=0
     ).exists()
 
     if user_levels:

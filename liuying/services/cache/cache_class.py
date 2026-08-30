@@ -22,7 +22,7 @@ class Cache[T]:
         ```python
         from liuying.services.cache import Cache
 
-        level_cache = Cache("LEVEL", result_type=list[UserLevel])
+        level_cache = Cache("LEVEL", result_type=list[UserPermLevel])
 
         users = await level_cache.get({"user_id": "123", "group_id": "456"})
         await level_cache.set({"user_id": "123", "group_id": "456"}, users)

@@ -7,7 +7,7 @@ from nonebot_plugin_uninfo import Member, SceneType, get_interface
 
 from liuying.configs.config import Config
 from liuying.models._group import GroupInfoUser
-from liuying.models._user import UserLevel
+from liuying.models._user import UserPermLevel
 from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
 
@@ -40,13 +40,13 @@ class MemberUpdateManage:
         role = member.role
 
         if member.id in driver.config.superusers:
-            await UserLevel.set_level(member.id, group_id, 9)
+            await UserPermLevel.set_level(member.id, group_id, 9)
         elif role and default_auth:
-            if role.id != "MEMBER" and not await UserLevel.is_group_flag(
+            if role.id != "MEMBER" and not await UserPermLevel.is_group_flag(
                 member.id, group_id
             ):
                 level = default_auth + 1 if role.id == "OWNER" else default_auth
-                await UserLevel.set_level(member.id, group_id, level)
+                await UserPermLevel.set_level(member.id, group_id, level)
 
         users = db_user_map.get(member.id, [])
         if users:

@@ -3,7 +3,7 @@ import time
 from nonebot_plugin_alconna import At
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.models._user import UserLevel
+from liuying.models._user import UserPermLevel
 from liuying.models.plugin_info import PluginInfo
 from liuying.utils.log import logger
 
@@ -30,7 +30,7 @@ async def auth_admin(plugin: PluginInfo, session: Uninfo):
 
         bot_id = session.self_id if hasattr(session, "self_id") else None
 
-        user_level = await UserLevel.get_level(
+        user_level = await UserPermLevel.get_level(
             user_id, bot_id, ids.group_id
         )
 

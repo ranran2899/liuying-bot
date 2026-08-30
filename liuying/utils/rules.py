@@ -7,10 +7,9 @@ from nonebot.permission import SUPERUSER
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.config import Config
-from liuying.models.ban_console import BanConsole
 from liuying.models._group import GroupConsole
-from liuying.models._user import UserLevel
-from liuying.utils.platform import PlatformUtils
+from liuying.models._user import UserPermLevel
+from liuying.models.ban_console import BanConsole
 
 
 def ensure_group(session: Uninfo) -> bool:
@@ -88,7 +87,7 @@ def admin_check(a: int | str, key: str | None = None) -> Rule:
         if level is None:
             return False
 
-        user_level = await UserLevel.get_level(user_id, bot.self_id, group_id)
+        user_level = await UserPermLevel.get_level(user_id, bot.self_id, group_id)
         return user_level >= int(level)
 
     return Rule(_rule)

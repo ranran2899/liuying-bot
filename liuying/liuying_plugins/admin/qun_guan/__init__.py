@@ -11,7 +11,7 @@ from nonebot_plugin_alconna import (
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.utils import PluginExtraData
-from liuying.models._user import UserLevel
+from liuying.models._user import UserPermLevel
 from liuying.utils.enum import PluginType
 from liuying.utils.message import MessageUtils
 from liuying.utils.rules import admin_check
@@ -73,10 +73,10 @@ async def _check_permission(
         return "此命令仅在群聊中有效"
 
     bot_id = bot.self_id
-    operator_level = await UserLevel.get_level(
+    operator_level = await UserPermLevel.get_level(
         session.user.id, bot_id, session.group.id
     )
-    target_level = await UserLevel.get_level(
+    target_level = await UserPermLevel.get_level(
         target_user_id, bot_id, session.group.id
     )
 

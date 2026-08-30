@@ -11,7 +11,7 @@ import json
 from typing import Any
 
 from liuying.configs.config import Config
-from liuying.models._user import UserLevel
+from liuying.models._user import UserPermLevel
 from liuying.services.cache import Cache
 from liuying.utils.log import logger
 
@@ -221,7 +221,7 @@ class QQBotConfigManager:
         bot_level = int(
             Config.get_config(_CONFIG_MODULE, "BOT_LEVEL") or 7
         )
-        await UserLevel.set_bot_level(bot_id, user_id, bot_level)
+        await UserPermLevel.set_bot_level(bot_id, user_id, bot_level)
 
         logger.info(f"用户 {user_id} 添加QQ机器人配置: {bot_id}")
         return True, f"成功添加机器人配置: {bot_id}"
@@ -376,7 +376,7 @@ class QQBotConfigManager:
             return False, "删除配置失败"
 
         await cls._cache.delete(_build_cache_key(user_id, bot_id))
-        await UserLevel.delete_bot_level(bot_id, user_id)
+        await UserPermLevel.delete_bot_level(bot_id, user_id)
         ReconnectMonitor.on_connected(bot_id)
         logger.info(f"用户 {user_id} 删除配置: {bot_id}")
         return True, f"成功删除机器人配置: {bot_id}"

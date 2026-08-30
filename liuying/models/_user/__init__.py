@@ -6,8 +6,8 @@ from .user_exp import UserExpInfo
 from .user_fortune import UserFortuneRecord
 from .user_info import UserInfo
 from .user_intro import UserIntroInfo
-from .user_level import UserLevel
 from .user_media import UserMediaInfo
+from .user_permlevel import UserPermLevel
 from .user_sign import UserSignInfo
 from .user_sign_log import UserSignLog
 from .user_theme import UserTheme
@@ -20,8 +20,8 @@ __all__ = [
     "UserFortuneRecord",
     "UserInfo",
     "UserIntroInfo",
-    "UserLevel",
     "UserMediaInfo",
+    "UserPermLevel",
     "UserSignInfo",
     "UserSignLog",
     "UserTheme",

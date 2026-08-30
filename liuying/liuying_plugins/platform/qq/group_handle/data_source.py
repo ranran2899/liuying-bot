@@ -11,10 +11,9 @@ import orjson as json
 
 from liuying.configs.config import Config
 from liuying.configs.path_config import DATA_PATH, IMAGE_PATH
+from liuying.models._group import GroupConsole, GroupInfoUser
+from liuying.models._user import UserPermLevel
 from liuying.models.fg_request import FgRequest
-from liuying.models._group import GroupConsole
-from liuying.models._group import GroupInfoUser
-from liuying.models._user import UserLevel
 from liuying.models.plugin_info import PluginInfo
 from liuying.services.log import logger
 from liuying.utils.common_utils import CommonUtils
@@ -80,7 +79,7 @@ class GroupManager:
         admin_default_auth = Config.get_config("admin_bot_manage", "ADMIN_DEFAULT_AUTH")
         member_list = await bot.get_group_member_list(group_id=group_id)
         member_id_list = [str(user_info["user_id"]) for user_info in member_list]
-        flag2u = await UserLevel.filter(
+        flag2u = await UserPermLevel.filter(
             user_id__in=member_id_list, group_id=group_id, group_flag=1
         ).values_list("user_id", flat=True)
         # 即刻刷新权限
@@ -88,7 +87,7 @@ class GroupManager:
             user_id = str(user_info["user_id"])
             role = user_info["role"]
             if user_id in bot.config.superusers:
-                await UserLevel.set_level(user_id, group_id, 9)
+                await UserPermLevel.set_level(user_id, group_id, 9)
                 logger.debug(
                     "添加超级用户权限: 9",
                     "入群检测",
@@ -100,7 +99,7 @@ class GroupManager:
                 and role in ["owner", "admin"]
                 and user_id not in flag2u
             ):
-                await UserLevel.set_level(
+                await UserPermLevel.set_level(
                     user_id,
                     group_id,
                     admin_default_auth if role == "admin" else admin_default_auth + 1,

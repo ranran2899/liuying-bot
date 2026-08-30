@@ -10,7 +10,7 @@ from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.path_config import TEMP_PATH
 from liuying.liuying_plugins.user_info.utils import QQMsgBuilder
-from liuying.models._user import UserLevel
+from liuying.models._user import UserPermLevel
 from liuying.ui.services import render
 from liuying.utils.bed_layout import BedLayout
 from liuying.utils.bot.version import BotVersionInfo
@@ -65,7 +65,7 @@ async def handle_user_info(session: Uninfo) -> None:
         UserUid.get_uid_token(user_uid),
         BotVersionInfo.get_version(),
         UserGold.get_user_gold(user_id),
-        UserLevel.get_level(user_id, bot_id, group_id),
+        UserPermLevel.get_level(user_id, bot_id, group_id),
         UserCurrUtils.get_user_copper(user_id),
         UserCurrUtils.get_user_silver(user_id),
         UserCurrUtils.get_user_diamond(user_id),
