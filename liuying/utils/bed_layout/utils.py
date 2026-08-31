@@ -1,22 +1,18 @@
 """
-床图工具函数
+床图定时删除任务管理工具
 
-提供定时删除任务管理、图片格式转换与缩放等辅助功能。
-通过 ProviderManager 直接操作存储提供者，避免依赖 BedLayout 业务层，
+封装图片定时删除任务的创建、取消与更新，
+直接通过 ProviderRegistry 操作存储提供者，避免依赖 BedLayout 业务层，
 彻底消除 utils 与 api 之间的循环依赖。
 """
 from datetime import datetime, timedelta
-from io import BytesIO
-
-from PIL import Image
 
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.enum import StorageType
 from liuying.utils.log import logger
 
+from .base import ProviderRegistry
 from .config import get_default_storage
-from .interfaces import ALLOWED_EXTENSIONS
-from .provider_manager import ProviderManager
 
 # 自动删除任务ID前缀，避免与其他任务冲突
 _TASK_ID_PREFIX = "auto_delete_image_"
@@ -32,18 +28,18 @@ class BedLayoutUtils:
     @staticmethod
     async def delete_image_task(
         filename: str,
-        storage_type: StorageType | None = None,
+        storage_type: StorageType | str | None = None,
     ) -> None:
         """定时删除图片任务（支持数据库持久化恢复）
 
-        直接通过 ProviderManager 操作存储提供者，避免依赖 BedLayout 业务层。
+        直接通过 ProviderRegistry 操作存储提供者，避免依赖 BedLayout 业务层。
 
         参数:
             filename: 文件名
             storage_type: 存储类型
         """
         actual_type = get_default_storage(storage_type)
-        provider = ProviderManager.get_provider(actual_type)
+        provider = ProviderRegistry.get(actual_type)
         if provider is None:
             logger.warning(
                 f"定时任务删除图片失败: 存储类型 {actual_type} 未配置 | "
@@ -65,7 +61,7 @@ class BedLayoutUtils:
     async def schedule_delete_task(
         filename: str,
         delete_at: datetime,
-        storage_type: StorageType | None = None,
+        storage_type: StorageType | str | None = None,
         task_description: str = "",
     ) -> str | None:
         """创建定时删除图片任务
@@ -114,7 +110,7 @@ class BedLayoutUtils:
     async def update_auto_delete_time(
         filename: str,
         new_minutes: int,
-        storage_type: StorageType | None = None,
+        storage_type: StorageType | str | None = None,
     ) -> bool:
         """更新图片的自动删除时间
 
@@ -142,52 +138,3 @@ class BedLayoutUtils:
         )
 
         return new_task_id is not None
-
-
-def convert_image_format(file_data: bytes, target_extension: str = ".webp") -> bytes:
-    """将图片转换为指定格式
-
-    参数:
-        file_data: 原始图片二进制数据
-        target_extension: 目标扩展名，默认转换为 webp
-
-    返回:
-        bytes: 转换后的图片二进制数据
-
-    异常:
-        ValueError: 目标格式不受支持时抛出
-    """
-    target_ext = target_extension.lower()
-    if target_ext not in ALLOWED_EXTENSIONS:
-        raise ValueError(f"不支持的图片格式: {target_extension}")
-
-    image_format = "JPEG" if target_ext in {".jpg", ".jpeg"} else target_ext[1:].upper()
-    with Image.open(BytesIO(file_data)) as img:
-        if img.mode in ("RGBA", "P") and image_format == "JPEG":
-            img = img.convert("RGB")
-        output = BytesIO()
-        img.save(output, format=image_format)
-        return output.getvalue()
-
-
-def resize_image(
-    file_data: bytes,
-    max_size: tuple[int, int] = (1024, 1024),
-    resample: int = Image.Resampling.LANCZOS,
-) -> bytes:
-    """按比例缩放图片，使其长边不超过指定尺寸
-
-    参数:
-        file_data: 原始图片二进制数据
-        max_size: 最大宽高元组，默认 1024x1024
-        resample: PIL 重采样算法，默认 LANCZOS
-
-    返回:
-        bytes: 缩放后的图片二进制数据
-    """
-    with Image.open(BytesIO(file_data)) as img:
-        img.thumbnail(max_size, resample=resample)
-        output = BytesIO()
-        save_format = img.format or "PNG"
-        img.save(output, format=save_format)
-        return output.getvalue()

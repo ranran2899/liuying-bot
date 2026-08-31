@@ -5,19 +5,18 @@
 所有处理器通过 APIRouter 注册到 nonebot2 框架统一端口。
 """
 import mimetypes
-import uuid
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 
 from liuying.models._bot import BedLayoutImage
-from liuying.utils.bed_layout.config import get_config
-from liuying.utils.bed_layout.http.utils import BedLayoutHttpUtils
-from liuying.utils.bed_layout.interfaces import validate_extension
-from liuying.utils.bed_layout.providers.local import LocalStorageProvider
 from liuying.utils.log import logger
 
+from ..config import get_config
+from ..interfaces import generate_filename, validate_extension
+from ..providers.local import LocalStorageProvider
 from .security import SecurityGuard
+from .utils import BedLayoutHttpUtils
 
 # 图片响应安全头
 _SECURITY_HEADERS = {
@@ -78,7 +77,7 @@ async def upload_image(
     """
     await SecurityGuard.check_protection(request)
 
-    original_filename = image.filename or f"{uuid.uuid4().hex}"
+    original_filename = image.filename or ""
     ext = (
         "." + original_filename.rsplit(".", 1)[-1].lower()
         if "." in original_filename
@@ -113,7 +112,7 @@ async def upload_image(
             detail=f"文件大小超过限制 ({max_size // 1024 // 1024}MB)",
         )
 
-    filename = f"{uuid.uuid4().hex}{ext}"
+    filename = generate_filename(None, ext)
     content_type, _ = mimetypes.guess_type(original_filename)
     provider = LocalStorageProvider()
     url = await provider.upload(file_data, filename, content_type)
@@ -141,7 +140,7 @@ async def health_check() -> JSONResponse:
         {
             "status": "healthy",
             "service": "bed_layout",
-            "version": "3.0.0",
+            "version": "3.1.0",
             "security_features": {
                 "api_key_enabled": bool(get_config("API_KEY", "")),
                 "rate_limiting": True,

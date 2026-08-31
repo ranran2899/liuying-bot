@@ -15,10 +15,11 @@ from fastapi import HTTPException, Request
 
 from liuying.services.cache import Cache
 from liuying.utils.apscheduler import task_manager
-from liuying.utils.bed_layout.config import get_config
-from liuying.utils.bed_layout.http.config import BedLayoutHttpConfig
-from liuying.utils.bed_layout.http.utils import BedLayoutHttpUtils
 from liuying.utils.log import logger
+
+from ..config import get_config
+from .config import BedLayoutHttpConfig
+from .utils import BedLayoutHttpUtils
 
 _RATE_LIMITS = {
     "global": {"requests": 100, "window": 60},

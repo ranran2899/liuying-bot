@@ -7,10 +7,11 @@
 from fastapi import FastAPI
 import nonebot
 
-from liuying.utils.bed_layout.http.config import ROUTE_PREFIX
-from liuying.utils.bed_layout.http.handlers import router as bed_layout_router
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
+
+from .config import ROUTE_PREFIX
+from .handlers import router as bed_layout_router
 
 
 class BedLayoutServer:

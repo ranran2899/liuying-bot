@@ -1,60 +1,42 @@
-"""
-腾讯云COS存储提供者
-"""
+"""腾讯云COS存储提供者"""
 from io import BytesIO
-from typing import ClassVar
+from typing import Any
 
-from ..config import get_provider_config
-from .base import CloudStorageProvider
+from liuying.utils.enum import StorageType
 
-_CONFIG_KEY = "TENCENT_COS_CONFIG"
+from ..base import CloudStorageProvider, ProviderRegistry
 
 
+@ProviderRegistry.register(StorageType.TENCENT)
 class TencentCosProvider(CloudStorageProvider):
     """腾讯云COS存储提供者"""
 
-    _client: ClassVar[object | None] = None
+    _config_key = "TENCENT_COS_CONFIG"
+    _required_fields = ("bucket_name", "region", "secret_id", "secret_key")
 
     @property
     def provider_name(self) -> str:
         return "腾讯云COS"
 
     @classmethod
-    def _get_client(cls):
-        """获取COS客户端实例
+    def _create_client(cls) -> object:
+        """创建COS客户端实例"""
+        from qcloud_cos import CosConfig, CosS3Client
 
-        返回:
-            CosS3Client: COS客户端实例
-        """
-        if cls._client is None:
-            from qcloud_cos import CosConfig, CosS3Client
-
-            config = get_provider_config(_CONFIG_KEY)
-            cos_config = CosConfig(
-                Region=config.get("region", ""),
-                SecretId=config.get("secret_id", ""),
-                SecretKey=config.get("secret_key", ""),
-            )
-            cls._client = CosS3Client(cos_config)
-        return cls._client
-
-    def is_configured(self) -> bool:
-        config = get_provider_config(_CONFIG_KEY)
-        return all(
-            (
-                config.get("bucket_name"),
-                config.get("region"),
-                config.get("secret_id"),
-                config.get("secret_key"),
-            )
+        config = cls._get_config()
+        cos_config = CosConfig(
+            Region=config.get("region", ""),
+            SecretId=config.get("secret_id", ""),
+            SecretKey=config.get("secret_key", ""),
         )
+        return CosS3Client(cos_config)
 
     async def upload(
         self,
         file_data: bytes,
         filename: str,
         content_type: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> str:
         """上传文件到腾讯云COS
 
@@ -62,21 +44,17 @@ class TencentCosProvider(CloudStorageProvider):
             file_data: 文件二进制数据
             filename: 文件名
             content_type: MIME类型
-            **kwargs: 扩展元数据，云存储当前不做处理仅保持接口兼容
+            **kwargs: 扩展元数据，云存储不做处理仅保持接口兼容
 
         返回:
             str: 文件访问URL
         """
-        client = self._get_client()
-        config = get_provider_config(_CONFIG_KEY)
-
-        client.put_object(
-            Bucket=config.get("bucket_name", ""),
+        self._get_client().put_object(
+            Bucket=self._bucket,
             Body=BytesIO(file_data),
             Key=filename,
             ContentType=content_type,
         )
-
         return await self.get_url(filename)
 
     async def delete(self, filename: str) -> bool:
@@ -88,13 +66,7 @@ class TencentCosProvider(CloudStorageProvider):
         返回:
             bool: 删除成功返回True
         """
-        client = self._get_client()
-        config = get_provider_config(_CONFIG_KEY)
-
-        client.delete_object(
-            Bucket=config.get("bucket_name", ""),
-            Key=filename,
-        )
+        self._get_client().delete_object(Bucket=self._bucket, Key=filename)
         return True
 
     async def get_url(self, filename: str) -> str:
@@ -106,8 +78,5 @@ class TencentCosProvider(CloudStorageProvider):
         返回:
             str: 文件访问URL
         """
-        config = get_provider_config(_CONFIG_KEY)
-        return (
-            f"https://{config.get('bucket_name', '')}"
-            f".cos.{config.get('region', '')}.myqcloud.com/{filename}"
-        )
+        region = self._get_config().get("region", "")
+        return f"https://{self._bucket}.cos.{region}.myqcloud.com/{filename}"

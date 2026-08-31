@@ -16,10 +16,9 @@ from liuying.utils.enum import StorageType
 from liuying.utils.log import logger
 from liuying.utils.utils import get_image_size
 
+from .base import ProviderRegistry, StorageProvider
 from .config import get_default_storage
-from .http.config import BedLayoutHttpConfig
 from .interfaces import generate_filename, validate_extension
-from .provider_manager import ProviderManager
 from .providers.local import LocalStorageProvider
 from .utils import BedLayoutUtils
 
@@ -29,27 +28,27 @@ class BedLayout:
     床图操作类
 
     封装图片上传、删除、获取URL等核心业务，
-    通过统一的存储提供者接口支持本地存储和云存储。
+    通过统一的存储提供者接口支持本地存储、云存储及自定义注册存储。
     """
 
     @classmethod
-    def _get_provider(cls, storage_type: StorageType):
-        """获取存储提供者，未配置时回退到本地存储
+    def _resolve_provider(cls, storage_type: str) -> tuple[StorageProvider, str]:
+        """解析存储提供者，目标存储未注册或未配置时回退到本地存储
 
         参数:
-            storage_type: 存储类型
+            storage_type: 存储类型标识
 
         返回:
-            CloudStorageProvider: 存储提供者实例
+            tuple[StorageProvider, str]: 提供者实例与实际生效的存储类型
         """
-        provider = ProviderManager.get_provider(storage_type)
+        provider = ProviderRegistry.get(storage_type)
         if provider is not None:
-            return provider
+            return provider, storage_type
         logger.warning(
-            f"存储类型 {storage_type} 未配置，将使用本地数据库存储",
+            f"存储类型 {storage_type} 未注册或未配置，回退到本地数据库存储",
             "BedLayout",
         )
-        return ProviderManager.get_provider(StorageType.LOCAL)
+        return LocalStorageProvider(), StorageType.LOCAL
 
     @classmethod
     async def upload(
@@ -59,9 +58,9 @@ class BedLayout:
         extension: str = ".png",
         content_type: str | None = None,
         original_filename: str | None = None,
-        storage_type: StorageType | None = None,
+        storage_type: StorageType | str | None = None,
         **kwargs: Any,
-    ) -> tuple[str, StorageType, str]:
+    ) -> tuple[str, str, str]:
         """上传图片到存储
 
         参数:
@@ -75,22 +74,16 @@ class BedLayout:
                 description/enable_dedup
 
         返回:
-            tuple[str, StorageType, str]: 图片访问URL、实际存储类型、最终文件名
+            tuple[str, str, str]: 图片访问URL、实际存储类型、最终文件名
         """
         validate_extension(extension)
-        storage_type = get_default_storage(storage_type)
+        storage = get_default_storage(storage_type)
         filename = generate_filename(filename, extension)
 
         if content_type is None:
             content_type, _ = mimetypes.guess_type(filename)
 
-        provider = cls._get_provider(storage_type)
-        actual_type = (
-            storage_type
-            if provider is not ProviderManager.get_provider(StorageType.LOCAL)
-            else StorageType.LOCAL
-        )
-
+        provider, actual_type = cls._resolve_provider(storage)
         url = await provider.upload(
             file_data,
             filename,
@@ -109,9 +102,9 @@ class BedLayout:
         cls,
         file_path: Path | str,
         filename: str | None = None,
-        storage_type: StorageType | None = None,
+        storage_type: StorageType | str | None = None,
         **kwargs: Any,
-    ) -> tuple[str, StorageType, str]:
+    ) -> tuple[str, str, str]:
         """从文件上传图片到存储
 
         参数:
@@ -121,7 +114,7 @@ class BedLayout:
             **kwargs: 上传时透传的扩展元数据
 
         返回:
-            tuple[str, StorageType, str]: 图片访问URL、实际存储类型、最终文件名
+            tuple[str, str, str]: 图片访问URL、实际存储类型、最终文件名
         """
         file_path = Path(file_path)
 
@@ -150,7 +143,7 @@ class BedLayout:
     async def delete(
         cls,
         filename: str,
-        storage_type: StorageType | None = None,
+        storage_type: StorageType | str | None = None,
     ) -> bool:
         """删除图片
 
@@ -161,12 +154,7 @@ class BedLayout:
         返回:
             bool: 删除成功返回True，图片不存在返回False
         """
-        storage_type = get_default_storage(storage_type)
-        provider = ProviderManager.get_provider(storage_type)
-        if provider is None:
-            logger.warning(f"存储类型 {storage_type} 未配置", "BedLayout")
-            return False
-
+        provider, _ = cls._resolve_provider(get_default_storage(storage_type))
         result = await provider.delete(filename)
         if result:
             logger.info(
@@ -179,7 +167,7 @@ class BedLayout:
     async def get_url(
         cls,
         filename: str,
-        storage_type: StorageType | None = None,
+        storage_type: StorageType | str | None = None,
     ) -> str:
         """获取图片访问URL
 
@@ -190,18 +178,14 @@ class BedLayout:
         返回:
             str: 图片访问URL
         """
-        storage_type = get_default_storage(storage_type)
-        provider = ProviderManager.get_provider(storage_type)
-        if provider is None:
-            return BedLayoutHttpConfig.get_image_url(filename)
-
+        provider, _ = cls._resolve_provider(get_default_storage(storage_type))
         return await provider.get_url(filename)
 
     @classmethod
     async def get_bytes(
         cls,
         filename: str,
-        storage_type: StorageType | None = None,
+        storage_type: StorageType | str | None = None,
     ) -> bytes | None:
         """获取图片的字节数据（仅支持本地数据库存储）
 
@@ -212,8 +196,7 @@ class BedLayout:
         返回:
             bytes | None: 图片字节数据，不存在返回None
         """
-        storage_type = get_default_storage(storage_type)
-        provider = ProviderManager.get_provider(storage_type)
+        provider = ProviderRegistry.get(get_default_storage(storage_type))
 
         if isinstance(provider, LocalStorageProvider):
             return await provider.get_bytes(filename)
@@ -269,7 +252,6 @@ class BedLayout:
             ),
         )
         logger.info(f"保存图片成功，返回图片链接: {url}", command="BedLayout")
-
 
         return {
             "url": url,

@@ -31,7 +31,10 @@ BED_LAYOUT_CONFIGS: list[dict[str, Any]] = [
         "key": "DEFAULT_STORAGE",
         "default": "local",
         "type": str,
-        "help": "默认存储类型 | 可选值: local(数据库), tencent, baidu, aliyun, huawei",
+        "help": (
+            "默认存储类型 | 可选值: local(数据库), tencent, baidu, aliyun, huawei,"
+            " 或已通过 ProviderRegistry 注册的自定义存储类型"
+        ),
     },
     {
         "key": "TENCENT_COS_CONFIG",
@@ -155,22 +158,21 @@ def get_config(key: str, default: Any = None) -> Any:
     return Config.get_config(_CONFIG_GROUP, key, default)
 
 
-def get_default_storage(storage_type: StorageType | None = None) -> StorageType:
+def get_default_storage(storage_type: StorageType | str | None = None) -> str:
     """获取默认存储类型
+
+    支持任意字符串类型的存储标识，由 ProviderRegistry 在运行时解析，
+    未知的存储类型最终由 BedLayout 回退到本地存储处理。
 
     参数:
         storage_type: 显式指定的存储类型，非 None 时直接返回
 
     返回:
-        StorageType: 实际使用的存储类型
+        str: 实际使用的存储类型标识
     """
     if storage_type is not None:
-        return storage_type
-    storage_str = get_config("DEFAULT_STORAGE", "local")
-    try:
-        return StorageType(storage_str)
-    except ValueError:
-        return StorageType.LOCAL
+        return str(storage_type)
+    return str(get_config("DEFAULT_STORAGE", "local"))
 
 
 def set_default_storage(storage_type: StorageType) -> None:

@@ -1,50 +1,32 @@
-"""
-华为云OBS存储提供者
-"""
-from typing import ClassVar
+"""华为云OBS存储提供者"""
+from typing import Any
 
-from ..config import get_provider_config
-from .base import CloudStorageProvider
+from liuying.utils.enum import StorageType
 
-_CONFIG_KEY = "HUAWEI_OBS_CONFIG"
+from ..base import CloudStorageProvider, ProviderRegistry
 
 
+@ProviderRegistry.register(StorageType.HUAWEI)
 class HuaweiObsProvider(CloudStorageProvider):
     """华为云OBS存储提供者"""
 
-    _client: ClassVar[object | None] = None
+    _config_key = "HUAWEI_OBS_CONFIG"
+    _required_fields = ("endpoint", "bucket_name", "access_key", "secret_key")
 
     @property
     def provider_name(self) -> str:
         return "华为云OBS"
 
     @classmethod
-    def _get_client(cls):
-        """获取OBS客户端实例
+    def _create_client(cls) -> object:
+        """创建OBS客户端实例"""
+        from obs import ObsClient
 
-        返回:
-            ObsClient: OBS客户端实例
-        """
-        if cls._client is None:
-            from obs import ObsClient
-
-            config = get_provider_config(_CONFIG_KEY)
-            cls._client = ObsClient(
-                access_key_id=config.get("access_key", ""),
-                secret_access_key=config.get("secret_key", ""),
-                server=config.get("endpoint", ""),
-            )
-        return cls._client
-
-    def is_configured(self) -> bool:
-        config = get_provider_config(_CONFIG_KEY)
-        return all(
-            (
-                config.get("endpoint"),
-                config.get("bucket_name"),
-                config.get("access_key"),
-                config.get("secret_key"),
-            )
+        config = cls._get_config()
+        return ObsClient(
+            access_key_id=config.get("access_key", ""),
+            secret_access_key=config.get("secret_key", ""),
+            server=config.get("endpoint", ""),
         )
 
     async def upload(
@@ -52,7 +34,7 @@ class HuaweiObsProvider(CloudStorageProvider):
         file_data: bytes,
         filename: str,
         content_type: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> str:
         """上传文件到华为云OBS
 
@@ -60,22 +42,18 @@ class HuaweiObsProvider(CloudStorageProvider):
             file_data: 文件二进制数据
             filename: 文件名
             content_type: MIME类型
-            **kwargs: 扩展元数据，云存储当前不做处理仅保持接口兼容
+            **kwargs: 扩展元数据，云存储不做处理仅保持接口兼容
 
         返回:
             str: 文件访问URL
         """
-        client = self._get_client()
-        config = get_provider_config(_CONFIG_KEY)
-
         headers = {"contentType": content_type} if content_type else None
-        client.putContent(
-            bucketName=config.get("bucket_name", ""),
+        self._get_client().putContent(
+            bucketName=self._bucket,
             objectKey=filename,
             content=file_data,
             headers=headers,
         )
-
         return await self.get_url(filename)
 
     async def delete(self, filename: str) -> bool:
@@ -87,13 +65,7 @@ class HuaweiObsProvider(CloudStorageProvider):
         返回:
             bool: 删除成功返回True
         """
-        client = self._get_client()
-        config = get_provider_config(_CONFIG_KEY)
-
-        client.deleteObject(
-            bucketName=config.get("bucket_name", ""),
-            objectKey=filename,
-        )
+        self._get_client().deleteObject(bucketName=self._bucket, objectKey=filename)
         return True
 
     async def get_url(self, filename: str) -> str:
@@ -105,10 +77,5 @@ class HuaweiObsProvider(CloudStorageProvider):
         返回:
             str: 文件访问URL
         """
-        config = get_provider_config(_CONFIG_KEY)
-        endpoint = config.get("endpoint", "").replace(
-            "https://", ""
-        ).replace("http://", "")
-        return (
-            f"https://{config.get('bucket_name', '')}.{endpoint}/{filename}"
-        )
+        endpoint = self._strip_scheme(self._get_config().get("endpoint", ""))
+        return f"https://{self._bucket}.{endpoint}/{filename}"
