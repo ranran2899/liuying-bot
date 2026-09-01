@@ -10,11 +10,12 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 
 from liuying.models._bot import BedLayoutImage
+from liuying.utils.enum import StorageType
 from liuying.utils.log import logger
 
+from ..base import ProviderRegistry
 from ..config import get_config
 from ..interfaces import generate_filename, validate_extension
-from ..providers.local import LocalStorageProvider
 from .security import SecurityGuard
 from .utils import BedLayoutHttpUtils
 
@@ -114,7 +115,8 @@ async def upload_image(
 
     filename = generate_filename(None, ext)
     content_type, _ = mimetypes.guess_type(original_filename)
-    provider = LocalStorageProvider()
+    # 经注册中心获取本地提供者，避免直接依赖 providers 包形成循环导入
+    provider = ProviderRegistry.get(StorageType.LOCAL)
     url = await provider.upload(file_data, filename, content_type)
 
     return JSONResponse(

@@ -1,61 +1,24 @@
+"""消息工具类
+
+基于 nonebot_plugin_alconna 的 UniMessage 构建多平台消息，
+不包含任何平台特定逻辑，由 UniMessage 负责各适配器的序列化。
+"""
+
 import base64
-import random
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+import random
 from typing import ClassVar
 
 import nonebot
-from nonebot.adapters.onebot.v11 import Message, MessageSegment
-from nonebot_plugin_alconna import (
-    At,
-    AtAll,
-    Audio,
-    Button,
-    CustomNode,
-    Emoji,
-    File,
-    Hyper,
-    Image,
-    Keyboard,
-    Other,
-    Reference,
-    Reply,
-    Text,
-    UniMessage,
-    Video,
-    Voice,
-)
+from nonebot_plugin_alconna import Button, Image, Segment, Text, UniMessage
 from pydantic import BaseModel
 
-from liuying.configs.config import BotConfig
 from liuying.services.log import logger
 from liuying.utils.image import BuildImage
 
-type MESSAGE_TYPE = (
-    str
-    | int
-    | float
-    | Path
-    | bytes
-    | BytesIO
-    | BuildImage
-    | At
-    | AtAll
-    | Audio
-    | Button
-    | CustomNode
-    | Emoji
-    | File
-    | Hyper
-    | Image
-    | Keyboard
-    | Other
-    | Reference
-    | Reply
-    | Text
-    | Video
-    | Voice
-)
+type MESSAGE_TYPE = str | int | float | Path | bytes | BytesIO | BuildImage | Segment
 
 
 class Config(BaseModel):
@@ -63,9 +26,21 @@ class Config(BaseModel):
     """是否将图片转换为bytes发送"""
 
 
+@lru_cache(maxsize=1)
+def _get_media_config() -> Config:
+    """获取媒体发送配置
+
+    进程内缓存，避免每次发送图片都重复解析 pydantic 配置。
+
+    返回:
+        Config: 媒体发送配置
+    """
+    return nonebot.get_plugin_config(Config)
+
+
 class MessageUtils:
     FAILURE_MESSAGES: ClassVar[list[str]] = [
-        "出了点小问题，待会再试试吧~ (´・ω・`)",
+        "出了点小问题，待会再试试吧~ ",
         "哎呀，失败了呢 QAQ",
     ]
 
@@ -97,10 +72,9 @@ class MessageUtils:
         返回:
             Image | None: 转换后的 Image 对象，路径不存在时返回 None
         """
-        config = nonebot.get_plugin_config(Config)
         match msg:
             case Path() if msg.exists():
-                if config.image_to_bytes:
+                if _get_media_config().image_to_bytes:
                     logger.debug("图片转为bytes发送", "MessageUtils")
                     return Image(raw=BuildImage.open(msg).pic2bytes())
                 return Image(path=msg)
@@ -113,41 +87,39 @@ class MessageUtils:
         return None
 
     @classmethod
-    def __build_message(
-        cls, msg_list: list[MESSAGE_TYPE], format_args: dict | None = None
+    def __build_single(
+        cls, msg: MESSAGE_TYPE, format_args: dict | None
     ) -> list:
-        """构造消息
+        """构造单个消息元素
 
         参数:
-            msg_list: 消息列表
-            format_args: 用于格式化字符串的参数字典.
+            msg: 消息元素
+            format_args: 用于格式化字符串的参数字典
 
         返回:
-            list: 构造完成的消息列表
+            list: 构造完成的消息元素列表
         """
-        message_list = []
-        for msg in msg_list:
-            match msg:
-                case str() if msg.startswith("base64://"):
-                    message_list.append(Image(raw=BytesIO(base64.b64decode(msg[9:]))))
-                case str():
-                    text = msg
-                    if format_args:
-                        try:
-                            text = msg.format_map(format_args)
-                        except (KeyError, IndexError) as e:
-                            logger.debug(
-                                f"格式化字符串 '{msg}' 失败 ({e})，将使用原始文本。"
-                            )
-                    message_list.append(Text(text))
-                case int() | float():
-                    message_list.append(Text(str(msg)))
-                case Path() | bytes() | BytesIO() | BuildImage():
-                    if image := cls._convert_media(msg):
-                        message_list.append(image)
-                case _:
-                    message_list.append(msg)
-        return message_list
+        match msg:
+            case str() if msg.startswith("base64://"):
+                return [Image(raw=BytesIO(base64.b64decode(msg[9:])))]
+            case str():
+                text = msg
+                if format_args:
+                    try:
+                        text = msg.format_map(format_args)
+                    except (KeyError, IndexError) as e:
+                        logger.debug(
+                            f"格式化字符串 '{msg}' 失败 ({e})，将使用原始文本。"
+                        )
+                return [Text(text)]
+            case int() | float():
+                return [Text(str(msg))]
+            case Path() | bytes() | BytesIO() | BuildImage():
+                if image := cls._convert_media(msg):
+                    return [image]
+                return []
+            case _:
+                return [msg]
 
     @classmethod
     def build_message(
@@ -159,7 +131,7 @@ class MessageUtils:
 
         参数:
             msg_list: 消息列表
-            format_args: 用于格式化字符串的参数字典.
+            format_args: 用于格式化字符串的参数字典
 
         返回:
             UniMessage: 构造完成的消息列表
@@ -169,60 +141,10 @@ class MessageUtils:
         items = [
             item
             for m in msg_list
-            for item in cls.__build_message(
-                m if isinstance(m, list) else [m], format_args
-            )
+            for sub in (m if isinstance(m, list) else [m])
+            for item in cls.__build_single(sub, format_args)
         ]
         return UniMessage(items)
-
-    @staticmethod
-    def _process_forward_node(msg: MESSAGE_TYPE) -> MESSAGE_TYPE:
-        """处理转发消息节点中的媒体类型
-
-        参数:
-            msg: 消息元素
-
-        返回:
-            MESSAGE_TYPE: 处理后的消息元素
-        """
-        match msg:
-            case Path():
-                return Image(raw=BuildImage.open(msg).pic2bytes())
-            case BuildImage():
-                return Image(raw=msg.pic2bytes())
-            case _:
-                return msg
-
-    @classmethod
-    def alc_forward_msg(
-        cls,
-        msg_list: list,
-        uin: str,
-        name: str,
-    ) -> UniMessage:
-        """生成自定义合并消息
-
-        参数:
-            msg_list: 消息列表
-            uin: 发送者 QQ
-            name: 自定义名称
-
-        返回:
-            UniMessage: 转发消息
-        """
-        nodes = [
-            CustomNode(
-                uid=uin,
-                name=name,
-                content=(
-                    UniMessage([cls._process_forward_node(m) for m in msg])
-                    if isinstance(msg, list)
-                    else msg
-                ),
-            )
-            for msg in msg_list
-        ]
-        return UniMessage(Reference(nodes=nodes))
 
     @classmethod
     def build_markdown_message(
@@ -256,89 +178,9 @@ class MessageUtils:
         message = UniMessage([Text(content).mark(0, len(content), "markdown")])
         if not buttons:
             return message
-        if buttons and isinstance(buttons[0], list):
+        if isinstance(buttons[0], list):
             for row in buttons:
                 message.keyboard(*row)
         else:
             message.keyboard(*buttons)
         return message
-
-    @classmethod
-    def custom_forward_msg(
-        cls,
-        msg_list: list[str | Message],
-        uin: str,
-        name: str = f"这里是{BotConfig.self_nickname}",
-    ) -> list[dict]:
-        """生成自定义合并消息
-
-        参数:
-            msg_list: 消息列表
-            uin: 发送者 QQ
-            name: 自定义名称
-
-        返回:
-            list[dict]: 转发消息
-        """
-        return [
-            {
-                "type": "node",
-                "data": {"name": name, "uin": uin, "content": msg},
-            }
-            for msg in msg_list
-        ]
-
-    @classmethod
-    def template2forward(cls, msg_list: list[UniMessage], uni: str) -> list[dict]:
-        """模板转转发消息
-
-        参数:
-            msg_list: 消息列表
-            uni: 发送者qq
-
-        返回:
-            list[dict]: 转发消息
-        """
-
-        def convert(item: UniMessage | Image) -> str:
-            match item:
-                case UniMessage() | list():
-                    parts = []
-                    for r in item:
-                        match r:
-                            case Text():
-                                parts.append(str(r))
-                            case Image() if (v := r.url or r.path or r.raw):
-                                parts.append(MessageSegment.image(v))
-                    return "".join(parts)
-                case Image() if (v := item.url or item.path):
-                    return MessageSegment.image(v)
-                case _:
-                    return str(item)
-
-        return cls.custom_forward_msg([convert(m) for m in msg_list], uni)
-
-    @classmethod
-    def template2alc(cls, msg_list: list[str | MessageSegment]) -> list:
-        """模板转alc
-
-        参数:
-            msg_list: 消息列表
-
-        返回:
-            list: alc模板
-        """
-        result = []
-        for msg in msg_list:
-            match msg:
-                case str():
-                    result.append(Text(msg))
-                case MessageSegment(type="at", data={"qq": qq}):
-                    result.append(
-                        AtAll() if qq == "0" else At(flag="user", target=qq)
-                    )
-                case MessageSegment(type="image", data=data):
-                    result.append(Image(url=data.get("file") or data.get("url")))
-                case MessageSegment(type="text", data={"text": text}) if text:
-                    result.append(Text(text))
-        return result
