@@ -95,7 +95,7 @@ def setup_chat_commands() -> None:
         使用 nonebot 的 to_me() 规则：私聊自动命中，
         群聊中@bot或回复bot时命中。
         """
-        if not get_config("ENABLE_AI", True):
+        if not get_config("ENABLE_AI", False):
             return
 
         user_id = session.user.id

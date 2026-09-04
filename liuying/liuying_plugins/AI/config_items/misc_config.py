@@ -12,10 +12,10 @@ __all__ = ["MISC_CONFIGS"]
 MISC_CONFIGS: list[RegisterConfig] = [
     RegisterConfig(
         key="ENABLE_AI",
-        value=True,
+        value=False,
         module=MODULE,
         help="是否启用AI对话",
-        default_value=True,
+        default_value=False,
         type=bool,
     ),
     RegisterConfig(
