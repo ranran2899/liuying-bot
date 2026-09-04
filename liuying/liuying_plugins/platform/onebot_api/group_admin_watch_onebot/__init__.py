@@ -10,7 +10,7 @@ from liuying.utils.log import logger
 from liuying.utils.rules import notice_rule
 
 __plugin_meta__ = PluginMetadata(
-    name="群管理员变动监测",
+    name="QQ群管理员变动监测",
     description="当群内管理员变更时，自动设置/取消用户权限等级",
     usage="无需手动触发，自动运行",
     extra=PluginExtraData(
@@ -21,7 +21,8 @@ __plugin_meta__ = PluginMetadata(
             RegisterConfig(
                 key="ADMIN_DEFAULT_AUTH",
                 value=5,
-                help="当用户成为群管理员时，自动设置的权限等级",
+                module="group_admin_watch_onebot",
+                help="当用户成为QQ群管理员时，自动设置的权限等级",
                 default_value=5,
                 type=int,
             ),
@@ -35,7 +36,7 @@ admin_notice = on_notice(
     block=False,
 )
 
-base_config = Config.get("admin_watch")
+base_config = Config.get("group_admin_watch_onebot")
 
 
 @admin_notice.handle()
