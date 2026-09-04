@@ -1,21 +1,21 @@
 import nonebot
-from nonebot import on_notice
 from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import Alconna, Arparma, on_alconna
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.configs.config import BotConfig
 from liuying.configs.utils import PluginExtraData
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.platform import PlatformUtils
-from liuying.utils.rules import admin_check, ensure_group, notice_rule
+from liuying.utils.rules import admin_check, ensure_group
 
-from ._data_source import MemberUpdateManage
+# 核心更新逻辑由平台插件提供，此处仅保留指令调用与定时任务调用
+from ...platform.onebot_api.group_member_update_onebot.data_source import (
+    MemberUpdateManage,
+)
 
 __plugin_meta__ = PluginMetadata(
     name="更新群组成员列表",
@@ -42,9 +42,6 @@ _matcher = on_alconna(
 )
 
 
-_notice = on_notice(priority=1, block=False, rule=notice_rule(GroupIncreaseNoticeEvent))
-
-
 @_matcher.handle()
 async def _(bot: Bot, session: Uninfo, arparma: Arparma):
     if gid := session.group.id if session.group else None:
@@ -52,18 +49,6 @@ async def _(bot: Bot, session: Uninfo, arparma: Arparma):
         result = await MemberUpdateManage.update_group_member(bot, gid)
         await MessageUtils.build_message(result).finish(reply_to=True)
     await MessageUtils.build_message("群组id为空...").send()
-
-
-@_notice.handle()
-async def _(bot: Bot, event: GroupIncreaseNoticeEvent):
-    if str(event.user_id) == bot.self_id:
-        await MemberUpdateManage.update_group_member(bot, str(event.group_id))
-        logger.info(
-            f"{BotConfig.self_nickname}加入群聊更新群组信息",
-            "更新群组成员列表",
-            session=event.user_id,
-            group_id=event.group_id,
-        )
 
 
 @task_manager.interval("update_group_member", minutes=5)
