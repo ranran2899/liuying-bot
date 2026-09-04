@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from typing import ClassVar
 
-from sqlalchemy import JSON, BigInteger, DateTime, Integer, String
+from sqlalchemy import JSON, BigInteger, DateTime, Integer, String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.data_access import DataAccess
@@ -31,6 +31,18 @@ class GroupInfoUser(Model):
         String(255), default="", comment="用户昵称"
     )
     """用户昵称"""
+    user_role: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="群成员角色 member-普通成员，owner-群主，admin-管理员"
+    )
+    """群成员角色 member-普通成员，owner-群主，admin-管理员"""
+    user_bot: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, comment="用户是否为机器人"
+    )
+    """用户是否为机器人"""
+    user_identifier: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="用户统一标识（如有）"
+    )
+    """用户统一标识（如有）"""
     group_id: Mapped[str] = mapped_column(
         String(255), nullable=False, comment="群聊id"
     )
@@ -47,22 +59,6 @@ class GroupInfoUser(Model):
         DateTime, nullable=True, comment="用户入群时间"
     )
     """用户入群时间"""
-    group_description: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="群简介"
-    )
-    """群简介"""
-    group_category: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="群分类"
-    )
-    """群分类"""
-    group_tags: Mapped[list | None] = mapped_column(
-        JSON, nullable=True, comment="群标签列表"
-    )
-    """群标签列表"""
-    member_count: Mapped[int | None] = mapped_column(
-        Integer, nullable=True, comment="群成员人数"
-    )
-    """群成员人数"""
     platform: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="平台"
     )
@@ -265,4 +261,10 @@ class GroupInfoUser(Model):
             "ADD COLUMN group_tags JSON;",
             "ALTER TABLE group_member_info "
             "ADD COLUMN member_count INTEGER;",
+            "ALTER TABLE group_member_info "
+            "ADD COLUMN user_role VARCHAR(255);",
+            "ALTER TABLE group_member_info "
+            "ADD COLUMN user_bot BOOLEAN;",
+            "ALTER TABLE group_member_info "
+            "ADD COLUMN user_identifier VARCHAR(255);",
         ]

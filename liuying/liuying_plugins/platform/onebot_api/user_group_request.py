@@ -16,7 +16,7 @@ from liuying.utils.enum import RequestHandleType, RequestType
 from liuying.utils.platform import PlatformUtils
 
 __plugin_meta__ = PluginMetadata(
-    name="群组申请",
+    name="qq群组申请",
     description="""
     一些小群直接邀请入群导致无法正常生成审核请求，需要用该方法手动生成审核请求。
     当管理员同意同意时会发送消息进行提示，之后再进行拉群不会退出。

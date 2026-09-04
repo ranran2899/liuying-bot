@@ -59,7 +59,7 @@ class GroupConsole(Model):
     superuser_block_plugin: Mapped[str] = mapped_column(Text, default="", comment="超级用户禁用插件")
     block_task: Mapped[str] = mapped_column(Text, default="", comment="禁用被动技能")
     superuser_block_task: Mapped[str] = mapped_column(Text, default="", comment="超级用户禁用被动")
-    platform: Mapped[str] = mapped_column(String(255), default="qq", comment="所属平台")
+    platform: Mapped[str | None] = mapped_column(String(255), default="", comment="所属平台")
 
     cache_type = CacheType.GROUPS
     cache_key_field = ("group_id", "channel_id")
@@ -427,4 +427,5 @@ class GroupConsole(Model):
             "ALTER TABLE group_console ADD superuser_block_task TEXT DEFAULT '';",
             "ALTER TABLE group_console ADD block_task TEXT DEFAULT '';",
             "ALTER TABLE group_console DROP proactive_allowed;",
+            "ALTER TABLE group_console ADD platform VARCHAR(255) DEFAULT '';",
         ]
