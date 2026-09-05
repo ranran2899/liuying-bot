@@ -16,10 +16,19 @@ except ImportError:
 
 
 try:
-    from nonebot.adapters.qq import (  # noqa: F401 # pyright: ignore [reportMissingImports]
+    from nonebot.adapters.qq import (
         Bot,
     )
 
     nonebot.load_plugins(str((path / "qq_api").resolve()))
 except ImportError:
     logger.warning("未安装 qq-adapter，无法加载QQ官平台专用插件...")
+
+try:
+    from nonebot.adapters.minecraft import (
+        Bot,
+    )
+
+    nonebot.load_plugins(str((path / "minecraft_api").resolve()))
+except ImportError:
+    logger.warning("未安装 minecraft-adapter，无法加载Minecraft平台专用插件...")
