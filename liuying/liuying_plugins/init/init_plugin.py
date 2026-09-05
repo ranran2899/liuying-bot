@@ -112,6 +112,12 @@ async def _() -> None:
     existing_plugins = await PluginInfo.filter().all()
     module2plugin = {p.module_path: p for p in existing_plugins}
 
+    if not existing_plugins:
+        logger.info(
+            "检测到首次启动，可通过 WebUI 配置插件数据",
+            "初始化插件数据",
+        )
+
     for plugin in get_loaded_plugins():
         load_plugin.append(plugin.module_name)
         await _handle_setting(plugin, plugin_list, limit_list)
@@ -148,6 +154,12 @@ async def _() -> None:
     await PluginInfo.filter(~PluginInfo.module_path.in_(load_plugin)).update(
         load_status=False
     )
+
+    if orphan_count := await PluginInfo.filter(load_status=False).count():
+        logger.info(
+            f"有 {orphan_count} 个插件数据未加载，可能已卸载或加载失败",
+            "初始化插件数据",
+        )
 
     manager.init()
     for limit in limit_list:

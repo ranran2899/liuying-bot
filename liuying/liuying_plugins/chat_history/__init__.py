@@ -11,6 +11,7 @@ from liuying.configs.utils import Command, PluginExtraData, RegisterConfig
 from liuying.utils.enum import PluginType
 from liuying.utils.manager import PriorityLifecycle
 from liuying.utils.message import MessageUtils
+from liuying.utils.rules import admin_check
 
 from .data_source import ChatHistoryManager
 from .recorder import ChatHistoryHook
@@ -28,7 +29,6 @@ __plugin_meta__ = PluginMetadata(
         version="0.2",
         plugin_type=PluginType.SUPER_AND_ADMIN,
         menu_type="统计",
-        admin_level=6,
         aliases={"群发言统计", "群活跃统计"},
         commands=[
             Command(
@@ -91,6 +91,7 @@ _hot_matcher = on_alconna(
     Alconna("热门群聊", Args["days?", int]),
     aliases={"群发言统计", "群活跃统计"},
     priority=5,
+    rule=admin_check(6),
     block=True,
 )
 

@@ -7,9 +7,10 @@ from nonebot.plugin import Plugin
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
-from liuying.configs.config import Config
+from liuying.configs.config import Config, NICKNAME
 from liuying.configs.path_config import DATA_PATH
 from liuying.configs.utils.models import RegisterConfig
+from liuying.utils.bot.version import get_bot_version
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 
@@ -180,8 +181,11 @@ def _update_plugins_config_file() -> None:
 
 
 @PriorityLifecycle.on_startup(priority=0)
-def _() -> None:
+async def _() -> None:
     """初始化插件数据配置"""
+    version = await get_bot_version()
+    logger.info(f"{NICKNAME} {version} 开始启动...")
+
     exists_module: list[str] = []
 
     for plugin in nonebot.get_loaded_plugins():

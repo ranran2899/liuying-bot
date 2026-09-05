@@ -1,5 +1,7 @@
 """初始化任务"""
 
+from datetime import datetime
+
 from nonebot import get_loaded_plugins
 from nonebot.plugin import Plugin
 from nonebot.utils import is_coroutine_callable
@@ -182,10 +184,21 @@ async def create_schedule(task: Task) -> None:
                 trigger_config = _build_trigger_config(scheduler_model)
                 interval_config = {f"{k}s": v for k, v in trigger_config.items()}
                 await task_manager.add_interval(**base_kwargs, **interval_config)
-            case "date" if scheduler_model.run_date:
+            case "date":
+                run_date = scheduler_model.run_date
+                if not run_date:
+                    return
+
+                if run_date <= datetime.now():
+                    logger.debug(
+                        f"被动技能 {task.name}({task.module}) 的 "
+                        f"date 触发时间已过期, 跳过创建定时任务"
+                    )
+                    return
+
                 await task_manager.add_date(
                     **base_kwargs,
-                    run_date=scheduler_model.run_date,
+                    run_date=run_date,
                 )
 
         logger.debug(f"成功动态创建定时任务: {task.name}({task.module})")
