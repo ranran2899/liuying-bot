@@ -105,10 +105,7 @@ __plugin_meta__ = PluginMetadata(
 
 
 
-@PriorityLifecycle.on_startup
-async def _init_signin_items() -> None:
-    """插件启动时注册签到道具"""
-    await SignInManage.init_items()
+
 
 
 sign_in_cmd = on_alconna(
@@ -163,6 +160,12 @@ async def handle_reset_sign(session: Uninfo) -> None:
     await MessageUtils.build_message(
         f"已成功重置所有用户的签到状态，共重置 {reset_count} 个用户"
     ).finish()
+
+
+@PriorityLifecycle.on_startup(priority=5)
+async def _init_signin_items() -> None:
+    """插件启动时注册签到道具"""
+    await SignInManage.init_items()
 
 
 
