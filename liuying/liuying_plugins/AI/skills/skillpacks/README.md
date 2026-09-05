@@ -120,7 +120,6 @@ SKILL.md 会随技能清单进入模型视野，直接决定调用准确率，�
 
 - [ ] `uv run ruff check` 通过
 - [ ] 所有函数有 Google 风格中文文档字符串
-- [ ] 单行不超过 88 字符，无 emoji
 - [ ] 服务为 None 时有降级分支
 - [ ] 重型工具设置了 `per_session_quota`
 - [ ] `references/mapping.md` 列出了实际暴露的工具名

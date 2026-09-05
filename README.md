@@ -295,10 +295,7 @@ register_external_tool(MyCustomTool())
 ## 🌟 特别感谢
 
 - [NoneBot2](https://nonebot.dev/)：强大且跨平台的 Python 异步机器人框架。
-- [OneBot](https://github.com/howmanybots/onebot)：统一且开放的机器人协议标准。
-- [nonebot-plugin-alconna](https://github.com/noneplugin/nonebot-plugin-alconna)：优雅的命令解析解决方案。
-- [nonebot-plugin-uninfo](https://github.com/NoneStudio/nonebot-plugin-uninfo)：结构化的会话信息提取。
-- [真寻 bot (zhenxun\_bot)](https://github.com/zhenxun-org/zhenxun_bot)：流萤机器人的诸多设计灵感与实现参考均来源于此。
+- [zhenxun-bot (zhenxun\_bot)](https://github.com/zhenxun-org/zhenxun_bot)：流萤机器人的诸多设计灵感与实现完全参考均来源于zhenxun_bot。
 
 ---
 

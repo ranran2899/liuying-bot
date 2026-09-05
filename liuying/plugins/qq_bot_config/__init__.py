@@ -1,5 +1,7 @@
 """QQ机器人配置管理插件"""
 
+from typing import Any
+
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import (
@@ -22,54 +24,40 @@ from liuying.utils.rules import ensure_private
 from ._adapter import QQAdapterManager
 from ._data_source import QQBotConfigManager
 from ._monitor import ReconnectMonitor
+from .model import QQBotConfig
 
 __plugin_meta__ = PluginMetadata(
     name="QQ机器人配置管理",
     description="管理QQ机器人适配器配置,支持添加、查询、修改和删除配置",
     usage="""
     指令格式:
-        qq配置添加 <机器人ID> <Token> <Secret> [选项]
+        qq配置添加 <机器人ID> <Secret> [--no-ws]
         qq配置查询 [机器人ID]
-        qq配置修改 <机器人ID> [选项]
+        qq配置修改 <机器人ID> [--secret Secret] [--ws|--no-ws]
         qq配置删除 <机器人ID>
-        qq配置导出 (仅私聊可用)
-        qq配置意图 <机器人ID> [选项]
-        qq配置状态 (仅管理员可使用)
-
-    选项说明:
-        --name <名称>           : 机器人名称
-        --sandbox              : 使用沙箱环境
-        --no-ws                : 不使用WebSocket
-        --remark <备注>        : 备注信息
-
-    意图配置选项:
-        --set <字段> <on|off>  : 设置意图字段
-        --reset                : 重置为默认意图
-        --list                 : 列出可用意图字段
+        qq配置导出 (仅私聊可用,导出QQ_BOTS环境变量格式)
+        qq配置意图 <机器人ID> [--set 字段 on|off | --reset | --list]
+        qq配置状态 (仅超级用户)
+        清空全部QQ配置 (仅超级用户)
 
     示例:
-        qq配置添加 100000000 token123 secret456
-        qq配置添加 100000000 token123 secret456 --name "测试机器人" --sandbox
+        qq配置添加 100000000 secret456
+        qq配置添加 100000000 secret456 --no-ws
         qq配置查询
-        qq配置查询 100000000
-        qq配置修改 100000000 --name "新名称"
+        qq配置修改 100000000 --secret 新Secret
         qq配置删除 100000000
-        qq配置导出
-        qq配置意图 100000000
-        qq配置意图 100000000 --set guilds on
-        qq配置意图 100000000 --reset
-        qq配置意图 100000000 --list
-        qq配置状态
+        qq配置意图 100000000 --set group_members off
     """.strip(),
     extra=PluginExtraData(
         admin_level=0,
         plugin_type=PluginType.NORMAL,
         superuser_help="""
         所有用户均可使用此插件管理自己的QQ机器人配置。
-        每个用户最多可配置5个机器人。
-        配置数据采用加密存储,确保安全性。
+        新版QQ适配器鉴权仅需 AppID 与 AppSecret,每个用户最多可配置5个机器人。
+        配置以QQ_BOTS环境变量格式存储,可通过 qq配置导出 直接导出使用。
         添加配置后自动连接到QQ适配器,无需重启。
         连续3次重连失败将自动删除配置。
+        超级用户指令: 清空全部QQ配置 (删除所有用户的全部配置)
         """.strip(),
         configs=[
             RegisterConfig(
@@ -86,41 +74,6 @@ __plugin_meta__ = PluginMetadata(
                 default_value=7,
                 type=int,
             ),
-            RegisterConfig(
-                key="MAX_RECONNECT_FAILURES",
-                value=3,
-                help="连续重连失败次数上限,超过后自动删除配置",
-                default_value=3,
-                type=int,
-            ),
-            RegisterConfig(
-                key="CREDENTIAL_MIN_LEN",
-                value=10,
-                help="凭据(Token/Secret)最小长度",
-                default_value=10,
-                type=int,
-            ),
-            RegisterConfig(
-                key="BOT_ID_MIN_LEN",
-                value=5,
-                help="机器人ID最小长度",
-                default_value=5,
-                type=int,
-            ),
-            RegisterConfig(
-                key="BOT_ID_MAX_LEN",
-                value=20,
-                help="机器人ID最大长度",
-                default_value=20,
-                type=int,
-            ),
-            RegisterConfig(
-                key="CHECK_INTERVAL",
-                value=10.0,
-                help="重连监控检查间隔(秒)",
-                default_value=10.0,
-                type=float,
-            ),
         ],
     ).to_dict(),
 )
@@ -129,52 +82,45 @@ __plugin_meta__ = PluginMetadata(
 class _ConfigFormatter:
     """QQ机器人配置信息格式化器"""
 
-
     @staticmethod
-    def format_single(config: dict, online: bool) -> str:
+    def format_single(bot: dict[str, Any], online: bool) -> str:
         """格式化单个配置信息
 
         参数:
-            config: 配置字典
+            bot: QQ_BOTS格式的单个机器人配置
             online: 是否在线
 
         返回:
             str: 格式化后的配置信息字符串
         """
         lines = [
-            f"机器人ID: {config['bot_id']}",
-            f"名称: {config.get('bot_name') or '未设置'}",
+            f"机器人ID: {bot['id']}",
             f"连接状态: {'在线' if online else '离线'}",
-            f"Token: {config['token'][:10]}...",
-            f"Secret: {config['secret'][:10]}...",
-            f"WebSocket: {'启用' if config['use_websocket'] else '禁用'}",
-            f"沙箱环境: {'是' if config['is_sandbox'] else '否'}",
-            f"配置状态: {'启用' if config['status'] else '禁用'}",
+            f"Secret: {bot['secret'][:10]}...",
+            f"WebSocket: {'启用' if bot['use_websocket'] else '禁用'}",
         ]
-        if config.get("remark"):
-            lines.append(f"备注: {config['remark']}")
-        lines.append(f"创建时间: {config['create_time']}")
-        if config.get("update_time"):
-            lines.append(f"更新时间: {config['update_time']}")
+        enabled = [k for k, v in bot.get("intent", {}).items() if v]
+        if enabled:
+            lines.append(f"启用意图: {', '.join(enabled)}")
         return "\n".join(lines)
 
     @staticmethod
-    def format_list(configs: list[dict], online_ids: set[str]) -> str:
+    def format_list(
+        bots: list[dict[str, Any]], online_ids: set[str]
+    ) -> str:
         """格式化配置列表信息
 
         参数:
-            configs: 配置字典列表
+            bots: QQ_BOTS格式的配置列表
             online_ids: 在线机器人ID集合
 
         返回:
             str: 格式化后的配置列表字符串
         """
-        parts = [f"共有 {len(configs)} 个QQ机器人配置:\n"]
-        for i, c in enumerate(configs, 1):
-            online_icon = "O" if c["bot_id"] in online_ids else "X"
-            env = "沙箱" if c["is_sandbox"] else "正式"
-            name = c.get("bot_name") or "未命名"
-            parts.append(f"{i}. [{online_icon}] {c['bot_id']} ({name}) [{env}]")
+        parts = [f"共有 {len(bots)} 个QQ机器人配置:\n"]
+        for i, b in enumerate(bots, 1):
+            online_icon = "O" if b["id"] in online_ids else "X"
+            parts.append(f"{i}. [{online_icon}] {b['id']}")
         return "\n".join(parts)
 
     @staticmethod
@@ -246,11 +192,8 @@ async def _() -> None:
 _add_matcher = on_alconna(
     Alconna(
         "qq配置添加",
-        Args["bot_id", str]["token", str]["secret", str],
-        Option("--name", Args["bot_name", str], help_text="机器人名称"),
-        Option("--sandbox", dest="is_sandbox", help_text="使用沙箱环境"),
+        Args["bot_id", str]["secret", str],
         Option("--no-ws", dest="no_websocket", help_text="不使用WebSocket"),
-        Option("--remark", Args["remark", str], help_text="备注信息"),
     ),
     priority=5,
     block=True,
@@ -266,15 +209,7 @@ _update_matcher = on_alconna(
     Alconna(
         "qq配置修改",
         Args["bot_id", str],
-        Option("--token", Args["token", str], help_text="更新Token"),
         Option("--secret", Args["secret", str], help_text="更新Secret"),
-        Option("--name", Args["bot_name", str], help_text="更新机器人名称"),
-        Option("--status", Args["status", bool], help_text="更新状态"),
-        Option("--remark", Args["remark", str], help_text="更新备注"),
-        Option("--sandbox", dest="is_sandbox", help_text="使用沙箱环境"),
-        Option(
-            "--no-sandbox", dest="no_sandbox", help_text="使用正式环境"
-        ),
         Option("--ws", dest="use_websocket", help_text="使用WebSocket"),
         Option("--no-ws", dest="no_websocket", help_text="不使用WebSocket"),
     ),
@@ -318,28 +253,27 @@ _status_matcher = on_alconna(
     block=True,
 )
 
+_clear_matcher = on_alconna(
+    Alconna("清空全部QQ配置"),
+    priority=5,
+    permission=SUPERUSER,
+    block=True,
+)
+
 
 @_add_matcher.handle()
 async def _(
     session: Uninfo,
     arparma: Arparma,
     bot_id: str,
-    token: str,
     secret: str,
-    bot_name: Match[str],
-    remark: Match[str],
 ) -> None:
     """添加QQ机器人配置"""
-    _, msg = await QQBotConfigManager.add_config(
+    msg = await QQBotConfigManager.add_config(
         user_id=session.user.id,
         bot_id=bot_id,
-        token=token,
         secret=secret,
-        intent=QQBotConfigManager.get_default_intent(),
-        bot_name=bot_name.result if bot_name.available else None,
         use_websocket=not arparma.find("no_websocket"),
-        is_sandbox=arparma.find("is_sandbox"),
-        remark=remark.result if remark.available else None,
     )
     await MessageUtils.build_message(msg).finish(reply_to=True)
 
@@ -351,24 +285,22 @@ async def _(session: Uninfo, bot_id: Match[str]) -> None:
     online_ids = QQAdapterManager.get_online_bot_ids()
 
     if bot_id.available:
-        config = await QQBotConfigManager.get_config(user_id, bot_id.result)
-        if not config:
+        bot = await QQBotConfig.get_bot(user_id, bot_id.result)
+        if bot is None:
             await MessageUtils.build_message(
                 f"未找到机器人配置: {bot_id.result}"
             ).finish(reply_to=True)
         await MessageUtils.build_message(
-            _ConfigFormatter.format_single(
-                config, bot_id.result in online_ids
-            )
+            _ConfigFormatter.format_single(bot, bot_id.result in online_ids)
         ).finish(reply_to=True)
     else:
-        configs = await QQBotConfigManager.get_user_configs(user_id)
-        if not configs:
+        bots = await QQBotConfig.get_user_bots(user_id)
+        if not bots:
             await MessageUtils.build_message(
                 "暂无QQ机器人配置\n使用 'qq配置添加' 命令添加配置"
             ).finish(reply_to=True)
         await MessageUtils.build_message(
-            _ConfigFormatter.format_list(configs, online_ids)
+            _ConfigFormatter.format_list(bots, online_ids)
         ).finish(reply_to=True)
 
 
@@ -377,54 +309,33 @@ async def _(
     session: Uninfo,
     arparma: Arparma,
     bot_id: str,
-    token: Match[str],
     secret: Match[str],
-    bot_name: Match[str],
-    status: Match[bool],
-    remark: Match[str],
 ) -> None:
     """修改QQ机器人配置"""
-    update_fields: dict = {}
-
-    for name, match in [
-        ("token", token),
-        ("secret", secret),
-        ("bot_name", bot_name),
-        ("remark", remark),
-    ]:
-        if match.available:
-            update_fields[name] = match.result
-    if status.available:
-        update_fields["status"] = status.result
-
-    if arparma.find("is_sandbox"):
-        update_fields["is_sandbox"] = True
-    if arparma.find("no_sandbox"):
-        update_fields["is_sandbox"] = False
+    use_ws: bool | None = None
     if arparma.find("use_websocket"):
-        update_fields["use_websocket"] = True
-    if arparma.find("no_websocket"):
-        update_fields["use_websocket"] = False
+        use_ws = True
+    elif arparma.find("no_websocket"):
+        use_ws = False
 
-    if not update_fields:
-        await MessageUtils.build_message(
-            "请指定要修改的字段\n"
-            "可用选项: --token, --secret, --name, --status, --remark, "
-            "--sandbox/--no-sandbox, --ws/--no-ws"
-        ).finish(reply_to=True)
+    if secret.available or use_ws is not None:
+        msg = await QQBotConfigManager.update_config(
+            user_id=session.user.id,
+            bot_id=bot_id,
+            secret=secret.result if secret.available else None,
+            use_websocket=use_ws,
+        )
+        await MessageUtils.build_message(msg).finish(reply_to=True)
 
-    _, msg = await QQBotConfigManager.update_config(
-        user_id=session.user.id,
-        bot_id=bot_id,
-        **update_fields,
-    )
-    await MessageUtils.build_message(msg).finish(reply_to=True)
+    await MessageUtils.build_message(
+        "请指定要修改的字段\n可用选项: --secret, --ws/--no-ws"
+    ).finish(reply_to=True)
 
 
 @_delete_matcher.handle()
 async def _(session: Uninfo, bot_id: str) -> None:
     """删除QQ机器人配置"""
-    _, msg = await QQBotConfigManager.delete_config(session.user.id, bot_id)
+    msg = await QQBotConfigManager.delete_config(session.user.id, bot_id)
     await MessageUtils.build_message(msg).finish(reply_to=True)
 
 
@@ -458,16 +369,16 @@ async def _(
         descriptions = QQBotConfigManager.get_intent_fields()
         lines = ["可用意图字段:"]
         lines.extend(f"  {f}: {desc}" for f, desc in descriptions.items())
-        await MessageUtils.build_message(
-            "\n".join(lines)
-        ).finish(reply_to=True)
+        await MessageUtils.build_message("\n".join(lines)).finish(
+            reply_to=True
+        )
 
     if arparma.find("reset"):
-        _, msg = await QQBotConfigManager.reset_intent(user_id, bot_id)
+        msg = await QQBotConfigManager.reset_intent(user_id, bot_id)
         await MessageUtils.build_message(msg).finish(reply_to=True)
 
     if field.available and value.available:
-        _, msg = await QQBotConfigManager.update_intent(
+        msg = await QQBotConfigManager.update_intent(
             user_id, bot_id, field.result, value.result
         )
         await MessageUtils.build_message(msg).finish(reply_to=True)
@@ -491,3 +402,10 @@ async def _() -> None:
     await MessageUtils.build_message(
         _ConfigFormatter.format_status(status)
     ).finish(reply_to=True)
+
+
+@_clear_matcher.handle()
+async def _() -> None:
+    """清空全部用户的QQ机器人配置(仅超级用户)"""
+    msg = await QQBotConfigManager.clear_all_configs()
+    await MessageUtils.build_message(msg).finish(reply_to=True)
