@@ -46,103 +46,30 @@ class UserIntroInfo(Model):
     """用户所在平台"""
 
     @classmethod
-    async def get_nickname(cls, user_id: str) -> str:
-        """
-        获取用户昵称
+    async def update_profile(
+        cls, user_id: str, nickname: str, avatar: str, platform: str
+    ) -> bool:
+        """单次读写更新用户基础资料（昵称/头像/平台）
 
         参数:
             user_id: 用户ID
+            nickname: 用户昵称
+            avatar: 用户头像url
+            platform: 用户所在平台
 
         返回:
-            str: 用户昵称，如果用户不存在则返回空字符串
-        """
-        user = await cls.safe_get_or_none(user_id=user_id)
-        return user.nickname if user else ""
-
-    @classmethod
-    async def set_nickname(cls, user_id: str, nickname: str) -> bool:
-        """
-        设置用户昵称
-
-        参数:
-            user_id: 用户ID
-            nickname: 要设置的用户昵称
-
-        返回:
-            bool: 设置成功返回True，失败返回False
+            bool: 更新成功返回True
         """
         user, _ = await cls.get_or_create(user_id=user_id)
         user.nickname = nickname
-        await user.save(update_fields=["nickname"])
-        return True
-
-    @classmethod
-    async def get_avatar(cls, user_id: str) -> str:
-        """
-        获取用户头像
-
-        参数:
-            user_id: 用户ID
-
-        返回:
-            str: 用户头像，如果用户不存在则返回空字符串
-        """
-        user = await cls.safe_get_or_none(user_id=user_id)
-        return user.avatar if user else ""
-
-    @classmethod
-    async def set_avatar(cls, user_id: str, avatar: str) -> bool:
-        """
-        设置用户头像
-
-        参数:
-            user_id: 用户ID
-            avatar: 要设置的用户头像
-
-        返回:
-            bool: 设置成功返回True，失败返回False
-        """
-        user, _ = await cls.get_or_create(user_id=user_id)
         user.avatar = avatar
-        await user.save(update_fields=["avatar"])
-        return True
-
-    @classmethod
-    async def set_platform(cls, user_id: str, platform: str | None = None) -> bool:
-        """
-        设置用户所在平台
-
-        参数:
-            user_id: 用户ID
-            platform: 要设置的用户所在平台
-
-        返回:
-            bool: 设置成功返回True，失败返回False
-        """
-        user, _ = await cls.get_or_create(user_id=user_id)
         user.platform = platform
-        await user.save(update_fields=["platform"])
+        await user.save(update_fields=["nickname", "avatar", "platform"])
         return True
 
     @classmethod
-    async def get_location(cls, user_id: str) -> str:
-        """
-        获取用户位置
-
-        参数:
-            user_id: 用户ID
-
-        返回:
-            str: 用户位置，如果用户不存在则返回默认值'北京'
-        """
-        user = await cls.safe_get_or_none(user_id=user_id)
-        return user.location if user else "北京"
-
-
-    @classmethod
-    def _run_script(cls):
-        """
-        数据库迁移
+    def _run_script(cls) -> list[str]:
+        """数据库迁移
 
         返回:
             list: SQL语句列表，用于数据库表结构更新

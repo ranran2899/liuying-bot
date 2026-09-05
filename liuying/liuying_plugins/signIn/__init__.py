@@ -1,11 +1,20 @@
-"""
-NoneBot 签到插件
-"""
+"""NoneBot 签到插件"""
+
+# from nonebot import get_driver
+from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
+from nonebot_plugin_alconna import Alconna, on_alconna
+from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.utils import Command, PluginExtraData, RegisterConfig
+from liuying.models._user.user_sign import UserSignInfo
+from liuying.utils.apscheduler import task_manager
+from liuying.utils.log import logger
+from liuying.utils.message import MessageUtils
+from liuying.utils.platform import PlatformUtils
+from liuying.utils.manager import PriorityLifecycle
 
-from .signIn import sign_in_cmd
+from .data_source import SIGN_IN_IMAGE_PATH, SignInManage
 
 __plugin_meta__ = PluginMetadata(
     name="签到",
@@ -94,4 +103,87 @@ __plugin_meta__ = PluginMetadata(
     ).to_dict(),
 )
 
-export = [sign_in_cmd]
+
+
+@PriorityLifecycle.on_startup
+async def _init_signin_items() -> None:
+    """插件启动时注册签到道具"""
+    await SignInManage.init_items()
+
+
+sign_in_cmd = on_alconna(
+    Alconna("签到"),
+    aliases={"打卡", "/签到"},
+    priority=52,
+    block=True,
+)
+
+reset_sign_cmd = on_alconna(
+    Alconna("重置签到"),
+    permission=SUPERUSER,
+    priority=51,
+    block=True,
+)
+
+
+async def _send_sign_card(session: Uninfo, user_id: str, image_bytes: bytes) -> None:
+    """发送签到卡片，QQ官方非频道场景优先走Markdown卡片，失败回退图片发送"""
+    if PlatformUtils.is_qbot(session) and not PlatformUtils.is_qq_guild(session):
+        url, width, height = await SignInManage.upload_image(user_id, image_bytes)
+        if url:
+            await MessageUtils.build_markdown_message(
+                SignInManage.build_markdown(url, width, height),
+                SignInManage.build_keyboard(),
+            ).finish()
+        logger.warning("图片上传失败，回退到图片发送")
+
+    await MessageUtils.build_message(image_bytes).finish()
+
+
+@sign_in_cmd.handle()
+async def handle_sign_in(session: Uninfo) -> None:
+    """处理签到请求"""
+    logger.info("用户签到请求", command="签到", session=session)
+    record = await UserSignInfo.safe_get_or_none(user_id=session.user.id)
+    if record and record.is_signed_in == 1:
+        image_bytes = await SignInManage.duplicate_card(session, record)
+    else:
+        image_bytes = await SignInManage.sign_in(session)
+    await _send_sign_card(session, session.user.id, image_bytes)
+
+
+@reset_sign_cmd.handle()
+async def handle_reset_sign(session: Uninfo) -> None:
+    """处理超级用户重置所有用户签到状态请求"""
+    reset_count = await UserSignInfo.reset_all_signed_in_users()
+    logger.info(
+        f"超级用户 {session.user.id} 手动重置了所有用户的签到状态，"
+        f"共重置 {reset_count} 个用户"
+    )
+    await MessageUtils.build_message(
+        f"已成功重置所有用户的签到状态，共重置 {reset_count} 个用户"
+    ).finish()
+
+
+
+@task_manager.cron("reset_daily_sign", hour=0, minute=0, second=0)
+async def _reset_daily_sign() -> None:
+    """每天凌晨0点重置所有用户的签到状态"""
+    reset_count = await UserSignInfo.reset_all_signed_in_users()
+    logger.info(f"每日签到状态重置完成，共重置 {reset_count} 个用户")
+
+
+@task_manager.cron("clear_sign_in_images", hour=23, minute=59, second=0)
+async def _clear_sign_in_images() -> None:
+    """每天23:59清空当日签到图片缓存"""
+    deleted_count = 0
+    for file_path in SIGN_IN_IMAGE_PATH.glob("*.png"):
+        try:
+            file_path.unlink()
+            deleted_count += 1
+        except OSError as e:
+            logger.error(f"清空签到图片失败: {e}")
+    logger.info(f"已清空签到图片，共删除 {deleted_count} 个文件")
+
+
+

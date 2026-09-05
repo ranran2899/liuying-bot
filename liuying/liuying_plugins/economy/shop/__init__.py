@@ -90,6 +90,7 @@ __plugin_meta__ = PluginMetadata(
 
 store_cmd = on_alconna(
     Alconna("商店", Args["shop_name?", str]),
+    aliases={"/商店"},
     priority=500,
     block=True,
 )
