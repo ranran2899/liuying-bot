@@ -26,8 +26,9 @@ __plugin_meta__ = PluginMetadata(
     extra=PluginExtraData(
         author="liuying",
         version="0.2",
-        plugin_type=PluginType.NORMAL,
+        plugin_type=PluginType.SUPER_AND_ADMIN,
         menu_type="统计",
+        admin_level=6,
         aliases={"群发言统计", "群活跃统计"},
         commands=[
             Command(

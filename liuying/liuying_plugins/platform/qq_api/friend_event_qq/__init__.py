@@ -12,13 +12,14 @@
 from nonebot import on_notice
 from nonebot.adapters import Event
 from nonebot.adapters.qq import Bot, FriendAddEvent, FriendDelEvent
-from nonebot.adapters.qq import Event as QQEvent
+from nonebot.adapters.qq import Event
 from nonebot.plugin import PluginMetadata
 
 from liuying.configs.utils import PluginExtraData
 from liuying.models._bot import BotFriend
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
+from liuying.utils.rules import notice_rule
 
 __plugin_meta__ = PluginMetadata(
     name="QQ官方好友事件监听",
@@ -32,20 +33,11 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-def _qbot_rule(event: Event) -> bool:
-    """QQ官方适配器事件过滤规则
-
-    参数:
-        event: 事件对象
-
-    返回:
-        bool: 是否为QQ官方适配器事件
-    """
-    return isinstance(event, QQEvent)
-
-
 # 好友增减事件
-_friend_event = on_notice(priority=1, block=False, rule=_qbot_rule)
+_friend_event = on_notice(
+    priority=1,
+    block=False,
+    rule=notice_rule([FriendAddEvent, FriendDelEvent]))
 
 
 @_friend_event.handle()
@@ -60,7 +52,7 @@ async def _handle_friend_event(event: Event, bot: Bot) -> None:
         await BotFriend.update_or_create(
             bot_id=bot.self_id,
             user_id=open_id,
-            defaults={"platform": "qq"},
+            defaults={"platform": "QQ"},
         )
     elif isinstance(event, FriendDelEvent):
         open_id = event.openid

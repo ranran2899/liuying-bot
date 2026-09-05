@@ -1,8 +1,8 @@
 import nonebot
 from nonebot import on_notice
 from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent
-from nonebot.adapters.onebot.v12 import GroupMemberIncreaseEvent
+from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent, Event as v11Event
+from nonebot.adapters.onebot.v12 import GroupMemberIncreaseEvent, Event as v12Event
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import Alconna, Arparma, on_alconna
 from nonebot_plugin_uninfo import Uninfo
@@ -36,9 +36,8 @@ __plugin_meta__ = PluginMetadata(
 
 
 _matcher = on_alconna(
-    Alconna("更新qq群组成员信息"),
-    rule=admin_check(1) & ensure_group,
-    aliases=["更新QQ群组成员信息"],
+    Alconna("更新群组成员信息"),
+    rule=admin_check(1) & ensure_group & notice_rule([v11Event, v12Event]),
     priority=5,
     block=True,
 )
@@ -72,9 +71,9 @@ async def _(bot: Bot, event: GroupIncreaseNoticeEvent | GroupMemberIncreaseEvent
         )
 
 
-@task_manager.interval("update_group_member", minutes=5)
+@task_manager.interval("update_group_member_onebot", minutes=5)
 async def _update_group_member():
-    """每5分钟更新一次群组成员信息"""
+    """每5分钟更新一次qq群组成员信息"""
     for bot in list(nonebot.get_bots().values()):
         if PlatformUtils.get_platform(bot) == "qq":
             try:

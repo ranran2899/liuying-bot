@@ -26,12 +26,13 @@ from nonebot.adapters.qq import (
     GroupMsgReceiveEvent,
     GroupMsgRejectEvent,
 )
-from nonebot.adapters.qq import Event as QQEvent
+from nonebot.adapters.qq import Event
 from nonebot.plugin import PluginMetadata
 
 from liuying.configs.utils import PluginExtraData, Task
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
+from liuying.utils.rules import notice_rule
 
 from .data_source import GroupManager
 
@@ -55,20 +56,9 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-def _qbot_rule(event: Event) -> bool:
-    """QQ官方适配器事件过滤规则
-
-    参数:
-        event: 事件对象
-
-    返回:
-        bool: 是否为QQ官方适配器事件
-    """
-    return isinstance(event, QQEvent)
-
 
 # 机器人进退群事件
-_group_robot_event = on_notice(priority=1, block=False, rule=_qbot_rule)
+_group_robot_event = on_notice(priority=1, block=False, rule=notice_rule([GroupAddRobotEvent, GroupDelRobotEvent]))
 
 
 @_group_robot_event.handle()
@@ -84,7 +74,7 @@ async def _handle_group_robot_event(event: Event) -> None:
 
 
 # 群聊主动消息状态变更事件
-_group_msg_status = on_notice(priority=1, block=False, rule=_qbot_rule)
+_group_msg_status = on_notice(priority=1, block=False, rule=notice_rule([GroupMsgRejectEvent, GroupMsgReceiveEvent]))
 
 
 @_group_msg_status.handle()
@@ -111,7 +101,7 @@ async def _handle_group_msg_status(event: Event) -> None:
 
 
 # 普通群成员进退事件
-_group_member_event = on_notice(priority=1, block=False, rule=_qbot_rule)
+_group_member_event = on_notice(priority=1, block=False, rule=notice_rule([GroupMemberAddEvent, GroupMemberRemoveEvent]))
 
 
 @_group_member_event.handle()
