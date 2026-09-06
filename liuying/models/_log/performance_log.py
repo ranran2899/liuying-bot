@@ -1,7 +1,6 @@
-from datetime import datetime
 from typing import ClassVar
 
-from sqlalchemy import BigInteger, DateTime, Float, Integer, String
+from sqlalchemy import BigInteger, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model

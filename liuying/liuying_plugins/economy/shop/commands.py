@@ -10,7 +10,6 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.models._economy import Shop, ShopItem
 from liuying.models._log.shop_log import ShopTransactionLog
 from liuying.utils.enum import PropHandle
-from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.user import UserGold
 
@@ -55,7 +54,6 @@ class ShopCommands:
             await MessageUtils.build_message(image_bytes).finish()
             return
 
-        logger.info("用户查看商店", command="商店", session=session)
         all_items = await TemplateRepository.get_visible()
         image_bytes = await ShopRenderer.render_store(user_id, all_items)
         await MessageUtils.build_message(image_bytes).finish()
@@ -116,14 +114,11 @@ class ShopCommands:
     @staticmethod
     async def use(session: Uninfo, item_id: str, quantity: Match[int]) -> None:
         """处理使用道具命令"""
-        user_id = session.user.id
-        use_quantity = quantity.result
-
-        result = await ShopCommands._use_item(user_id, item_id, use_quantity)
-        if result.success:
-            await MessageUtils.build_message(result.message).finish()
-        else:
-            await MessageUtils.build_message(f"使用失败: {result.message}").finish()
+        result = await ShopCommands._use_item(
+            session.user.id, item_id, quantity.result
+        )
+        message = result.message if result.success else f"使用失败: {result.message}"
+        await MessageUtils.build_message(message).finish()
 
     @staticmethod
     async def my_items(session: Uninfo) -> None:
@@ -361,8 +356,8 @@ class ShopCommands:
         item_id = item_info["id"]
         item_name = item_info["name"]
 
-        if not await ItemInventory.check_enough(user_id, item_id, quantity):
-            current = await ItemInventory.get_count(user_id, item_id)
+        current = await ItemInventory.get_count(user_id, item_id)
+        if current < quantity:
             return UseResult(
                 success=False,
                 result_type=PropHandle.INSUFFICIENT_ITEMS,

@@ -1,17 +1,17 @@
 """用户其他货币"""
 
-from sqlalchemy import String, BigInteger
+from sqlalchemy import BigInteger, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
 from liuying.utils.enum import CurrHandle
 from liuying.utils.exception import (
     InsufficientCopper,
-    InsufficientSilver,
     InsufficientDiamond,
+    InsufficientSilver,
+    InsufficientTianrew,
     InsufficientXingqiong,
     InsufficientYuanshi,
-    InsufficientTianrew,
 )
 
 from .._log.user_curr_log import UserCurrLog

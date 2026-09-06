@@ -3,8 +3,7 @@
 from datetime import datetime, timedelta
 from typing import ClassVar
 
-import orjson as json
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
@@ -31,8 +30,8 @@ class AuctionItem(Model):
     seller_id: Mapped[str] = mapped_column(
         String(255), nullable=False, index=True, comment="卖家用户ID"
     )
-    item_data: Mapped[str] = mapped_column(
-        Text, default="{}", comment="道具信息JSON（含id字段）"
+    item_data: Mapped[dict] = mapped_column(
+        JSON, default=dict, comment="道具信息JSON（含id字段）"
     )
     quantity: Mapped[int] = mapped_column(
         Integer, default=1, comment="上架数量"
@@ -49,28 +48,24 @@ class AuctionItem(Model):
 
     @property
     def item_id(self) -> str:
-        """道具ID（从item_data JSON的id字段读取）"""
+        """道具ID（从item_data的id字段读取）"""
         return self.get_data().get("id", "")
 
     def get_data(self) -> dict:
-        """解析道具信息JSON
+        """获取道具信息字典
 
         返回:
-            dict: 道具信息字典
+            dict: 道具信息字典，字段异常时返回空字典
         """
-        try:
-            data = json.loads(self.item_data)
-            return data if isinstance(data, dict) else {}
-        except (json.JSONDecodeError, TypeError):
-            return {}
+        return self.item_data if isinstance(self.item_data, dict) else {}
 
     def set_data(self, data: dict) -> None:
-        """设置道具信息JSON
+        """设置道具信息字典
 
         参数:
             data: 道具信息字典
         """
-        self.item_data = json.dumps(data).decode()
+        self.item_data = data
 
     def to_dict(self) -> dict:
         """转换为统一展示字典
@@ -133,7 +128,7 @@ class AuctionItem(Model):
             seller_id=seller_id,
             quantity=quantity,
             price=price,
-            item_data=json.dumps({"id": item_id, **item_data}).decode(),
+            item_data={"id": item_id, **item_data},
             expire_at=expire_at,
         )
         return True
@@ -166,18 +161,6 @@ class AuctionItem(Model):
         """
         items = await cls.filter(seller_id=seller_id).all()
         return [item.to_dict() for item in items]
-
-    @classmethod
-    async def get_user_listed_types(cls, seller_id: str) -> int:
-        """获取用户在拍卖行上架的物品种类数
-
-        参数:
-            seller_id: 卖家用户ID
-
-        返回:
-            int: 物品种类数
-        """
-        return await cls.filter(seller_id=seller_id).count()
 
     @classmethod
     async def reduce_quantity(
@@ -281,26 +264,6 @@ class AuctionItem(Model):
             item.to_dict()
             for item in items
             if not item.expire_at or item.expire_at > now
-        ]
-
-    @classmethod
-    async def find_by_keyword(cls, keyword: str) -> list[dict]:
-        """通过关键字搜索拍卖行物品（支持ID或名称模糊匹配，排除已过期）
-
-        参数:
-            keyword: 搜索关键字
-
-        返回:
-            list[dict]: 匹配的物品字典列表
-        """
-        all_items = await cls.get_all_items()
-        return [
-            item
-            for item in all_items
-            if keyword in item.get("name", "")
-            or keyword in item.get("id", "")
-            or keyword == item.get("id", "")
-            or keyword == item.get("name", "")
         ]
 
     @classmethod

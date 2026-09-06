@@ -2,11 +2,11 @@
 调度器任务存储模型
 """
 
-import json
 from datetime import datetime
+import json
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model

@@ -11,32 +11,32 @@ class FgRequest(Model):
     
     用于记录和处理好友及群组请求
     """
-    __tablename__ = 'fg_request'
+    __tablename__ = "fg_request"
     __table_args__ = {
-        'comment': '好友群组请求'
+        "comment": "好友群组请求"
     }
-    
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, comment='自增id')
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, comment="自增id")
     """自增id"""
-    request_type: Mapped[RequestType | None] = mapped_column(Enum(RequestType), default=None, comment='请求类型')
+    request_type: Mapped[RequestType | None] = mapped_column(Enum(RequestType), default=None, comment="请求类型")
     """请求类型"""
-    platform: Mapped[str | None] = mapped_column(String(255), comment='平台')
+    platform: Mapped[str | None] = mapped_column(String(255), comment="平台")
     """平台"""
-    bot_id: Mapped[str | None] = mapped_column(String(255), comment='Bot Id')
+    bot_id: Mapped[str | None] = mapped_column(String(255), comment="Bot Id")
     """机器人id"""
-    flag: Mapped[str | None] = mapped_column(String(255), default='', comment='flag')
+    flag: Mapped[str | None] = mapped_column(String(255), default="", comment="flag")
     """请求标志"""
-    user_id: Mapped[str | None] = mapped_column(String(255), comment='请求用户id')
+    user_id: Mapped[str | None] = mapped_column(String(255), comment="请求用户id")
     """请求用户id"""
-    group_id: Mapped[str | None] = mapped_column(String(255), nullable=True, comment='邀请入群id')
+    group_id: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="邀请入群id")
     """邀请入群id"""
-    nickname: Mapped[str | None] = mapped_column(String(255), comment='请求人名称')
+    nickname: Mapped[str | None] = mapped_column(String(255), comment="请求人名称")
     """对象名称"""
-    comment: Mapped[str | None] = mapped_column(String(255), nullable=True, comment='验证信息')
+    comment: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="验证信息")
     """验证信息"""
-    handle_type: Mapped[RequestHandleType | None] = mapped_column(Enum(RequestHandleType), nullable=True, comment='处理类型')
+    handle_type: Mapped[RequestHandleType | None] = mapped_column(Enum(RequestHandleType), nullable=True, comment="处理类型")
     """处理类型"""
-    message_ids: Mapped[str | None] = mapped_column(String(255), nullable=True, comment='消息id列表')
+    message_ids: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="消息id列表")
     """消息id列表"""
 
     @classmethod

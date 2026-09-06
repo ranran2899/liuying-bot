@@ -8,8 +8,7 @@
 from datetime import datetime
 from typing import ClassVar
 
-import orjson as json
-from sqlalchemy import String, Text
+from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
@@ -18,7 +17,7 @@ from liuying.services.liuying_db import Model
 class ItemTemplate(Model):
     """道具模板模型类
 
-    道具 ID 存储在 item_data JSON 中，本类仅负责表结构与基础读写。
+    道具 ID 存储在 item_data JSON 字段中，本类仅负责表结构与基础读写。
     """
 
     __tablename__ = "item_template"
@@ -28,11 +27,11 @@ class ItemTemplate(Model):
     shop_name: Mapped[str] = mapped_column(
         String(255), default="default", index=True, comment="商店名称"
     )
-    item_data: Mapped[str] = mapped_column(
-        Text, default="{}", comment="道具信息JSON"
+    item_data: Mapped[dict] = mapped_column(
+        JSON, default=dict, comment="道具信息JSON"
     )
-    purchase_stats: Mapped[str] = mapped_column(
-        Text, default="{}", comment="购买统计JSON"
+    purchase_stats: Mapped[dict] = mapped_column(
+        JSON, default=dict, comment="购买统计JSON"
     )
     created_at: Mapped[datetime] = mapped_column(
         default=datetime.now, comment="创建时间"
@@ -42,31 +41,29 @@ class ItemTemplate(Model):
         """获取道具数据字典
 
         返回:
-            dict: 道具数据字典，JSON 解析失败时返回空字典
+            dict: 道具数据字典，字段异常时返回空字典
         """
-        try:
-            return json.loads(self.item_data)
-        except (json.JSONDecodeError, TypeError):
-            return {}
+        return self.item_data if isinstance(self.item_data, dict) else {}
 
     def set_data(self, data: dict) -> None:
-        """设置道具数据
+        """设置道具数据字典
 
         参数:
             data: 道具数据字典
         """
-        self.item_data = json.dumps(data).decode()
+        self.item_data = data
 
     def get_stats(self) -> dict:
         """获取购买统计数据
 
         返回:
-            dict: 购买统计数据字典
+            dict: 购买统计数据字典，字段异常时返回默认结构
         """
-        try:
-            return json.loads(self.purchase_stats)
-        except (json.JSONDecodeError, TypeError):
-            return _default_stats()
+        return (
+            self.purchase_stats
+            if isinstance(self.purchase_stats, dict)
+            else _default_stats()
+        )
 
     def set_stats(self, stats: dict) -> None:
         """设置购买统计数据
@@ -74,7 +71,7 @@ class ItemTemplate(Model):
         参数:
             stats: 购买统计数据字典
         """
-        self.purchase_stats = json.dumps(stats).decode()
+        self.purchase_stats = stats
 
     def to_dict(self) -> dict:
         """将模板实例转换为字典
@@ -82,7 +79,7 @@ class ItemTemplate(Model):
         返回:
             dict: 包含 shop_name 字段的道具字典
         """
-        data = self.get_data()
+        data = dict(self.get_data())
         data["shop_name"] = self.shop_name
         return data
 

@@ -16,10 +16,10 @@ class AccountPassword(Model):
     
     用于管理系统中的账号密码信息
     """
-    
+
     __tablename__ = "account_password"
     __table_args__ = {"comment": "账号密码表，用于管理系统中的账号密码信息"}
-    
+
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, comment="自增id")
     """自增id"""
     account: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, comment="账号")
@@ -34,7 +34,7 @@ class AccountPassword(Model):
     """账号描述"""
     create_time: Mapped[datetime | None] = mapped_column(DateTime, default=datetime.now, comment="创建时间")
     """创建时间"""
-    
+
     @classmethod
     async def exists(cls, account: str) -> bool:
         """
@@ -48,7 +48,7 @@ class AccountPassword(Model):
         """
         instance = await cls.safe_get_or_none(account=account)
         return instance is not None
-    
+
     @classmethod
     async def get_status(cls, account: str) -> int:
         """

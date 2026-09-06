@@ -2,10 +2,38 @@
 
 聚合拍卖行和商店的物品查询，解耦拍卖行服务对商店模型的直接依赖。
 扁平化设计：VenueItem 数据类 + VenueAggregator 聚合器类，
-无需抽象接口和适配器类。
+并提供交易结果数据类供拍卖行/商店服务复用。
 """
 
 from dataclasses import dataclass
+
+from liuying.models._economy import AuctionItem, ShopItem
+
+
+@dataclass(slots=True)
+class ListResult:
+    """上架/下架/改价操作结果
+
+    参数:
+        error: 错误信息，None 表示成功
+        item_name: 道具名称
+    """
+
+    error: str | None = None
+    item_name: str = ""
+
+
+@dataclass(slots=True)
+class TradeResult:
+    """购买/下架/改价操作结果
+
+    参数:
+        success: 是否成功
+        message: 结果消息
+    """
+
+    success: bool = False
+    message: str = ""
 
 
 @dataclass(slots=True)
@@ -82,11 +110,7 @@ class VenueAggregator:
         返回:
             bool: 是否匹配
         """
-        return (
-            keyword == item.id
-            or keyword == item.name
-            or keyword in item.name
-        )
+        return keyword == item.id or keyword == item.name or keyword in item.name
 
     @staticmethod
     def _convert_auction(item: dict) -> VenueItem:
@@ -144,29 +168,13 @@ class VenueAggregator:
         返回:
             list[VenueItem]: 所有场所物品的聚合列表
         """
-        from liuying.models._economy import AuctionItem, ShopItem
-        from liuying.utils.log import logger
-
         all_items: list[VenueItem] = []
-
-        try:
-            auction_items = await AuctionItem.get_all_items()
-            all_items.extend(
-                VenueAggregator._convert_auction(item)
-                for item in auction_items
-            )
-        except Exception as e:
-            logger.error(f"获取拍卖行物品失败: {e}")
-
-        try:
-            shop_items = await ShopItem.get_all_shop_items()
-            all_items.extend(
-                VenueAggregator._convert_shop(item)
-                for item in shop_items
-            )
-        except Exception as e:
-            logger.error(f"获取商店物品失败: {e}")
-
+        auction_items = await AuctionItem.get_all_items()
+        all_items.extend(
+            VenueAggregator._convert_auction(item) for item in auction_items
+        )
+        shop_items = await ShopItem.get_all_shop_items()
+        all_items.extend(VenueAggregator._convert_shop(item) for item in shop_items)
         return all_items
 
     @staticmethod
@@ -197,19 +205,15 @@ class VenueAggregator:
         返回:
             bool: 是否减少成功
         """
-        from liuying.models._economy import AuctionItem, ShopItem
-
         if item.source == "auction":
             return await AuctionItem.reduce_quantity(
                 item.seller_id, item.id, quantity
             )
-        if item.source == "shop":
-            if not item.venue_name:
-                return False
+        if item.source == "shop" and item.venue_name:
             return await ShopItem.reduce_quantity(
                 item.venue_name, item.id, quantity
             )
         return False
 
 
-__all__ = ["VenueAggregator", "VenueItem"]
+__all__ = ["ListResult", "TradeResult", "VenueAggregator", "VenueItem"]

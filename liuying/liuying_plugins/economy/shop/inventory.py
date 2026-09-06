@@ -7,6 +7,7 @@
 
 import orjson as json
 
+from liuying.models._economy.item_template import ItemTemplate
 from liuying.models._user.user_info import UserInfo
 from liuying.utils.log import logger
 
@@ -72,6 +73,8 @@ class ItemInventory:
     async def get_items(user_id: str) -> list[dict]:
         """获取用户道具列表（合并模板信息）
 
+        单次加载全部模板建立索引，避免逐个道具查询模板。
+
         参数:
             user_id: 用户 ID
 
@@ -79,11 +82,15 @@ class ItemInventory:
             list[dict]: 道具信息列表，每项包含 count 字段
         """
         items_data = await ItemInventory._load_items(user_id)
+        if not items_data:
+            return []
+        templates = {
+            t.get_data().get("id", ""): t.to_dict()
+            for t in await ItemTemplate.filter(shop_name=_DEFAULT_SHOP).all()
+        }
         result: list[dict] = []
         for item_id, count in items_data.items():
-            template = await TemplateRepository.get_by_id(
-                item_id, _DEFAULT_SHOP
-            )
+            template = templates.get(item_id)
             if template:
                 template["count"] = count
                 result.append(template)
@@ -151,20 +158,6 @@ class ItemInventory:
         """
         items_data = await ItemInventory._load_items(user_id)
         return items_data.get(item_id, 0)
-
-    @staticmethod
-    async def check_enough(user_id: str, item_id: str, count: int) -> bool:
-        """检查用户道具是否足够
-
-        参数:
-            user_id: 用户 ID
-            item_id: 道具 ID
-            count: 需要检查的数量
-
-        返回:
-            bool: 是否足够
-        """
-        return await ItemInventory.get_count(user_id, item_id) >= count
 
     @staticmethod
     async def check_limit(user_id: str, item_id: str, limit: int) -> bool:

@@ -1,8 +1,7 @@
 from datetime import datetime
 from typing import ClassVar
 
-import orjson as json
-from sqlalchemy import String, Text
+from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
@@ -19,21 +18,28 @@ class ShopItem(Model):
     quantity: Mapped[int] = mapped_column(default=1, comment="上架数量")
     price: Mapped[int] = mapped_column(default=0, comment="出售价格")
     seller_id: Mapped[str] = mapped_column(String(255), comment="卖家用户ID")
-    item_data: Mapped[str] = mapped_column(Text, default="{}", comment="道具信息JSON")
+    item_data: Mapped[dict] = mapped_column(
+        JSON, default=dict, comment="道具信息JSON"
+    )
     created_at: Mapped[datetime] = mapped_column(
         default=datetime.now, comment="上架时间"
     )
 
     def get_data(self) -> dict:
-        """获取道具数据字典"""
-        try:
-            return json.loads(self.item_data)
-        except (json.JSONDecodeError, TypeError):
-            return {}
+        """获取道具数据字典
 
-    def set_data(self, data: dict):
-        """设置道具数据"""
-        self.item_data = json.dumps(data).decode()
+        返回:
+            dict: 道具数据字典，字段异常时返回空字典
+        """
+        return self.item_data if isinstance(self.item_data, dict) else {}
+
+    def set_data(self, data: dict) -> None:
+        """设置道具数据字典
+
+        参数:
+            data: 道具数据字典
+        """
+        self.item_data = data
 
     def to_dict(self) -> dict:
         """将上架物品转换为字典
@@ -41,7 +47,7 @@ class ShopItem(Model):
         返回:
             dict: 包含上架信息与道具数据的字典
         """
-        data = self.get_data()
+        data = dict(self.get_data())
         data["shop_name"] = self.shop_name
         data["quantity"] = self.quantity
         data["price"] = self.price
@@ -100,13 +106,12 @@ class ShopItem(Model):
             await existing.save(update_fields=["quantity", "price"])
             return True
 
-        store_data = {"id": item_id, **item_data}
         await cls.create(
             shop_name=shop_name,
             quantity=quantity,
             price=price,
             seller_id=seller_id,
-            item_data=json.dumps(store_data).decode(),
+            item_data={"id": item_id, **item_data},
         )
         return True
 
@@ -123,21 +128,6 @@ class ShopItem(Model):
         """
         items = await cls.filter(shop_name=shop_name).all()
         return [item.to_dict() for item in items]
-
-    @classmethod
-    async def get_item(cls, shop_name: str, item_id: str) -> dict | None:
-        """
-        获取商店中的指定物品
-
-        参数:
-            shop_name: 商店名称
-            item_id: 道具ID
-
-        返回:
-            dict | None: 物品信息字典
-        """
-        item = await cls._find_by_item_id(shop_name, item_id)
-        return item.to_dict() if item else None
 
     @classmethod
     async def reduce_quantity(cls, shop_name: str, item_id: str, quantity: int) -> bool:

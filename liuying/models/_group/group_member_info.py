@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from typing import ClassVar
 
-from sqlalchemy import JSON, BigInteger, DateTime, Integer, String, Boolean
+from sqlalchemy import BigInteger, Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.data_access import DataAccess

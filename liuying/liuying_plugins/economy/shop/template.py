@@ -8,8 +8,6 @@
 from datetime import datetime
 import time
 
-import orjson as json
-
 from liuying.models._economy import ItemTemplate
 from liuying.models._economy.item_template import _default_stats
 from liuying.utils.log import logger
@@ -85,6 +83,12 @@ class TemplateRepository:
             logger.warning("道具注册失败: 未提供有效的道具数据")
             return 0, 0
 
+        # 单次加载已有模板，避免逐条注册时重复全表扫描
+        existing_ids = {
+            t.get_data().get("id", "")
+            for t in await ItemTemplate.filter(shop_name=shop_name).all()
+        }
+
         added = 0
         skipped = 0
         for item_data in items_list:
@@ -94,15 +98,16 @@ class TemplateRepository:
                 logger.warning(f"道具数据缺少必要字段: {item_data}")
                 continue
             item_id = item_data["id"]
-            if await cls._find_orm_by_id(item_id, shop_name):
+            if item_id in existing_ids:
                 skipped += 1
                 continue
             store_data = _build_store_data(item_data)
             await ItemTemplate.create(
                 shop_name=shop_name,
-                item_data=json.dumps(store_data).decode(),
-                purchase_stats=json.dumps(_default_stats()).decode(),
+                item_data=store_data,
+                purchase_stats=_default_stats(),
             )
+            existing_ids.add(item_id)
             added += 1
 
         total = len(items_list)
@@ -172,6 +177,8 @@ class TemplateRepository:
     ) -> dict | None:
         """通过 ID 或名称查找道具模板
 
+        单次加载全部模板后同时匹配 ID 与名称，避免双重扫描。
+
         参数:
             keyword: 道具 ID 或名称
             shop_name: 商店名称
@@ -181,13 +188,10 @@ class TemplateRepository:
         """
         if not keyword:
             return None
-        by_id = await cls.get_by_id(keyword, shop_name)
-        if by_id:
-            return by_id
-
         templates = await ItemTemplate.filter(shop_name=shop_name).all()
         for t in templates:
-            if t.get_data().get("name") == keyword:
+            data = t.get_data()
+            if data.get("id") == keyword or data.get("name") == keyword:
                 return t.to_dict()
         return None
 

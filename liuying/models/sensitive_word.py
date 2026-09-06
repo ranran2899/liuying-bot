@@ -3,8 +3,8 @@ from typing import ClassVar
 from sqlalchemy import Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from liuying.services.liuying_db import Model
 from liuying.services.cache import CacheRoot
+from liuying.services.liuying_db import Model
 from liuying.utils.enum import CacheType
 
 

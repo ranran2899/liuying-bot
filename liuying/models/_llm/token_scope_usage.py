@@ -1,5 +1,4 @@
 """LLM 作用域 Token 消耗统计模型 - 按用户/群/频道/Bot维度"""
-import time
 from typing import ClassVar
 
 from sqlalchemy import BigInteger, Integer, String

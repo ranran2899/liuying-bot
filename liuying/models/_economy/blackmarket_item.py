@@ -3,8 +3,7 @@
 from datetime import datetime
 from typing import ClassVar
 
-import orjson as json
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
@@ -28,8 +27,8 @@ class BlackMarketItem(Model):
     id: Mapped[int] = mapped_column(
         primary_key=True, autoincrement=True, comment="自增id"
     )
-    item_data: Mapped[str] = mapped_column(
-        Text, default="{}", comment="道具信息JSON（含id字段）"
+    item_data: Mapped[dict] = mapped_column(
+        JSON, default=dict, comment="道具信息JSON（含id字段）"
     )
     quantity: Mapped[int] = mapped_column(
         Integer, default=1, comment="库存数量"
@@ -49,28 +48,24 @@ class BlackMarketItem(Model):
 
     @property
     def item_id(self) -> str:
-        """道具ID（从item_data JSON的id字段读取）"""
+        """道具ID（从item_data的id字段读取）"""
         return self.get_data().get("id", "")
 
     def get_data(self) -> dict:
-        """解析道具信息JSON
+        """获取道具信息字典
 
         返回:
-            dict: 道具信息字典
+            dict: 道具信息字典，字段异常时返回空字典
         """
-        try:
-            data = json.loads(self.item_data)
-            return data if isinstance(data, dict) else {}
-        except (json.JSONDecodeError, TypeError):
-            return {}
+        return self.item_data if isinstance(self.item_data, dict) else {}
 
     def set_data(self, data: dict) -> None:
-        """设置道具信息JSON
+        """设置道具信息字典
 
         参数:
             data: 道具信息字典
         """
-        self.item_data = json.dumps(data).decode()
+        self.item_data = data
 
     def to_dict(self) -> dict:
         """转换为统一展示字典
@@ -183,7 +178,7 @@ class BlackMarketItem(Model):
         """
         base_price = int(item_data.get("price", price))
         return await cls.create(
-            item_data=json.dumps({"id": item_id, **item_data}).decode(),
+            item_data={"id": item_id, **item_data},
             quantity=quantity,
             price=price,
             base_price=base_price,

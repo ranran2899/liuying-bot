@@ -248,5 +248,5 @@ class PluginInfo(Model):
     def _run_script(cls):
         """数据库迁移脚本"""
         return [
-            "ALTER TABLE plugin_info DROP COLUMN impression", 
+            "ALTER TABLE plugin_info DROP COLUMN impression",
         ]

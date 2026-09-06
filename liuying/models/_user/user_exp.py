@@ -5,9 +5,9 @@ from typing import ClassVar
 from sqlalchemy import BigInteger, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from liuying.configs.config import Config
 from liuying.services.cache import CacheRoot
 from liuying.services.liuying_db import Model
-from liuying.configs.config import Config
 
 from .user_info import UserInfo
 

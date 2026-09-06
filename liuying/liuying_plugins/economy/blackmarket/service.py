@@ -79,8 +79,7 @@ class BlackMarketService:
                 f"当前有{current_gold:,}金币"
             )
 
-        reduced = await UserGold.reduce_user_gold(user_id, total_cost)
-        if not reduced:
+        if not await UserGold.reduce_user_gold(user_id, total_cost):
             return f"金币不足! 需要{total_cost:,}金币"
 
         add_ok = await ItemInventory.add(user_id, item_id, quantity)
@@ -114,18 +113,6 @@ class BlackMarketService:
             list[dict]: 黑市商品字典列表
         """
         return await BlackMarketItem.get_all_items()
-
-    @staticmethod
-    async def search_items(keyword: str) -> list[dict]:
-        """搜索黑市商品
-
-        参数:
-            keyword: 搜索关键字
-
-        返回:
-            list[dict]: 匹配的商品字典列表
-        """
-        return await BlackMarketItem.find_by_keyword(keyword)
 
     @classmethod
     async def refresh(cls) -> str:

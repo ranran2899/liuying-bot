@@ -4,8 +4,7 @@
 命令层只负责参数提取与消息构建，业务校验与数据库操作集中于此。
 """
 
-from dataclasses import dataclass
-
+from liuying.liuying_plugins.economy.trading import ListResult
 from liuying.models._economy import Shop, ShopItem
 from liuying.models._log.shop_log import ShopTransactionLog
 from liuying.utils.log import logger
@@ -30,19 +29,6 @@ def calc_discount(price: int, discount: int) -> int:
         int: 折扣后的价格
     """
     return int(price * discount / 100)
-
-
-@dataclass(slots=True)
-class ListResult:
-    """上架/下架/改价操作结果
-
-    参数:
-        error: 错误信息，None 表示成功
-        item_name: 道具名称
-    """
-
-    error: str | None = None
-    item_name: str = ""
 
 
 class ShopService:

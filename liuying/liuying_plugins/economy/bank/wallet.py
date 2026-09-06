@@ -1,9 +1,6 @@
 from liuying.models._user.bank_user import BankUser
 from liuying.models._user.user_curr import UserCurr
 from liuying.models._user.user_info import UserInfo
-from liuying.models.treasury import Treasury
-
-from .constants import TREASURY_NAMES
 
 
 class WalletService:
@@ -112,43 +109,3 @@ class WalletService:
                 await UserCurr.add_silver(user_id, amount, source)
             case "copper":
                 await UserCurr.add_copper(user_id, amount, source)
-
-    @staticmethod
-    async def consume(
-        user_id: str,
-        currency: str,
-        amount: int,
-        source: str = "bank",
-    ) -> None:
-        """从用户银行扣除指定币种并转入钱包
-
-        参数:
-            user_id: 用户id
-            currency: 货币类型 (gold/silver/copper)
-            amount: 扣除金额
-            source: 来源标识
-        """
-        await BankUser.withdraw(user_id, amount, currency)
-        await WalletService.add(user_id, currency, amount, source)
-        treasury_name = TREASURY_NAMES.get(currency, "gold_treasury")
-        await Treasury.decrease_treasury_money(amount, treasury_name)
-
-    @staticmethod
-    async def grant(
-        user_id: str,
-        currency: str,
-        amount: int,
-        source: str = "bank",
-    ) -> None:
-        """从用户钱包扣除指定币种并存入银行
-
-        参数:
-            user_id: 用户id
-            currency: 货币类型 (gold/silver/copper)
-            amount: 存入金额
-            source: 来源标识
-        """
-        await WalletService.reduce(user_id, currency, amount, source)
-        await BankUser.deposit(user_id, amount, 0, currency)
-        treasury_name = TREASURY_NAMES.get(currency, "gold_treasury")
-        await Treasury.increase_treasury_money(amount, treasury_name)

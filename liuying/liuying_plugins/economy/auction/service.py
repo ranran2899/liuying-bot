@@ -4,12 +4,14 @@
 通过统一交易服务聚合展示拍卖行和个人商店的物品。
 """
 
-from dataclasses import dataclass
-
 from liuying.configs.config import Config
 from liuying.liuying_plugins.economy.shop.inventory import ItemInventory
-from liuying.liuying_plugins.economy.shop.template import TemplateRepository
-from liuying.liuying_plugins.economy.trading import VenueAggregator, VenueItem
+from liuying.liuying_plugins.economy.trading import (
+    ListResult,
+    TradeResult,
+    VenueAggregator,
+    VenueItem,
+)
 from liuying.models._economy import AuctionItem, AuctionTransaction
 from liuying.models.treasury import Treasury
 from liuying.utils.log import logger
@@ -60,81 +62,17 @@ def _get_max_expire_days() -> int:
     return Config.get_config(_PLUGIN_MODULE, "AUCTION_MAX_EXPIRE_DAYS", 30)
 
 
-@dataclass(slots=True)
-class ListResult:
-    """上架操作结果
-
-    参数:
-        error: 错误信息，None表示成功
-        item_name: 道具名称
-    """
-
-    error: str | None = None
-    item_name: str = ""
-
-
-@dataclass(slots=True)
-class BuyResult:
-    """购买操作结果
-
-    参数:
-        success: 是否成功
-        message: 结果消息
-    """
-
-    success: bool = False
-    message: str = ""
-
-
-@dataclass(slots=True)
-class DelistResult:
-    """下架操作结果
-
-    参数:
-        success: 是否成功
-        message: 结果消息
-    """
-
-    success: bool = False
-    message: str = ""
-
-
-@dataclass(slots=True)
-class ChangePriceResult:
-    """改价操作结果
-
-    参数:
-        success: 是否成功
-        message: 结果消息
-    """
-
-    success: bool = False
-    message: str = ""
-
-
-def _sort_by_price_desc(items: list[dict]) -> list[dict]:
-    """按价格降序排列物品列表
+def _sort_by_price(items: list[dict], *, desc: bool = False) -> list[dict]:
+    """按价格对物品列表排序
 
     参数:
         items: 物品列表
+        desc: True 为降序，False 为升序
 
     返回:
         list[dict]: 排序后的列表
     """
-    items.sort(key=lambda x: x.get("price", 0), reverse=True)
-    return items
-
-
-def _sort_by_price_asc(items: list[dict]) -> list[dict]:
-    """按价格升序排列物品列表
-
-    参数:
-        items: 物品列表
-
-    返回:
-        list[dict]: 排序后的列表
-    """
-    items.sort(key=lambda x: x.get("price", 0))
+    items.sort(key=lambda x: x.get("price", 0), reverse=desc)
     return items
 
 
@@ -216,20 +154,16 @@ class AuctionService:
 
         item_id = inv_item["id"]
 
-        template = await TemplateRepository.get_by_id(item_id)
-        if not template:
+        # 单次加载用户全部上架记录，同时判断重复上架与种类上限
+        user_listings = await AuctionItem.get_user_items(user_id)
+        existing = next(
+            (it for it in user_listings if it.get("item_id") == item_id), None
+        )
+        if not existing and len(user_listings) >= MAX_USER_LISTED_TYPES:
             return ListResult(
-                error=f"道具'{inv_item.get('name', item_id)}'未在系统中注册，无法上架"
+                error=f"你已在拍卖行上架了{len(user_listings)}种物品，"
+                f"上限为{MAX_USER_LISTED_TYPES}种"
             )
-
-        existing = await AuctionItem._find_by_seller_and_item(user_id, item_id)
-        if not existing:
-            listed_types = await AuctionItem.get_user_listed_types(user_id)
-            if listed_types >= MAX_USER_LISTED_TYPES:
-                return ListResult(
-                    error=f"你已在拍卖行上架了{listed_types}种物品，"
-                    f"上限为{MAX_USER_LISTED_TYPES}种"
-                )
 
         await ItemInventory.reduce(user_id, item_id, quantity)
 
@@ -258,7 +192,7 @@ class AuctionService:
     @staticmethod
     async def buy_item(
         user_id: str, item_keyword: str, quantity: int = 1
-    ) -> BuyResult:
+    ) -> TradeResult:
         """从拍卖行购买物品，自动从价格最低的上架记录开始购买
 
         参数:
@@ -267,14 +201,14 @@ class AuctionService:
             quantity: 购买数量
 
         返回:
-            BuyResult: 购买结果
+            TradeResult: 购买结果
         """
         if quantity <= 0:
-            return BuyResult(message="购买数量必须大于0")
+            return TradeResult(message="购买数量必须大于0")
 
         listings = await VenueAggregator.find_venue_items(item_keyword)
         if not listings:
-            return BuyResult(message=f"拍卖行中没有'{item_keyword}'")
+            return TradeResult(message=f"拍卖行中没有'{item_keyword}'")
 
         listings.sort(key=lambda x: x.price)
 
@@ -282,12 +216,12 @@ class AuctionService:
             item for item in listings if item.seller_id != user_id
         ]
         if not other_listings:
-            return BuyResult(message="不能购买自己上架的物品")
+            return TradeResult(message="不能购买自己上架的物品")
 
         total_available = sum(item.quantity for item in other_listings)
         if total_available < quantity:
             item_name = other_listings[0].name
-            return BuyResult(
+            return TradeResult(
                 message=f"拍卖行中'{item_name}'可购买数量不足，"
                 f"当前可购总量：{total_available}"
             )
@@ -296,7 +230,7 @@ class AuctionService:
             other_listings, quantity
         )
         if not purchase_plan:
-            return BuyResult(message="可购买数量不足")
+            return TradeResult(message="可购买数量不足")
 
         total_cost = sum(listing.price * qty for listing, qty in purchase_plan)
         fee_rate = _get_fee_rate()
@@ -305,7 +239,7 @@ class AuctionService:
 
         current_gold = await UserGold.get_user_gold(user_id)
         if current_gold < total_payment:
-            return BuyResult(
+            return TradeResult(
                 message=f"金币不足! 需要{total_payment:,}金币"
                 f"(含手续费{fee:,})，当前有{current_gold:,}金币"
             )
@@ -321,7 +255,7 @@ class AuctionService:
                 user_id, total_payment, source="拍卖行购买失败退还"
             )
             logger.error(f"拍卖行购买执行失败，已退还金币: {e}", "拍卖行购买")
-            return BuyResult(message="购买过程中发生错误，金币已退还")
+            return TradeResult(message="购买过程中发生错误，金币已退还")
 
         await Treasury.increase_treasury_money(fee, "gold_treasury")
 
@@ -332,7 +266,7 @@ class AuctionService:
             f"买家: {user_id}",
             "拍卖行购买",
         )
-        return BuyResult(
+        return TradeResult(
             success=True,
             message=(
                 f"购买成功!\n获得{item_name} x {quantity}\n"
@@ -413,7 +347,7 @@ class AuctionService:
     @staticmethod
     async def delist_item(
         user_id: str, item_keyword: str, quantity: int = 1
-    ) -> DelistResult:
+    ) -> TradeResult:
         """下架拍卖行物品，归还背包
 
         参数:
@@ -422,10 +356,10 @@ class AuctionService:
             quantity: 下架数量
 
         返回:
-            DelistResult: 下架结果
+            TradeResult: 下架结果
         """
         if quantity <= 0:
-            return DelistResult(message="下架数量必须大于0")
+            return TradeResult(message="下架数量必须大于0")
 
         auction_items = await AuctionItem.get_user_items(user_id)
         matched = [
@@ -434,7 +368,7 @@ class AuctionService:
             if AuctionService._match_keyword(item, item_keyword)
         ]
         if not matched:
-            return DelistResult(message=f"你在拍卖行没有上架'{item_keyword}'")
+            return TradeResult(message=f"你在拍卖行没有上架'{item_keyword}'")
 
         item = matched[0]
         item_id = item.get("item_id", item.get("id", ""))
@@ -444,7 +378,7 @@ class AuctionService:
             user_id, item_id, quantity
         )
         if delist_qty <= 0:
-            return DelistResult(message="下架失败")
+            return TradeResult(message="下架失败")
 
         await ItemInventory.add(user_id, item_id, delist_qty)
 
@@ -453,7 +387,7 @@ class AuctionService:
             f"卖家: {user_id}",
             "拍卖行下架",
         )
-        return DelistResult(
+        return TradeResult(
             success=True,
             message=f"下架成功! 已将{item_name} x {delist_qty}归还背包",
         )
@@ -461,7 +395,7 @@ class AuctionService:
     @staticmethod
     async def change_price(
         user_id: str, item_keyword: str, new_price: int
-    ) -> ChangePriceResult:
+    ) -> TradeResult:
         """修改拍卖行上架价格
 
         参数:
@@ -470,12 +404,12 @@ class AuctionService:
             new_price: 新单价
 
         返回:
-            ChangePriceResult: 改价结果
+            TradeResult: 改价结果
         """
         if new_price <= 0:
-            return ChangePriceResult(message="价格必须大于0")
+            return TradeResult(message="价格必须大于0")
         if new_price > MAX_ITEM_PRICE:
-            return ChangePriceResult(
+            return TradeResult(
                 message=f"价格不能超过{MAX_ITEM_PRICE:,}金币"
             )
 
@@ -486,7 +420,7 @@ class AuctionService:
             if AuctionService._match_keyword(item, item_keyword)
         ]
         if not matched:
-            return ChangePriceResult(
+            return TradeResult(
                 message=f"你在拍卖行没有上架'{item_keyword}'"
             )
 
@@ -497,14 +431,14 @@ class AuctionService:
 
         success = await AuctionItem.change_price(user_id, item_id, new_price)
         if not success:
-            return ChangePriceResult(message="改价失败")
+            return TradeResult(message="改价失败")
 
         logger.info(
             f"拍卖行改价: {item_name}, "
             f"{old_price} -> {new_price}, 卖家: {user_id}",
             "拍卖行改价",
         )
-        return ChangePriceResult(
+        return TradeResult(
             success=True,
             message=f"改价成功! {item_name}的价格"
             f"已从{old_price:,}改为{new_price:,}金币",
@@ -561,7 +495,7 @@ class AuctionService:
         """
         items = await VenueAggregator.find_venue_items(item_keyword)
         all_items = [item.to_dict() for item in items]
-        return _sort_by_price_asc(all_items)
+        return _sort_by_price(all_items)
 
     @staticmethod
     async def get_all_listings() -> list[dict]:
@@ -572,7 +506,7 @@ class AuctionService:
         """
         items = await VenueAggregator.get_all_venue_items()
         all_items = [item.to_dict() for item in items]
-        return _sort_by_price_desc(all_items)
+        return _sort_by_price(all_items, desc=True)
 
     @staticmethod
     async def search_items(keyword: str) -> list[dict]:
@@ -586,7 +520,7 @@ class AuctionService:
         """
         items = await VenueAggregator.find_venue_items(keyword)
         all_items = [item.to_dict() for item in items]
-        all_items = _sort_by_price_desc(all_items)
+        all_items = _sort_by_price(all_items, desc=True)
         return all_items[:MAX_SEARCH_RESULTS]
 
     @staticmethod

@@ -12,16 +12,15 @@
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TypeAlias
 
 from liuying.utils.enum import PropHandle
 from liuying.utils.log import logger
 
 from .template import TemplateRepository
 
-_UseFunc: TypeAlias = Callable[[str, dict, int], Awaitable["UseResult"]]
-_CanUseFunc: TypeAlias = Callable[[str, dict], Awaitable[bool]]
-_HandlerEntry: TypeAlias = tuple[_UseFunc, _CanUseFunc | None, str]
+type _UseFunc = Callable[[str, dict, int], Awaitable[UseResult]]
+type _CanUseFunc = Callable[[str, dict], Awaitable[bool]]
+type _HandlerEntry = tuple[_UseFunc, _CanUseFunc | None, str]
 
 
 @dataclass(slots=True)
@@ -66,22 +65,6 @@ def register_handler(
     name = item_name or item_id
     _handlers[item_id] = (use_func, can_use_func, name)
     _name_to_id[name] = item_id
-
-
-def unregister_handler(item_id: str) -> bool:
-    """注销道具处理器
-
-    参数:
-        item_id: 道具 ID
-
-    返回:
-        bool: 是否注销成功
-    """
-    entry = _handlers.pop(item_id, None)
-    if entry is None:
-        return False
-    _name_to_id.pop(entry[2], None)
-    return True
 
 
 def get_handler(key: str) -> _HandlerEntry | None:
@@ -241,5 +224,4 @@ __all__ = [
     "register",
     "register_handler",
     "register_items",
-    "unregister_handler",
 ]

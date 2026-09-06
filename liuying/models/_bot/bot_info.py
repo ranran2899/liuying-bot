@@ -1,10 +1,10 @@
 """机器人信息"""
 
-from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db.base_model import Model
-from liuying.utils.enum import CacheType
+
 
 class BotInfo(Model):
     """机器人信息数据模型"""
@@ -22,5 +22,5 @@ class BotInfo(Model):
     """机器人其他id，用于唯一标识机器人（如果有）"""
     # bot_cache = CacheType.BOT
     # """机器人缓存类型"""
-    # bot_cache_data = 
+    # bot_cache_data =
     # """机器人缓存数据"""

@@ -8,7 +8,6 @@ from liuying.services.liuying_db.base_model import Model
 from liuying.utils.enum import CacheType
 
 
-
 class BotConsole(Model):
     """Bot控制台数据模型"""
 
@@ -217,25 +216,25 @@ class BotConsole(Model):
             data (str): 要移动的数据
         """
         bot = await cls.filter(bot_id=bot_id).first()
-        
+
         if not bot:
             return
-            
+
         from_value = getattr(bot, from_field)
         to_value = getattr(bot, to_field)
-        
+
         from_list = cls.convert_module_format(from_value)
         if data in from_list:
             from_list.remove(data)
             from_value = cls.convert_module_format(from_list)
             setattr(bot, from_field, from_value)
-        
+
         to_list = cls.convert_module_format(to_value)
         if data not in to_list:
             to_list.append(data)
             to_value = cls.convert_module_format(to_list)
             setattr(bot, to_field, to_value)
-        
+
         await bot.save()
 
     @classmethod
@@ -292,10 +291,10 @@ class BotConsole(Model):
             func_type (str | None): 功能类型，"tasks" 或 "plugins"，如果为None则禁用所有
         """
         bot = await cls.filter(bot_id=bot_id).first()
-        
+
         if not bot:
             return
-        
+
         if func_type == "plugins":
             available_plugins = cls.convert_module_format(bot.available_plugins)
             if available_plugins:
@@ -317,14 +316,14 @@ class BotConsole(Model):
                 block_plugins.extend(available_plugins)
                 bot.block_plugins = cls.convert_module_format(block_plugins)
                 bot.available_plugins = ""
-            
+
             available_tasks = cls.convert_module_format(bot.available_tasks)
             if available_tasks:
                 block_tasks = cls.convert_module_format(bot.block_tasks)
                 block_tasks.extend(available_tasks)
                 bot.block_tasks = cls.convert_module_format(block_tasks)
                 bot.available_tasks = ""
-        
+
         await bot.save()
 
     @classmethod
@@ -337,10 +336,10 @@ class BotConsole(Model):
             func_type (str | None): 功能类型，"tasks" 或 "plugins"，如果为None则启用所有
         """
         bot = await cls.filter(bot_id=bot_id).first()
-        
+
         if not bot:
             return
-        
+
         if func_type == "plugins":
             block_plugins = cls.convert_module_format(bot.block_plugins)
             if block_plugins:
@@ -362,14 +361,14 @@ class BotConsole(Model):
                 available_plugins.extend(block_plugins)
                 bot.available_plugins = cls.convert_module_format(available_plugins)
                 bot.block_plugins = ""
-            
+
             block_tasks = cls.convert_module_format(bot.block_tasks)
             if block_tasks:
                 available_tasks = cls.convert_module_format(bot.available_tasks)
                 available_tasks.extend(block_tasks)
                 bot.available_tasks = cls.convert_module_format(available_tasks)
                 bot.block_tasks = ""
-        
+
         await bot.save()
 
     @classmethod
@@ -385,10 +384,10 @@ class BotConsole(Model):
             bool: 是否被禁用
         """
         bot = await cls.filter(bot_id=bot_id).first()
-        
+
         if not bot:
             return False
-            
+
         block_plugins = cls.convert_module_format(bot.block_plugins)
         return module in block_plugins
 
@@ -405,9 +404,9 @@ class BotConsole(Model):
             bool: 是否被禁用
         """
         bot = await cls.filter(bot_id=bot_id).first()
-        
+
         if not bot:
             return False
-            
+
         block_tasks = cls.convert_module_format(bot.block_tasks)
         return module in block_tasks
