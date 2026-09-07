@@ -2,6 +2,7 @@
 帮助数据源模块
 """
 from pathlib import Path
+from typing import Any
 
 import nonebot
 from nonebot_plugin_uninfo import Uninfo
@@ -20,179 +21,275 @@ from .config import (
     SIMPLE_HELP_IMAGE,
     driver,
 )
-from .render import build_help_image
+from .render import HelpRender
 
 
-async def create_help_image(
-    session: Uninfo, group_id: str | None, is_detail: bool
-) -> Path:
-    """
-    生成帮助图片
+class HelpManage:
+    """帮助数据管理"""
 
-    参数:
-        session: Uninfo
-        group_id: 群号
-        is_detail: 是否详细
+    @staticmethod
+    def get_save_path(group_id: str | None, is_detail: bool) -> Path:
+        """
+        获取帮助图片保存路径
 
-    返回:
-        Path: 图片保存路径
-    """
-    image_data = await build_help_image(session, group_id, is_detail)
-    result = BuildImage.open(image_data)
+        参数:
+            group_id: 群号
+            is_detail: 是否详细
 
-    save_path = get_save_path(group_id, is_detail)
-    await result.save(save_path)
-    return save_path
+        返回:
+            Path: 保存路径
+        """
+        match (group_id, is_detail):
+            case (str(gid), _):
+                return GROUP_HELP_PATH / f"{gid}_{is_detail}.png"
+            case (None, True):
+                return SIMPLE_DETAIL_HELP_IMAGE
+            case _:
+                return SIMPLE_HELP_IMAGE
 
+    @classmethod
+    async def create_help_image(
+        cls, session: Uninfo, group_id: str | None, is_detail: bool
+    ) -> Path:
+        """
+        生成帮助图片并保存
 
-def get_save_path(group_id: str | None, is_detail: bool) -> Path:
-    """
-    获取帮助图片保存路径
+        参数:
+            session: Uninfo
+            group_id: 群号
+            is_detail: 是否详细
 
-    参数:
-        group_id: 群号
-        is_detail: 是否详细
+        返回:
+            Path: 图片保存路径
+        """
+        image_data = await HelpRender.build(session, group_id, is_detail)
+        result = BuildImage.open(image_data)
 
-    返回:
-        Path: 保存路径
-    """
-    match (group_id, is_detail):
-        case (str(gid), _):
-            return GROUP_HELP_PATH / f"{gid}_{is_detail}.png"
-        case (None, True):
-            return SIMPLE_DETAIL_HELP_IMAGE
-        case _:
-            return SIMPLE_HELP_IMAGE
+        save_path = cls.get_save_path(group_id, is_detail)
+        await result.save(save_path)
+        return save_path
 
+    @staticmethod
+    async def get_user_allowed_types(user_id: str) -> list[PluginType]:
+        """
+        获取用户可访问插件类型列表
 
-async def get_user_allowed_types(user_id: str) -> list[PluginType]:
-    """
-    获取用户可访问插件类型列表
+        参数:
+            user_id: 用户id
 
-    参数:
-        user_id: 用户id
+        返回:
+            list[PluginType]: 插件类型列表
+        """
+        types = [PluginType.NORMAL, PluginType.DEPENDANT]
 
-    返回:
-        list[PluginType]: 插件类型列表
-    """
-    types = [PluginType.NORMAL, PluginType.DEPENDANT]
+        user_levels = await UserPermLevel.filter(
+            user_id=user_id, user_perm__gt=0
+        ).exists()
 
-    user_levels = await UserPermLevel.filter(
-        user_id=user_id, user_perm__gt=0
-    ).exists()
+        if user_levels:
+            types.extend([PluginType.ADMIN, PluginType.SUPER_AND_ADMIN])
 
-    if user_levels:
-        types.extend([PluginType.ADMIN, PluginType.SUPER_AND_ADMIN])
+        if user_id in driver.config.superusers:
+            types.append(PluginType.SUPERUSER)
 
-    if user_id in driver.config.superusers:
-        types.append(PluginType.SUPERUSER)
+        return types
 
-    return types
+    @classmethod
+    async def get_plugin_help_detail(
+        cls, user_id: str, name: str, is_superuser: bool
+    ) -> str | bytes:
+        """
+        获取功能的帮助信息
 
+        参数:
+            user_id: 用户id
+            name: 插件名称或id
+            is_superuser: 是否为超级用户
 
-async def get_plugin_help_detail(
-    user_id: str, name: str, is_superuser: bool
-) -> str | bytes:
-    """
-    获取功能的帮助信息
+        返回:
+            str | bytes: 帮助信息
+        """
+        allowed_types = await cls.get_user_allowed_types(user_id)
+        plugin = await cls._find_plugin(name, allowed_types)
 
-    参数:
-        user_id: 用户id
-        name: 插件名称或id
-        is_superuser: 是否为超级用户
+        if not plugin:
+            return "没有查找到这个功能噢..."
 
-    返回:
-        str | bytes: 帮助信息
-    """
-    allowed_types = await get_user_allowed_types(user_id)
-    plugin = await _find_plugin(name, allowed_types)
+        return await cls._build_help_detail(plugin, is_superuser, user_id)
 
-    if not plugin:
-        return "没有查找到这个功能噢..."
+    @classmethod
+    async def get_plugin_list(cls) -> list[dict[str, Any]]:
+        """
+        获取全部可见插件摘要列表（普通/管理员/超级用户）
 
-    return await _build_help_detail(plugin, is_superuser, user_id)
+        供其他插件调用的查询接口，不含依赖插件与父插件。
 
+        返回:
+            list[dict[str, Any]]: 插件摘要列表，每项包含
+                id/name/description/menu_type/plugin_type/admin_level/status
+        """
+        plugins = await PluginInfo.visible_query(
+            plugin_type__in=[
+                PluginType.NORMAL,
+                PluginType.ADMIN,
+                PluginType.SUPER_AND_ADMIN,
+                PluginType.SUPERUSER,
+            ],
+        ).all()
 
-async def _find_plugin(
-    name: str, allowed_types: list[PluginType]
-) -> PluginInfo | None:
-    """
-    查找插件
+        result: list[dict[str, Any]] = []
+        for plugin in plugins:
+            nb_plugin = nonebot.get_plugin_by_module_name(plugin.module_path)
+            description = (
+                nb_plugin.metadata.description
+                if nb_plugin and nb_plugin.metadata
+                else ""
+            )
+            result.append({
+                "id": str(plugin.id),
+                "name": plugin.name,
+                "description": description,
+                "menu_type": plugin.menu_type,
+                "plugin_type": (
+                    str(plugin.plugin_type) if plugin.plugin_type else None
+                ),
+                "admin_level": plugin.admin_level,
+                "status": plugin.status,
+            })
+        return result
 
-    参数:
-        name: 插件名称或id
-        allowed_types: 允许的插件类型列表
+    @classmethod
+    async def get_plugin_full_info(cls, name: str) -> dict[str, Any] | None:
+        """
+        获取单个插件的完整信息（插件信息/功能描述/使用方法/命令列表）
 
-    返回:
-        PluginInfo | None: 插件信息
-    """
-    if name.isdigit():
+        供其他插件调用的查询接口，支持插件名称或id。
+
+        参数:
+            name: 插件名称或id
+
+        返回:
+            dict[str, Any] | None: 插件完整信息，未找到时返回 None
+        """
+        plugin = await PluginInfo.get_by_id_or_name(
+            name, is_show=True, is_delete=False
+        )
+        if not plugin:
+            return None
+
+        info: dict[str, Any] = {
+            "id": str(plugin.id),
+            "name": plugin.name,
+            "module": plugin.module,
+            "menu_type": plugin.menu_type,
+            "plugin_type": str(plugin.plugin_type) if plugin.plugin_type else None,
+            "admin_level": plugin.admin_level,
+            "status": plugin.status,
+            "author": plugin.author,
+            "version": plugin.version,
+            "description": "",
+            "usage": "",
+            "superuser_help": "",
+            "commands": [],
+            "call_count": 0,
+        }
+
+        nb_plugin = nonebot.get_plugin_by_module_name(plugin.module_path)
+        if nb_plugin and nb_plugin.metadata:
+            extra_data = PluginExtraData(**nb_plugin.metadata.extra)
+            info.update({
+                "author": extra_data.author or plugin.author,
+                "version": extra_data.version or plugin.version,
+                "description": nb_plugin.metadata.description,
+                "usage": nb_plugin.metadata.usage,
+                "superuser_help": extra_data.superuser_help or "",
+                "commands": [cmd.model_dump() for cmd in extra_data.commands],
+            })
+
+        info["call_count"] = await Statistics.filter(plugin_name=plugin.module).count()
+        return info
+
+    @classmethod
+    async def _find_plugin(
+        cls, name: str, allowed_types: list[PluginType]
+    ) -> PluginInfo | None:
+        """
+        查找插件
+
+        参数:
+            name: 插件名称或id
+            allowed_types: 允许的插件类型列表
+
+        返回:
+            PluginInfo | None: 插件信息
+        """
+        if name.isdigit():
+            return await PluginInfo.filter(
+                id=int(name), plugin_type__in=allowed_types,
+            ).first()
+
         return await PluginInfo.filter(
-            id=int(name), plugin_type__in=allowed_types,
+            name__iexact=name,
+            load_status=True,
+            plugin_type__in=allowed_types,
         ).first()
 
-    return await PluginInfo.filter(
-        name__iexact=name,
-        load_status=True,
-        plugin_type__in=allowed_types,
-    ).first()
+    @classmethod
+    async def _build_help_detail(
+        cls, plugin: PluginInfo, is_superuser: bool, user_id: str
+    ) -> str | bytes:
+        """
+        构建帮助详情
 
+        参数:
+            plugin: 插件信息
+            is_superuser: 是否为超级用户
+            user_id: 用户ID
 
-async def _build_help_detail(
-    plugin: PluginInfo, is_superuser: bool, user_id: str
-) -> str | bytes:
-    """
-    构建帮助详情
+        返回:
+            str | bytes: 帮助详情
+        """
+        nb_plugin = nonebot.get_plugin_by_module_name(plugin.module_path)
 
-    参数:
-        plugin: 插件信息
-        is_superuser: 是否为超级用户
-        user_id: 用户ID
+        if not nb_plugin or not nb_plugin.metadata:
+            return "糟糕! 该功能没有帮助喔..."
 
-    返回:
-        str | bytes: 帮助详情
-    """
-    nb_plugin = nonebot.get_plugin_by_module_name(plugin.module_path)
+        extra_data = PluginExtraData(**nb_plugin.metadata.extra)
 
-    if not nb_plugin or not nb_plugin.metadata:
-        return "糟糕! 该功能没有帮助喔..."
+        if is_superuser and not extra_data.superuser_help:
+            return "该功能没有超级用户帮助信息"
 
-    extra_data = PluginExtraData(**nb_plugin.metadata.extra)
+        usage = extra_data.superuser_help if is_superuser else nb_plugin.metadata.usage
+        call_count = await Statistics.filter(plugin_name=plugin.module).count()
 
-    if is_superuser and not extra_data.superuser_help:
-        return "该功能没有超级用户帮助信息"
+        template_data = {
+            "title": nb_plugin.metadata.name,
+            "author": extra_data.author,
+            "version": extra_data.version,
+            "call_count": call_count,
+            "descriptions": cls._format_text(nb_plugin.metadata.description),
+            "usages": cls._format_text(usage),
+        }
 
-    usage = extra_data.superuser_help if is_superuser else nb_plugin.metadata.usage
-    call_count = await Statistics.filter(plugin_name=plugin.module).count()
+        return await ui_render(
+            "pages/builtin/help_detail", template_data,
+            user_id=user_id, wait=2,
+        )
 
-    template_data = {
-        "title": nb_plugin.metadata.name,
-        "author": extra_data.author,
-        "version": extra_data.version,
-        "call_count": call_count,
-        "descriptions": _format_text(nb_plugin.metadata.description),
-        "usages": _format_text(usage),
-    }
+    @staticmethod
+    def _format_text(text: str) -> list[str]:
+        """
+        格式化文本，移除每行公共前导空格
 
-    return await ui_render(
-        "pages/builtin/help_detail", template_data,
-        user_id=user_id, wait=2,
-    )
+        参数:
+            text: 原始文本
 
-
-def _format_text(text: str) -> list[str]:
-    """
-    格式化文本，移除每行公共前导空格
-
-    参数:
-        text: 原始文本
-
-    返回:
-        list[str]: 格式化后的文本列表
-    """
-    lines = text.split("\n")
-    min_spaces = min(
-        (len(line) - len(line.lstrip(" ")) for line in lines if line.strip()),
-        default=0,
-    )
-    return [line[min_spaces:] for line in lines]
+        返回:
+            list[str]: 格式化后的文本列表
+        """
+        lines = text.split("\n")
+        min_spaces = min(
+            (len(line) - len(line.lstrip(" ")) for line in lines if line.strip()),
+            default=0,
+        )
+        return [line[min_spaces:] for line in lines]

@@ -2,12 +2,14 @@
 帮助插件主模块
 """
 from nonebot.adapters import Bot
+from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 from nonebot_plugin_alconna import (
     Alconna,
     AlconnaQuery,
     Args,
+    Arparma,
     Match,
     Option,
     Query,
@@ -20,12 +22,10 @@ from liuying.configs.utils import PluginExtraData, RegisterConfig
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
+from liuying.utils.rules import admin_check, ensure_group
 
-from .data_source import (
-    create_help_image,
-    get_plugin_help_detail,
-    get_save_path,
-)
+from .data_source import HelpManage
+from .render import HelpRender
 
 __plugin_meta__ = PluginMetadata(
     name="帮助",
@@ -33,7 +33,7 @@ __plugin_meta__ = PluginMetadata(
     usage="",
     extra=PluginExtraData(
         author="liuying",
-        version="0.3",
+        version="0.5",
         plugin_type=PluginType.DEPENDANT,
         is_show=False,
         configs=[
@@ -73,6 +73,23 @@ _matcher.shortcut(
     prefix=True,
 )
 
+_admin_help_matcher = on_alconna(
+    Alconna("管理员帮助"),
+    aliases={"admin_help", "管理员菜单"},
+    rule=admin_check(1) & ensure_group,
+    priority=5,
+    block=True,
+)
+
+_superuser_help_matcher = on_alconna(
+    Alconna("超级用户帮助"),
+    aliases={"superuser_help", "超级用户菜单"},
+    permission=SUPERUSER,
+    rule=admin_check(9),
+    priority=5,
+    block=True,
+)
+
 
 @_matcher.handle()
 async def _(
@@ -93,7 +110,7 @@ async def _(
         is_detail: 是否详细帮助
     """
     if name.available:
-        result = await get_plugin_help_detail(
+        result = await HelpManage.get_plugin_help_detail(
             session.user.id, name.result, is_superuser.result
         )
         await MessageUtils.build_message(result).send(reply_to=True)
@@ -114,6 +131,24 @@ async def _(
         await _send_help_image(session, None, is_detail.result)
 
 
+@_admin_help_matcher.handle()
+async def _(session: Uninfo, arparma: Arparma):
+    await _send_menu_help(
+        session,
+        arparma,
+        "管理员帮助",
+        "群管理员帮助",
+        [PluginType.ADMIN, PluginType.SUPER_AND_ADMIN],
+    )
+
+
+@_superuser_help_matcher.handle()
+async def _(session: Uninfo, arparma: Arparma):
+    await _send_menu_help(
+        session, arparma, "超级用户帮助", "超级用户帮助", [PluginType.SUPERUSER]
+    )
+
+
 async def _send_help_image(
     session: Uninfo, group_id: str | None, is_detail: bool
 ) -> None:
@@ -125,7 +160,42 @@ async def _send_help_image(
         group_id: 群号，私聊时为 None
         is_detail: 是否详细帮助
     """
-    image_path = get_save_path(group_id, is_detail)
+    image_path = HelpManage.get_save_path(group_id, is_detail)
     if not image_path.exists():
-        await create_help_image(session, group_id, is_detail)
+        await HelpManage.create_help_image(session, group_id, is_detail)
     await MessageUtils.build_message(image_path).finish()
+
+
+async def _send_menu_help(
+    session: Uninfo,
+    arparma: Arparma,
+    cmd: str,
+    menu_title: str,
+    plugin_types: list[PluginType],
+) -> None:
+    """
+    构建并发送角色帮助菜单图片，失败时发送提示
+
+    参数:
+        session: 会话信息
+        arparma: 命令解析结果
+        cmd: 命令名称，用于日志与提示
+        menu_title: 菜单标题
+        plugin_types: 插件类型列表
+    """
+    group_id = session.group.id if session.group else None
+    try:
+        image_bytes = await HelpRender.build(
+            session=session,
+            group_id=group_id,
+            is_detail=True,
+            plugin_types=plugin_types,
+            menu_title=menu_title,
+        )
+        logger.info(f"查看{cmd}", arparma.header_result, session=session)
+        await MessageUtils.build_message(image_bytes).send(reply_to=True)
+    except Exception as e:
+        logger.error(f"生成{cmd}失败: {e}", cmd, session=session)
+        await MessageUtils.build_message(f"生成{cmd}失败，请稍后再试...").finish(
+            reply_to=True
+        )
