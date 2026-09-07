@@ -10,16 +10,17 @@ from liuying.configs.utils import PluginExtraData
 from liuying.models._user import UserPermLevel
 from liuying.models.plugin_info import PluginInfo
 from liuying.models.statistics import Statistics
+from liuying.ui import render as ui_render
 from liuying.utils.enum import PluginType
 from liuying.utils.image import BuildImage
 
-from ._config import (
+from .config import (
     GROUP_HELP_PATH,
     SIMPLE_DETAIL_HELP_IMAGE,
     SIMPLE_HELP_IMAGE,
     driver,
 )
-from ._render import build_help_image
+from .render import build_help_image
 
 
 async def create_help_image(
@@ -39,12 +40,12 @@ async def create_help_image(
     image_data = await build_help_image(session, group_id, is_detail)
     result = BuildImage.open(image_data)
 
-    save_path = _get_save_path(group_id, is_detail)
+    save_path = get_save_path(group_id, is_detail)
     await result.save(save_path)
     return save_path
 
 
-def _get_save_path(group_id: str | None, is_detail: bool) -> Path:
+def get_save_path(group_id: str | None, is_detail: bool) -> Path:
     """
     获取帮助图片保存路径
 
@@ -140,7 +141,8 @@ async def _find_plugin(
 async def _build_help_detail(
     plugin: PluginInfo, is_superuser: bool, user_id: str
 ) -> str | bytes:
-    """构建帮助详情
+    """
+    构建帮助详情
 
     参数:
         plugin: 插件信息
@@ -161,9 +163,7 @@ async def _build_help_detail(
         return "该功能没有超级用户帮助信息"
 
     usage = extra_data.superuser_help if is_superuser else nb_plugin.metadata.usage
-    call_count = await Statistics.filter(
-        plugin_name=plugin.module
-    ).count()
+    call_count = await Statistics.filter(plugin_name=plugin.module).count()
 
     template_data = {
         "title": nb_plugin.metadata.name,
@@ -174,8 +174,7 @@ async def _build_help_detail(
         "usages": _format_text(usage),
     }
 
-    from liuying.ui import render
-    return await render(
+    return await ui_render(
         "pages/builtin/help_detail", template_data,
         user_id=user_id, wait=2,
     )
@@ -183,7 +182,7 @@ async def _build_help_detail(
 
 def _format_text(text: str) -> list[str]:
     """
-    格式化文本，移除多余空格
+    格式化文本，移除每行公共前导空格
 
     参数:
         text: 原始文本
@@ -196,36 +195,4 @@ def _format_text(text: str) -> list[str]:
         (len(line) - len(line.lstrip(" ")) for line in lines if line.strip()),
         default=0,
     )
-
-    return [
-        line[min_spaces:]
-        for line in lines
-    ]
-
-
-async def search_plugins(
-    user_id: str, keyword: str, is_superuser: bool
-) -> list[dict[str, str]]:
-    """
-    搜索插件
-
-    参数:
-        user_id: 用户id
-        keyword: 搜索关键词
-        is_superuser: 是否为超级用户
-
-    返回:
-        list[dict[str, str]]: 搜索结果列表
-    """
-    allowed_types = await get_user_allowed_types(user_id)
-
-    plugins = await PluginInfo.filter(
-        name__icontains=keyword,
-        load_status=True,
-        plugin_type__in=allowed_types,
-    ).all()
-
-    return [
-        {"id": str(plugin.id), "name": plugin.name}
-        for plugin in plugins
-    ]
+    return [line[min_spaces:] for line in lines]

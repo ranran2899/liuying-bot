@@ -9,7 +9,7 @@ from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.rules import ensure_group
 
-from ..help._render import build_superuser_help
+from ..help.render import build_superuser_help
 
 __plugin_meta__ = PluginMetadata(
     name="超级用户帮助",

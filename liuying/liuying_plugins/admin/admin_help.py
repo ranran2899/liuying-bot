@@ -8,7 +8,7 @@ from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.rules import admin_check, ensure_group
 
-from ..help._render import build_admin_help
+from ..help.render import build_admin_help
 
 __plugin_meta__ = PluginMetadata(
     name="管理员帮助",

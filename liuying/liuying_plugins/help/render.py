@@ -14,11 +14,12 @@ from liuying.models.plugin_info import PluginInfo
 from liuying.ui import render
 from liuying.utils.enum import BlockType, PluginType
 
-from ._utils import process_plugins
+from .utils import process_plugins
 
 
 class PluginItem(BaseModel):
     """插件项数据模型"""
+
     plugin_name: str
     commands: list[str]
     id: str
@@ -87,26 +88,17 @@ def _build_frontend_data(classified: dict[str, list[PluginItem]]) -> list[dict]:
     返回:
         list[dict]: 前端插件数据
     """
-    if not classified:
-        return []
-
     sorted_classified = dict(
         sorted(classified.items(), key=lambda x: len(x[1]), reverse=True)
     )
 
-    menu_items = [
+    return [
         {
-            "name": "主要功能" if menu in ["normal", "功能"] else menu,
+            "name": "主要功能" if menu == "功能" else menu,
             "items": items,
         }
         for menu, items in sorted_classified.items()
     ]
-
-    for item in menu_items:
-        if isinstance(item["items"], list):
-            item["items"].sort(key=lambda x: x.id)
-
-    return menu_items
 
 
 async def build_help_image(
@@ -141,23 +133,15 @@ async def build_help_image(
         session, group_id, is_detail, _create_plugin_item, plugin_types
     )
     plugin_list = _build_frontend_data(classified)
-
-    plugin_count = sum(
-        len(p["items"]) for p in plugin_list if isinstance(p.get("items"), list)
-    )
-    available_count = sum(
-        sum(1 for item in p["items"] if item.status)
-        for p in plugin_list
-        if isinstance(p.get("items"), list)
-    )
+    items = [item for p in plugin_list for item in p["items"]]
 
     template_data = {
         "plugin_list": plugin_list,
         "width": 637,
         "font_size": (53, 19),
         "is_detail": is_detail,
-        "plugin_count": plugin_count,
-        "available_count": available_count,
+        "plugin_count": len(items),
+        "available_count": sum(1 for item in items if item.status),
         "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "menu_title": menu_title,
     }
