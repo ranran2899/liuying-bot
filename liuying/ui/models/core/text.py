@@ -1,12 +1,16 @@
+"""富文本组件数据模型。"""
+
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from .base import RenderableComponent
 
+__all__ = ["TextData", "TextSpan"]
+
 
 class TextSpan(BaseModel):
-    """单个富文本片段的数据模型"""
+    """单个富文本片段。"""
 
     text: str
     bold: bool = False
@@ -20,7 +24,7 @@ class TextSpan(BaseModel):
 
 
 class TextData(RenderableComponent):
-    """轻量级富文本组件的数据模型"""
+    """轻量级富文本组件数据模型。"""
 
     spans: list[TextSpan] = Field(default_factory=list, description="文本片段列表")
     """文本片段列表"""

@@ -1,3 +1,5 @@
+"""主题管理器：主题加载、模板解析与组件 HTML 组装。"""
+
 import asyncio
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
@@ -11,84 +13,144 @@ from jinja2 import (
     TemplateNotFound,
     pass_context,
 )
-import markdown
+import markdown as markdown_lib
 from markupsafe import Markup
-import orjson as json
+from orjson import JSONDecodeError
+from orjson import loads as json_loads
 from pydantic import BaseModel
 
 from liuying.configs.path_config import THEMES_PATH
 from liuying.services.log import logger
+from liuying.services.renderer.config import RESERVED_TEMPLATE_KEYS
 from liuying.services.renderer.protocols import Renderable
 from liuying.services.renderer.registry import asset_registry
+from liuying.services.renderer.resolver import ResourceResolver
+from liuying.services.renderer.store import (
+    ThemeCatalog,
+    ThemeStoreItem,
+    has_template_suffix,
+)
 from liuying.utils.pydantic_compat import model_dump
 
 if TYPE_CHECKING:
     from .context import RenderContext
 
-from .config import RESERVED_TEMPLATE_KEYS
-from .resolver import ResourceResolver
+from .config import RESOLVE_TIMEOUT
 from .utils import deep_merge_dict
 
-_TEMPLATE_RESOLVE_TIMEOUT = 10.0
+# Markdown 转 HTML 使用的扩展集合
+_MD_EXTENSIONS = [
+    "pymdownx.tasklist",
+    "tables",
+    "fenced_code",
+    "codehilite",
+    "mdx_math",
+    "pymdownx.tilde",
+]
 
 
 class RelativePathEnvironment(Environment):
-    """自定义 Jinja2 环境，支持模板间的相对路径引用。"""
+    """支持模板间相对路径引用的 Jinja2 环境。"""
 
     def join_path(self, template: str, parent: str) -> str:
-        if template.startswith("./") or template.startswith("../"):
-            return str(
-                PurePosixPath(parent).parent / template
-            )
+        """解析模板间的相对引用路径。
+
+        参数:
+            template: 被引用的模板名（可能以 ./ 或 ../ 开头）。
+            parent: 发起引用的父模板名。
+
+        返回:
+            str: 相对父模板目录解析后的模板名。
+        """
+        if template.startswith(("./", "../")):
+            return str(PurePosixPath(parent).parent / template)
         return super().join_path(template, parent)
 
 
 class Theme(BaseModel):
-    """主题数据模型。"""
+    """已加载主题的数据模型。"""
 
     name: str
+    """主题名称"""
     palette: dict[str, Any]
+    """调色板数据（mode/colors/component_colors）"""
     style_css: str = ""
+    """主题附加样式（预留）"""
     assets_dir: Path
+    """当前主题的 assets 目录"""
     default_assets_dir: Path
+    """默认主题的 assets 目录"""
+
+    @property
+    def root(self) -> Path:
+        """返回当前主题根目录（含 pages/ 与 components/）。
+
+        返回:
+            Path: 主题根目录。
+        """
+        return self.assets_dir.parent
+
+    @property
+    def default_root(self) -> Path:
+        """返回默认主题根目录。
+
+        返回:
+            Path: 默认主题的根目录。
+        """
+        return self.default_assets_dir.parent
 
 
-class ThemeStoreItem(BaseModel):
-    """主题商店条目模型。"""
+def markdown_filter(text: str) -> str:
+    """Jinja2 过滤器：将 Markdown 文本转换为 HTML。
 
-    feature: str
-    feature_label: str
-    theme_name: str
-    theme_label: str
-    display_name: str
-    price: int
-    page_path: str
+    参数:
+        text: Markdown 源文本，非字符串时返回空串。
+
+    返回:
+        str: 转换后的 HTML 片段。
+    """
+    if not isinstance(text, str):
+        return ""
+    return markdown_lib.markdown(
+        text,
+        extensions=_MD_EXTENSIONS,
+        extension_configs={"mdx_math": {"enable_dollar_delimiter": True}},
+    )
 
 
 class ThemeManager:
-    """主题管理器，负责UI主题的加载、解析和模板渲染。"""
+    """主题管理器，负责主题加载、模板解析与组件到 HTML 的渲染。"""
 
-    def __init__(self, env: Environment):
+    def __init__(self, env: Environment) -> None:
+        """初始化管理器并注册模板全局函数与过滤器。
+
+        参数:
+            env: 已构建的 Jinja2 异步环境。
+        """
         self.jinja_env = env
         self.current_theme: Theme | None = None
+        self.catalog = ThemeCatalog()
 
-        self.jinja_env.globals["render"] = self._global_render_component
-        self.jinja_env.globals["asset"] = self._create_asset_loader()
+        self.jinja_env.globals["render"] = self._render_child_global
+        self.jinja_env.globals["asset"] = self._make_asset_loader()
         self.jinja_env.globals["resolve_template"] = (
-            self._resolve_component_template
+            self.resolve_component_template
         )
+        self.jinja_env.filters["md"] = markdown_filter
 
-        self.jinja_env.filters["md"] = self._markdown_filter
-
-        self._manifest_cache: dict[str, Any] = {}
-        self._manifest_cache_lock = asyncio.Lock()
-        self._page_themes_cache: dict[str, list[str]] = {}
+        self._manifest_cache: dict[str, dict[str, Any] | None] = {}
+        self._manifest_lock = asyncio.Lock()
         self._theme_css_cache: dict[str, str] = {}
-        self._template_resolve_cache: dict[str, str] = {}
-        self._store_cache: list[ThemeStoreItem] | None = None
+        self._template_cache: dict[str, str] = {}
+
+    # ---------- 主题加载 ----------
 
     def list_available_themes(self) -> list[str]:
-        """扫描主题目录并返回所有可用的全局主题名称。"""
+        """扫描主题目录，返回全部可用的全局主题名称。
+
+        返回:
+            list[str]: 含 palette.json 的主题目录名列表。
+        """
         if not THEMES_PATH.is_dir():
             return []
         return [
@@ -97,284 +159,520 @@ class ThemeManager:
             if d.is_dir() and (d / "palette.json").exists()
         ]
 
-    def list_page_themes(self, page_path: str) -> list[str]:
-        """扫描页面目录并返回所有可用的页面级主题名称（带缓存）。"""
-        if page_path in self._page_themes_cache:
-            return self._page_themes_cache[page_path]
+    async def load_theme(self, theme_name: str = "default") -> None:
+        """加载指定全局主题，并注入模板全局变量。
 
-        if not self.current_theme:
-            return ["default"]
-        theme_dir = self.current_theme.assets_dir.parent / page_path
-        if not theme_dir.is_dir():
-            self._page_themes_cache[page_path] = ["default"]
-            return ["default"]
-
-        themes = [
-            d.name
-            for d in theme_dir.iterdir()
-            if d.is_dir() and (d / "theme.json").exists()
-        ]
-        result = sorted(themes) if themes else ["default"]
-        self._page_themes_cache[page_path] = result
-        return result
-
-    def _load_theme_json(
-        self, page_path: str, theme_name: str
-    ) -> dict[str, Any] | None:
-        """加载指定页面主题的 theme.json 配置。
-
-        优先从当前主题目录加载，回退到默认主题目录。
+        目标主题不存在时回退加载 default；同时把 default 主题的调色板
+        作为 default_theme_palette 全局变量供变量生成器做映射回退。
 
         参数:
-            page_path: 页面路径，如 "pages/builtin/signIn"
-            theme_name: 主题名称，如 "pink"
+            theme_name: 主题目录名，默认加载 "default"。
+
+        异常:
+            FileNotFoundError: 默认主题 default 也未找到时抛出。
+        """
+        theme_dir = THEMES_PATH / theme_name
+        if not theme_dir.is_dir():
+            logger.error(f"主题 '{theme_name}' 不存在，将回退到默认主题。")
+            if theme_name == "default":
+                raise FileNotFoundError("默认主题 'default' 未找到！")
+            theme_name = "default"
+            theme_dir = THEMES_PATH / "default"
+
+        self._sync_theme_loader(theme_dir)
+        default_palette = (
+            self._read_json(THEMES_PATH / "default" / "palette.json") or {}
+        )
+        self.current_theme = Theme(
+            name=theme_name,
+            palette=self._read_json(theme_dir / "palette.json") or {},
+            assets_dir=theme_dir / "assets",
+            default_assets_dir=THEMES_PATH / "default" / "assets",
+        )
+        self.jinja_env.globals["theme"] = model_dump(self.current_theme)
+        self.jinja_env.globals["default_theme_palette"] = default_palette
+        logger.info(f"主题管理器已加载主题: {theme_name}")
+
+    def _sync_theme_loader(self, theme_dir: Path) -> None:
+        """把主题目录与默认主题目录挂到模板加载链最前端。
+
+        参数:
+            theme_dir: 待加载的主题根目录。
+        """
+        loader = self.jinja_env.loader
+        if not (loader and isinstance(loader, ChoiceLoader)):
+            return
+        loaders = list(loader.loaders)
+        if len(loaders) > 1 and isinstance(loaders[0], PrefixLoader):
+            default_dir = str(THEMES_PATH / "default")
+            loaders[1] = FileSystemLoader([str(theme_dir), default_dir])
+            loader.loaders = loaders
+
+    @staticmethod
+    def _read_json(path: Path) -> dict[str, Any] | None:
+        """读取 JSON 文件。
+
+        参数:
+            path: JSON 文件路径。
 
         返回:
-            dict | None: 主题配置字典，加载失败返回 None
+            dict[str, Any] | None: 解析结果，文件缺失或解析失败时返回 None。
+        """
+        if not path.exists():
+            return None
+        try:
+            return json_loads(path.read_bytes())
+        except (JSONDecodeError, OSError):
+            logger.warning(f"JSON 文件解析失败: '{path}'")
+            return None
+
+    def clear_cache(self) -> None:
+        """清空清单、主题 CSS、模板解析与商店缓存。"""
+        self._manifest_cache.clear()
+        self._theme_css_cache.clear()
+        self._template_cache.clear()
+        self.catalog.clear_cache()
+        logger.debug("主题管理器缓存已全部清除")
+
+    # ---------- 页面主题 / 商店（委托 ThemeCatalog） ----------
+
+    def _roots(self) -> tuple[Path, Path] | None:
+        """返回当前主题根目录与默认主题根目录。
+
+        返回:
+            tuple[Path, Path] | None: (当前主题根, 默认主题根)，
+                主题未加载时返回 None。
         """
         if not self.current_theme:
             return None
-        theme_json_path = (
-            self.current_theme.assets_dir.parent
-            / page_path
-            / theme_name
-            / "theme.json"
-        )
-        if not theme_json_path.exists():
-            default_theme_json = (
-                self.current_theme.default_assets_dir.parent
-                / page_path
-                / theme_name
-                / "theme.json"
-            )
-            if not default_theme_json.exists():
-                return None
-            theme_json_path = default_theme_json
-        try:
-            return json.loads(theme_json_path.read_bytes())
-        except (json.JSONDecodeError, OSError):
-            return None
+        return self.current_theme.root, self.current_theme.default_root
+
+    def list_page_themes(self, page_path: str) -> list[str]:
+        """列出指定页面可用的页面级主题。
+
+        参数:
+            page_path: 页面路径，如 "pages/builtin/signIn"。
+
+        返回:
+            list[str]: 主题目录名列表，未加载主题时返回 ["default"]。
+        """
+        if roots := self._roots():
+            return self.catalog.list_page_themes(roots[0], page_path)
+        return ["default"]
 
     def get_theme_price(self, page_path: str, theme_name: str) -> int:
-        """获取指定页面主题的价格。
+        """查询页面主题价格。
 
         参数:
-            page_path: 页面路径，如 "pages/builtin/bank"
-            theme_name: 主题名称，如 "pink"
+            page_path: 页面路径。
+            theme_name: 主题目录名。
 
         返回:
-            int: 主题价格，默认主题返回0，未找到时返回0
+            int: 主题价格，默认主题或未配置时返回 0。
         """
-        if theme_name == "default":
-            return 0
-        data = self._load_theme_json(page_path, theme_name)
-        return data.get("price", 0) if data else 0
+        if roots := self._roots():
+            return self.catalog.get_theme_price(
+                roots[0], roots[1], page_path, theme_name
+            )
+        return 0
 
-    def get_theme_label(
-        self, page_path: str, theme_name: str
-    ) -> str:
-        """获取指定页面主题的中文标签。
+    def get_theme_label(self, page_path: str, theme_name: str) -> str:
+        """查询页面主题的中文标签。
 
         参数:
-            page_path: 页面路径
-            theme_name: 主题名称
+            page_path: 页面路径。
+            theme_name: 主题目录名。
 
         返回:
-            str: 中文标签，未配置时返回主题名称本身
+            str: 中文标签，未配置时返回主题目录名。
         """
-        if theme_name == "default":
-            return "默认"
-        data = self._load_theme_json(page_path, theme_name)
-        if data:
-            return data.get("label", theme_name)
+        if roots := self._roots():
+            return self.catalog.get_theme_label(
+                roots[0], roots[1], page_path, theme_name
+            )
         return theme_name
 
     def resolve_theme_name(
         self, page_path: str, label_or_name: str
     ) -> str | None:
-        """将中文标签或英文名称解析为主题目录名。
-
-        支持中文标签（如"粉色"）和英文主题名（如"pink"）双向解析。
+        """把中文标签或英文目录名解析为主题目录名。
 
         参数:
-            page_path: 页面路径
-            label_or_name: 中文标签或英文主题名
+            page_path: 页面路径。
+            label_or_name: 中文标签（如"粉色"）或英文目录名（如"pink"）。
 
         返回:
-            str | None: 匹配的主题目录名，未匹配返回 None
+            str | None: 匹配的主题目录名，未匹配时返回 None。
         """
-        available_themes = self.list_page_themes(page_path)
-        for t_name in available_themes:
-            if t_name == label_or_name:
-                return t_name
-            label = self.get_theme_label(page_path, t_name)
-            if label == label_or_name:
-                return t_name
+        if roots := self._roots():
+            return self.catalog.resolve_theme_name(
+                roots[0], roots[1], page_path, label_or_name
+            )
         return None
 
-    def resolve_feature_key(self, label_or_key: str) -> str | None:
-        """将中文功能标签或英文功能键解析为功能键。
-
-        支持中文标签（如"签到"）和英文键（如"sign"）双向解析。
-
-        参数:
-            label_or_key: 中文功能标签或英文功能键
+    def discover_features(self) -> dict[str, dict[str, str]]:
+        """自动发现全部内置页面功能。
 
         返回:
-            str | None: 匹配的功能键，未匹配返回 None
+            dict[str, dict[str, str]]: 功能键到 {page_path, label} 的映射，
+                主题未加载时返回空字典。
         """
-        features = self.discover_features()
-        for f_key, info in features.items():
-            if f_key == label_or_key:
-                return f_key
-            if info.get("label") == label_or_key:
-                return f_key
+        if roots := self._roots():
+            return self.catalog.discover_features(roots[0])
+        return {}
+
+    def resolve_feature_key(self, label_or_key: str) -> str | None:
+        """把中文功能标签或英文功能键解析为功能键。
+
+        参数:
+            label_or_key: 中文标签（如"签到"）或英文键（如"sign"）。
+
+        返回:
+            str | None: 匹配的功能键，未匹配时返回 None。
+        """
+        if roots := self._roots():
+            return self.catalog.resolve_feature_key(roots[0], label_or_key)
         return None
 
     def get_store_items(self) -> list[ThemeStoreItem]:
-        """获取主题商店所有可购买的主题条目。
+        """获取主题商店全部条目。
 
         返回:
-            list[ThemeStoreItem]: 商店条目列表
+            list[ThemeStoreItem]: 商店条目列表，主题未加载时返回空列表。
         """
-        if self._store_cache is not None:
-            return self._store_cache
-
-        features = self.discover_features()
-        items: list[ThemeStoreItem] = []
-
-        for f_key, info in sorted(features.items()):
-            page_path = info["page_path"]
-            f_label = info["label"]
-            themes = self.list_page_themes(page_path)
-
-            for t_name in themes:
-                data = self._load_theme_json(page_path, t_name)
-                if data:
-                    display_name = data.get("name", t_name)
-                    price = data.get("price", 0)
-                    theme_label = data.get("label", t_name)
-                else:
-                    display_name = t_name
-                    price = 0
-                    theme_label = "默认" if t_name == "default" else t_name
-
-                items.append(ThemeStoreItem(
-                    feature=f_key,
-                    feature_label=f_label,
-                    theme_name=t_name,
-                    theme_label=theme_label,
-                    display_name=display_name,
-                    price=price,
-                    page_path=page_path,
-                ))
-
-        self._store_cache = items
-        return items
-
-    def clear_store_cache(self) -> None:
-        """清除主题商店缓存。"""
-        self._store_cache = None
-
-    def discover_features(self) -> dict[str, dict[str, str]]:
-        """自动扫描 pages/builtin 目录，从 manifest.json 发现功能。"""
-        if not self.current_theme:
-            return {}
-        builtin_dir = (
-            self.current_theme.assets_dir.parent / "pages" / "builtin"
-        )
-        if not builtin_dir.is_dir():
-            return {}
-
-        features: dict[str, dict[str, str]] = {}
-        for page_dir in builtin_dir.iterdir():
-            if not page_dir.is_dir():
-                continue
-            manifest_path = page_dir / "manifest.json"
-            if not manifest_path.exists():
-                continue
-            try:
-                manifest = json.loads(manifest_path.read_bytes())
-            except (json.JSONDecodeError, OSError):
-                continue
-            feature = manifest.get("feature")
-            if not feature:
-                continue
-            features[feature] = {
-                "page_path": f"pages/builtin/{page_dir.name}",
-                "label": manifest.get("feature_label", feature),
-            }
-        return features
+        if roots := self._roots():
+            return self.catalog.get_store_items(roots[0], roots[1])
+        return []
 
     async def resolve_user_variant(
         self, page_path: str, user_id: str
     ) -> str | None:
-        """根据页面路径和用户ID自动解析用户的主题变体。"""
+        """根据页面路径与用户 ID 解析用户的主题偏好。
+
+        读取页面 manifest.json 的 feature 键，再查询用户主题表中
+        该用户在此功能上选择的主题。
+
+        参数:
+            page_path: 页面路径，如 "pages/builtin/signIn"。
+            user_id: 用户 ID。
+
+        返回:
+            str | None: 用户选择的主题名；默认主题、页面无 feature
+                配置或主题未加载时返回 None。
+        """
         if not self.current_theme:
             return None
-        manifest_path = (
-            self.current_theme.assets_dir.parent
-            / page_path
-            / "manifest.json"
+        manifest = self._read_json(
+            self.current_theme.root / page_path / "manifest.json"
         )
-        if not manifest_path.exists():
-            return None
-        try:
-            manifest = json.loads(manifest_path.read_bytes())
-        except (json.JSONDecodeError, OSError):
-            return None
-        feature = manifest.get("feature")
-        if not feature:
+        if not (feature := (manifest or {}).get("feature")):
             return None
 
         from liuying.models._user.user_theme import UserTheme
 
         current = await UserTheme.get_current_theme(user_id, feature)
-        return current if current != "default" else None
+        return None if current == "default" else current
 
-    @staticmethod
-    def _get_base_entrypoint(theme_dir: Path) -> str:
-        """从基础 manifest.json 获取入口文件名。"""
-        manifest_path = theme_dir / "manifest.json"
-        if manifest_path.exists():
+    # ---------- 模板与清单解析 ----------
+
+    async def get_component_manifest(self, component_path: str) -> dict | None:
+        """获取组件目录的 manifest.json。
+
+        清单包含 entrypoint、styles、render_options、skin 等配置，
+        结果带缓存与并发保护。
+
+        参数:
+            component_path: 组件模板路径，如 "components/core/card"。
+
+        返回:
+            dict | None: 清单字典，文件缺失或解析失败时返回 None。
+        """
+        if component_path in self._manifest_cache:
+            return self._manifest_cache[component_path]
+
+        async with self._manifest_lock:
+            if component_path not in self._manifest_cache:
+                self._manifest_cache[component_path] = await asyncio.wait_for(
+                    self._load_manifest_file(component_path),
+                    timeout=RESOLVE_TIMEOUT,
+                )
+            return self._manifest_cache[component_path]
+
+    async def _load_manifest_file(self, component_path: str) -> dict | None:
+        """从模板加载器读取组件根目录的 manifest.json。
+
+        参数:
+            component_path: 组件模板路径。
+
+        返回:
+            dict | None: 清单字典，文件缺失或解析失败时返回 None。
+        """
+        loader = self.jinja_env.loader
+        if not loader:
+            return None
+        manifest_path = f"{component_path}/manifest.json".replace("\\", "/")
+        try:
+            source, _filepath, _uptodate = loader.get_source(
+                self.jinja_env, manifest_path
+            )
+        except TemplateNotFound:
+            return None
+        try:
+            return json_loads(source.encode())
+        except (JSONDecodeError, OSError):
+            logger.warning(f"组件清单解析失败: '{manifest_path}'")
+            return None
+
+    async def _safe_component_manifest(
+        self, component_path: str
+    ) -> dict[str, Any] | None:
+        """获取组件清单，超时降级为 None 并告警。
+
+        参数:
+            component_path: 组件模板路径。
+
+        返回:
+            dict[str, Any] | None: 组件清单，超时时返回 None。
+        """
+        try:
+            return await asyncio.wait_for(
+                self.get_component_manifest(component_path),
+                timeout=RESOLVE_TIMEOUT,
+            )
+        except TimeoutError:
+            logger.warning(f"解析组件 '{component_path}' 清单超时")
+            return None
+
+    async def get_template_manifest(
+        self, component_path: str, skin: str | None = None
+    ) -> dict[str, Any] | None:
+        """获取组件的页面主题配置（theme.json），带缓存与并发保护。
+
+        参数:
+            component_path: 组件模板路径。
+            skin: 页面主题名，None 时只查找 default 子目录。
+
+        返回:
+            dict[str, Any] | None: 主题配置字典，缺失或解析失败时返回 None。
+        """
+        cache_key = f"{component_path}:{skin or 'base'}"
+        if cache_key in self._manifest_cache:
+            return self._manifest_cache[cache_key]
+
+        async with self._manifest_lock:
+            if cache_key not in self._manifest_cache:
+                self._manifest_cache[cache_key] = await asyncio.wait_for(
+                    self._load_theme_config(component_path, skin),
+                    timeout=RESOLVE_TIMEOUT,
+                )
+            return self._manifest_cache[cache_key]
+
+    async def _load_theme_config(
+        self, component_path: str, skin: str | None
+    ) -> dict[str, Any] | None:
+        """按 变体目录 -> skins 目录 -> default 目录 的顺序加载 theme.json。
+
+        参数:
+            component_path: 组件模板路径。
+            skin: 页面主题名。
+
+        返回:
+            dict[str, Any] | None: 主题配置字典，全部缺失时返回 None。
+        """
+        base = PurePosixPath(component_path)
+        candidates: list[str] = []
+        if skin and skin != "default":
+            candidates.extend([str(base / skin), str(base / "skins" / skin)])
+        candidates.append(str(base / "default"))
+
+        for candidate in candidates:
+            theme_path = f"{candidate}/theme.json".replace("\\", "/")
+            if not self.jinja_env.loader:
+                return None
             try:
-                manifest = json.loads(manifest_path.read_bytes())
-                return manifest.get("entrypoint", "main.html")
-            except (json.JSONDecodeError, OSError):
-                pass
-        return "main.html"
+                source, _filepath, _uptodate = self.jinja_env.loader.get_source(
+                    self.jinja_env, theme_path
+                )
+            except TemplateNotFound:
+                continue
+            try:
+                return json_loads(source.encode())
+            except (JSONDecodeError, OSError):
+                logger.warning(f"主题配置解析失败: '{theme_path}'")
+        return None
 
-    def clear_cache(self) -> None:
-        """清除所有缓存。"""
-        self._manifest_cache.clear()
-        self._page_themes_cache.clear()
-        self._theme_css_cache.clear()
-        self._template_resolve_cache.clear()
-        self._store_cache = None
-        logger.debug("主题管理器缓存已全部清除")
+    def tpl_render_opts(
+        self, manifest: dict[str, Any] | None, template_name: str
+    ) -> dict[str, Any]:
+        """读取清单中的渲染选项，并与特定模板的选项合并。
 
-    def _create_asset_loader(self) -> Callable[..., str]:
-        """创建 Jinja2 中的 asset() 函数闭包。"""
+        参数:
+            manifest: 组件清单或页面主题配置。
+            template_name: 入口模板文件名，用于匹配 template_render_options。
+
+        返回:
+            dict[str, Any]: 合并后的渲染选项，清单为空时返回空字典。
+        """
+        if not manifest:
+            return {}
+        result = dict(manifest.get("render_options", {}))
+        for item in manifest.get("template_render_options", []) or []:
+            if item.get("template") == template_name:
+                if specific := item.get("render_options"):
+                    if isinstance(specific, dict):
+                        result = deep_merge_dict(result, specific)
+                break
+        return result
+
+    async def resolve_component_template(
+        self, component: Renderable, context: "RenderContext"
+    ) -> str:
+        """解析组件的实际模板路径，支持变体与 default 目录回退。
+
+        按优先级尝试：变体目录 -> skins/变体目录 -> default 目录 ->
+        组件根目录 -> 组件路径.html。
+
+        参数:
+            component: 待渲染的组件。
+            context: 渲染上下文，解析结果会写入其路径缓存。
+
+        返回:
+            str: 实际可渲染的模板路径。
+
+        异常:
+            TemplateNotFound: 所有候选路径均不存在时抛出。
+        """
+        component_path = str(component.template_name)
+        variant = getattr(component, "variant", None)
+        cache_key = f"{component_path}::{variant or 'default'}"
+        if cached := context.resolved_template_paths.get(cache_key):
+            return cached
+
+        # 已经是具体文件路径的组件直接校验存在性
+        if has_template_suffix(component_path):
+            self.jinja_env.get_template(component_path)
+            return component_path
+
+        manifest = await self._safe_component_manifest(component_path)
+        entrypoint = (
+            manifest.get("entrypoint", "main.html") if manifest else "main.html"
+        )
+        skin = variant or (manifest.get("skin") if manifest else None)
+
+        base = PurePosixPath(component_path)
+        candidates: list[str] = []
+        if skin and skin != "default":
+            candidates.append(str(base / skin / entrypoint))
+            candidates.append(str(base / "skins" / skin / entrypoint))
+        candidates.append(str(base / "default" / entrypoint))
+        candidates.append(str(base / entrypoint))
+        if entrypoint == "main.html":
+            candidates.append(f"{component_path}.html")
+
+        for candidate in candidates:
+            try:
+                self.jinja_env.get_template(candidate)
+            except TemplateNotFound:
+                continue
+            context.resolved_template_paths[cache_key] = candidate
+            return candidate
+
+        raise TemplateNotFound(
+            f"无法为组件 '{component_path}' 找到可用的模板，已尝试: {candidates}"
+        )
+
+    async def get_render_options(
+        self, component_path: str, variant: str | None, template_name: str
+    ) -> dict[str, Any]:
+        """合并组件 manifest.json 与页面 theme.json 的渲染选项。
+
+        参数:
+            component_path: 组件模板路径。
+            variant: 组件的变体名称。
+            template_name: 入口模板文件名。
+
+        返回:
+            dict[str, Any]: 按 manifest -> theme.json 顺序深度合并的选项。
+        """
+        options: dict[str, Any] = {}
+        if manifest := await self._safe_component_manifest(component_path):
+            options = self.tpl_render_opts(manifest, template_name)
+        if theme_config := await self._safe_theme_config(component_path, variant):
+            options = deep_merge_dict(
+                options, self.tpl_render_opts(theme_config, template_name)
+            )
+        return options
+
+    async def _safe_theme_config(
+        self, component_path: str, variant: str | None
+    ) -> dict[str, Any] | None:
+        """获取页面主题配置，超时降级为 None 并告警。
+
+        参数:
+            component_path: 组件模板路径。
+            variant: 组件的变体名称。
+
+        返回:
+            dict[str, Any] | None: 主题配置，超时时返回 None。
+        """
+        try:
+            return await asyncio.wait_for(
+                self.get_template_manifest(component_path, skin=variant),
+                timeout=RESOLVE_TIMEOUT,
+            )
+        except TimeoutError:
+            logger.warning(f"解析组件 '{component_path}' 主题配置超时")
+            return None
+
+    # ---------- 资源加载器 ----------
+
+    def _make_asset_loader(self) -> Callable[..., str]:
+        """创建模板内使用的 asset() 全局函数。
+
+        返回:
+            Callable[..., str]: 带上下文的资源解析函数。
+        """
         resolver = ResourceResolver(self)
 
         @pass_context
-        def asset_loader(ctx, asset_path: str) -> str:
+        def asset_loader(ctx: Any, asset_path: str) -> str:
+            """把模板内的资源引用解析为绝对 URI。
+
+            参数:
+                ctx: Jinja2 渲染上下文。
+                asset_path: 资源引用路径。
+
+            返回:
+                str: 资源的绝对 URI，未找到时返回空字符串。
+            """
+            template_name = ctx.name or "unknown_template"
             if not ctx.name:
-                logger.warning(
-                    "Jinja2 上下文缺少模板名称，无法进行资源解析。"
-                )
-                return resolver.resolve_asset_uri(
-                    asset_path, "unknown_template"
-                )
-            return resolver.resolve_asset_uri(asset_path, ctx.name)
+                logger.warning("Jinja2 上下文缺少模板名称，无法解析资源。")
+            return resolver.resolve_asset_uri(asset_path, template_name)
 
         return asset_loader
 
-    def _create_standalone_asset_loader(
+    def make_standalone_asset_loader(
         self, local_base_path: Path
     ) -> Callable[[str], str]:
-        """为独立模板创建资源加载器。"""
+        """为独立模板创建基于本地目录的资源加载器。
+
+        参数:
+            local_base_path: 独立模板所在目录，作为相对资源的基础路径。
+
+        返回:
+            Callable[[str], str]: 资源路径到绝对 URI 的解析函数。
+        """
+
         def asset_loader(asset_path: str) -> str:
+            """解析独立模板的资源引用。
+
+            参数:
+                asset_path: 资源引用路径，绝对路径直接使用。
+
+            返回:
+                str: 资源的绝对 URI，文件不存在时返回空字符串。
+            """
             path = (
                 Path(asset_path)
                 if Path(asset_path).is_absolute()
@@ -384,442 +682,186 @@ class ThemeManager:
 
         return asset_loader
 
-    async def _global_render_component(
-        self, component: Renderable | None
-    ) -> str:
-        """Jinja2 全局函数，在模板内部渲染子组件。"""
-        if not component:
-            return ""
-        try:
-            from .context import RenderContext
-
-            mock_context = RenderContext(
-                renderer=None,
-                theme_manager=self,
-                screenshot_engine=None,
-                component=component,
-                use_cache=False,
-                render_options={},
-            )
-            template_path = await self._resolve_component_template(
-                component, mock_context
-            )
-            template = self.jinja_env.get_template(template_path)
-
-            template_context = {
-                "data": component,
-                "frameless": True,
-            }
-            render_data = component.get_render_data()
-            template_context.update(render_data)
-
-            return Markup(
-                await template.render_async(**template_context)
-            )
-        except Exception as e:
-            logger.error(
-                f"在全局 render 函数中渲染组件 "
-                f"'{component.__class__.__name__}' 失败",
-                e=e,
-            )
-            return (
-                f"<!-- 组件渲染失败{component.__class__.__name__}: {e} -->"
-            )
-
-    @staticmethod
-    def _markdown_filter(text: str) -> str:
-        """将 Markdown 文本转换为 HTML 的 Jinja2 过滤器。"""
-        if not isinstance(text, str):
-            return ""
-        return markdown.markdown(
-            text,
-            extensions=[
-                "pymdownx.tasklist",
-                "tables",
-                "fenced_code",
-                "codehilite",
-                "mdx_math",
-                "pymdownx.tilde",
-            ],
-            extension_configs={
-                "mdx_math": {"enable_dollar_delimiter": True}
-            },
-        )
-
-    async def load_theme(self, theme_name: str = "default"):
-        """加载指定主题。"""
-        theme_dir = THEMES_PATH / theme_name
-        if not theme_dir.is_dir():
-            logger.error(
-                f"主题 '{theme_name}' 不存在，将回退到默认主题。"
-            )
-            if theme_name == "default":
-                raise FileNotFoundError("默认主题 'default' 未找到！")
-            theme_name = "default"
-            theme_dir = THEMES_PATH / "default"
-
-        default_palette_path = THEMES_PATH / "default" / "palette.json"
-        default_palette = (
-            json.loads(default_palette_path.read_bytes())
-            if default_palette_path.exists()
-            else {}
-        )
-        if self.jinja_env.loader and isinstance(
-            self.jinja_env.loader, ChoiceLoader
-        ):
-            current_loaders = list(self.jinja_env.loader.loaders)
-            if len(current_loaders) > 1 and isinstance(
-                current_loaders[0], PrefixLoader
-            ):
-                prefix_loader = current_loaders[0]
-                new_theme_loader = FileSystemLoader(
-                    [str(theme_dir), str(THEMES_PATH / "default")]
-                )
-                self.jinja_env.loader.loaders = [
-                    prefix_loader, new_theme_loader
-                ]
-
-        palette_path = theme_dir / "palette.json"
-        palette = (
-            json.loads(palette_path.read_bytes())
-            if palette_path.exists()
-            else {}
-        )
-
-        self.current_theme = Theme(
-            name=theme_name,
-            palette=palette,
-            assets_dir=theme_dir / "assets",
-            default_assets_dir=THEMES_PATH / "default" / "assets",
-        )
-        theme_context_dict = {
-            "name": theme_name,
-            "palette": palette,
-            "assets_dir": theme_dir / "assets",
-            "default_assets_dir": THEMES_PATH / "default" / "assets",
-        }
-        self.jinja_env.globals["theme"] = theme_context_dict
-        self.jinja_env.globals["default_theme_palette"] = default_palette
-        logger.info(f"主题管理器已加载主题: {theme_name}")
-
-    async def _resolve_component_template(
-        self, component: Renderable, context: "RenderContext"
-    ) -> str:
-        """智能解析组件模板路径，支持扁平化主题和传统皮肤目录。
-
-        包含超时保护，防止模板解析长时间阻塞。
-        """
-        component_path_base = str(component.template_name)
-
-        variant = getattr(component, "variant", None)
-        cache_key = f"{component_path_base}::{variant or 'default'}"
-        if cached_path := context.resolved_template_paths.get(cache_key):
-            return cached_path
-
-        if PurePosixPath(component_path_base).suffix:
-            try:
-                self.jinja_env.get_template(component_path_base)
-                return component_path_base
-            except TemplateNotFound as e:
-                logger.error(
-                    f"指定的模板文件路径不存在: '{component_path_base}'",
-                    e=e,
-                )
-                raise e
-
-        try:
-            base_manifest = await asyncio.wait_for(
-                self.get_template_manifest(component_path_base),
-                timeout=_TEMPLATE_RESOLVE_TIMEOUT,
-            )
-        except TimeoutError:
-            logger.warning(
-                f"解析组件 '{component_path_base}' 基础清单超时"
-            )
-            base_manifest = None
-
-        theme_to_use = variant or (
-            base_manifest.get("skin") if base_manifest else None
-        )
-
-        try:
-            final_manifest = await asyncio.wait_for(
-                self.get_template_manifest(
-                    component_path_base, skin=theme_to_use
-                ),
-                timeout=_TEMPLATE_RESOLVE_TIMEOUT,
-            )
-        except TimeoutError:
-            logger.warning(
-                f"解析组件 '{component_path_base}' 主题清单超时"
-            )
-            final_manifest = None
-
-        entrypoint_filename = (
-            final_manifest.get("entrypoint", "main.html")
-            if final_manifest
-            else "main.html"
-        )
-
-        potential_paths: list[str] = []
-        base = PurePosixPath(component_path_base)
-
-        if theme_to_use and theme_to_use != "default":
-            potential_paths.append(
-                str(base / theme_to_use / entrypoint_filename)
-            )
-            potential_paths.append(
-                str(base / "skins" / theme_to_use / entrypoint_filename)
-            )
-
-        potential_paths.append(
-            str(base / "default" / entrypoint_filename)
-        )
-        potential_paths.append(
-            str(base / entrypoint_filename)
-        )
-
-        if entrypoint_filename == "main.html":
-            potential_paths.append(f"{component_path_base}.html")
-
-        for path in potential_paths:
-            try:
-                self.jinja_env.get_template(path)
-                context.resolved_template_paths[cache_key] = path
-                return path
-            except TemplateNotFound:
-                continue
-
-        err_msg = (
-            f"无法为组件 '{component_path_base}' 找到任何可用的模板。"
-            f"检查路径: {potential_paths}"
-        )
-        logger.error(err_msg)
-        raise TemplateNotFound(err_msg)
-
-    async def _load_single_manifest(
-        self, path_str: str
-    ) -> dict[str, Any] | None:
-        """从指定路径加载单个 manifest.json 文件。"""
-        normalized_path = path_str.replace("\\", "/")
-        manifest_path_str = f"{normalized_path}/manifest.json"
-
-        if not self.jinja_env.loader:
-            return None
-
-        try:
-            source, filepath, _ = self.jinja_env.loader.get_source(
-                self.jinja_env, manifest_path_str
-            )
-            logger.debug(
-                f"找到清单文件: '{manifest_path_str}' "
-                f"(从 '{filepath}' 加载)"
-            )
-            return json.loads(source)
-        except TemplateNotFound:
-            return None
-        except json.JSONDecodeError:
-            logger.warning(f"清单文件 '{manifest_path_str}' 解析失败")
-            return None
-
-    async def _load_theme_config(
-        self, path_str: str
-    ) -> dict[str, Any] | None:
-        """从指定路径加载 theme.json 文件。"""
-        normalized_path = path_str.replace("\\", "/")
-        theme_path_str = f"{normalized_path}/theme.json"
-
-        if not self.jinja_env.loader:
-            return None
-
-        try:
-            source, filepath, _ = self.jinja_env.loader.get_source(
-                self.jinja_env, theme_path_str
-            )
-            logger.debug(
-                f"找到主题配置: '{theme_path_str}' "
-                f"(从 '{filepath}' 加载)"
-            )
-            return json.loads(source)
-        except TemplateNotFound:
-            return None
-        except json.JSONDecodeError:
-            logger.warning(f"主题配置 '{theme_path_str}' 解析失败")
-            return None
-
-    async def _load_and_merge_manifests(
-        self,
-        component_path: Path | str,
-        skin: str | None = None,
-    ) -> dict[str, Any] | None:
-        """加载主题配置文件 theme.json。"""
-        theme_config: dict[str, Any] | None = None
-        base = PurePosixPath(component_path)
-
-        if skin and skin != "default":
-            theme_config = await self._load_theme_config(
-                str(base / skin)
-            )
-            if not theme_config:
-                theme_config = await self._load_theme_config(
-                    str(base / "skins" / skin)
-                )
-
-        if not theme_config:
-            theme_config = await self._load_theme_config(
-                str(base / "default")
-            )
-
-        return theme_config
-
-    async def get_template_manifest(
-        self, component_path: str, skin: str | None = None
-    ) -> dict[str, Any] | None:
-        """查找并解析组件的 manifest.json 文件，支持缓存。"""
-        cache_key = f"{component_path}:{skin or 'base'}"
-
-        if cache_key in self._manifest_cache:
-            return self._manifest_cache[cache_key]
-
-        async with self._manifest_cache_lock:
-            if cache_key in self._manifest_cache:
-                return self._manifest_cache[cache_key]
-
-            manifest = await self._load_and_merge_manifests(
-                component_path, skin
-            )
-            self._manifest_cache[cache_key] = manifest
-            return manifest
-
-    def tpl_render_opts(
-        self, manifest: dict[str, Any] | None, template_name: str
-    ) -> dict[str, Any]:
-        """获取特定模板的渲染选项。"""
-        if not manifest:
-            return {}
-
-        result = manifest.get("render_options", {}).copy()
-        template_options = manifest.get("template_render_options", [])
-
-        if isinstance(template_options, list):
-            for item in template_options:
-                if item.get("template") == template_name:
-                    specific_options = item.get("render_options", {})
-                    if isinstance(specific_options, dict):
-                        result = deep_merge_dict(result, specific_options)
-                    break
-
-        return result
+    # ---------- Markdown 样式 ----------
 
     async def resolve_markdown_style_path(
         self, style_name: str, context: "RenderContext"
     ) -> Path | None:
-        """按照注册->主题约定->默认约定的顺序解析 Markdown 样式路径。"""
-        if cached_path := context.resolved_style_paths.get(style_name):
-            return cached_path
+        """按 注册表 -> 当前主题 -> 默认主题 的顺序解析样式路径。
 
-        resolved_path: Path | None = None
-        if registered_path := asset_registry.resolve_markdown_style(
-            style_name
-        ):
-            resolved_path = registered_path
+        参数:
+            style_name: 样式名称。
+            context: 渲染上下文，解析结果会写入其样式缓存。
 
-        elif self.current_theme:
-            theme_style_path = (
+        返回:
+            Path | None: 样式文件路径，全部未找到时返回 None。
+        """
+        if style_name in context.resolved_style_paths:
+            return context.resolved_style_paths[style_name]
+
+        resolved: Path | None = asset_registry.resolve_markdown_style(style_name)
+        if not resolved and self.current_theme:
+            candidates = [
                 self.current_theme.assets_dir
-                / "css"
-                / "styles"
-                / "markdown"
-                / f"{style_name}.css"
-            )
-            if theme_style_path.exists():
-                resolved_path = theme_style_path
+                / "css" / "styles" / "markdown" / f"{style_name}.css",
+                self.current_theme.default_assets_dir
+                / "css" / "styles" / "markdown" / f"{style_name}.css",
+            ]
+            resolved = next((p for p in candidates if p.exists()), None)
 
-            if not resolved_path:
-                default_style_path = (
-                    self.current_theme.default_assets_dir
-                    / "css"
-                    / "styles"
-                    / "markdown"
-                    / f"{style_name}.css"
-                )
-                if default_style_path.exists():
-                    resolved_path = default_style_path
+        context.resolved_style_paths[style_name] = resolved
+        if not resolved:
+            logger.warning(f"Markdown 样式 '{style_name}' 未找到。")
+        return resolved
 
-        if resolved_path:
-            context.resolved_style_paths[style_name] = resolved_path
-        else:
-            logger.warning(
-                f"Markdown 样式 '{style_name}' "
-                f"在注册表和主题目录中均未找到。"
-            )
+    # ---------- 模板全局函数 ----------
 
-        return resolved_path
+    async def _render_child_global(self, component: Renderable | None) -> str:
+        """Jinja2 全局函数 render()：在模板内部渲染子组件。
 
-    async def _render_component_to_html(
-        self,
-        context: "RenderContext",
-        **kwargs,
+        以 frameless 片段模式渲染，失败时返回 HTML 注释占位不中断整页。
+
+        参数:
+            component: 待渲染的子组件，为 None 时返回空字符串。
+
+        返回:
+            str: 子组件的 HTML 片段（Markup 安全标记）。
+        """
+        if not component:
+            return ""
+        try:
+            template_path = await self._resolve_template_without_context(component)
+            template = self.jinja_env.get_template(template_path)
+            template_context: dict[str, Any] = {
+                "data": component,
+                "frameless": True,
+            }
+            template_context.update(component.get_render_data())
+            return Markup(await template.render_async(**template_context))
+        except Exception as e:
+            name = component.__class__.__name__
+            logger.error(f"模板内渲染组件 '{name}' 失败", e=e)
+            return f"<!-- 组件渲染失败 {name}: {e} -->"
+
+    async def _resolve_template_without_context(
+        self, component: Renderable
     ) -> str:
-        """将 Renderable 组件渲染成 HTML 字符串。"""
+        """脱离渲染上下文解析组件模板路径（用于模板内嵌套渲染）。
+
+        参数:
+            component: 待渲染的组件。
+
+        返回:
+            str: 模板路径，全部候选缺失时回退到组件根入口路径。
+        """
+        component_path = str(component.template_name)
+        if has_template_suffix(component_path):
+            return component_path
+
+        variant = getattr(component, "variant", None)
+        manifest = await self._safe_component_manifest(component_path)
+        entrypoint = (
+            manifest.get("entrypoint", "main.html") if manifest else "main.html"
+        )
+        skin = variant or (manifest.get("skin") if manifest else None)
+        base = PurePosixPath(component_path)
+        candidates: list[str] = []
+        if skin and skin != "default":
+            candidates.append(str(base / skin / entrypoint))
+        candidates.extend([
+            str(base / "default" / entrypoint),
+            str(base / entrypoint),
+        ])
+        for candidate in candidates:
+            try:
+                self.jinja_env.get_template(candidate)
+                return candidate
+            except TemplateNotFound:
+                continue
+        return str(base / entrypoint)
+
+    # ---------- 组件渲染为 HTML ----------
+
+    async def render_component_to_html(
+        self, context: "RenderContext", **kwargs: Any
+    ) -> str:
+        """把组件渲染成完整页面 HTML 或片段。
+
+        frameless 为 True 时仅返回组件片段；否则把片段包进
+        partials/_base.html，并注入主题 CSS 与收集到的依赖。
+
+        参数:
+            context: 渲染上下文（含已收集的依赖）。
+            **kwargs: 额外的模板上下文与渲染选项，frameless 控制包装行为。
+
+        返回:
+            str: 完整页面 HTML 或组件片段。
+
+        异常:
+            TemplateNotFound: 组件模板无法解析时抛出。
+        """
         component = context.component
         assert self.current_theme is not None
 
-        data_dict = component.get_render_data()
-        theme_context_dict = model_dump(self.current_theme)
+        theme_context = model_dump(self.current_theme)
+        template_path = await self.resolve_component_template(component, context)
+        template = self.jinja_env.get_template(template_path)
 
-        theme_name = self.current_theme.name
-        if theme_name not in self._theme_css_cache:
-            theme_css_template = self.jinja_env.get_template(
-                "theme.css.jinja"
-            )
-            self._theme_css_cache[theme_name] = (
-                await theme_css_template.render_async(
-                    theme=theme_context_dict
-                )
-            )
-        theme_css_content = self._theme_css_cache[theme_name]
-
-        resolved_template_name = await self._resolve_component_template(
-            component, context
-        )
-        template = self.jinja_env.get_template(resolved_template_name)
-
-        unpacked_data = {}
-        for key, value in data_dict.items():
-            if key in RESERVED_TEMPLATE_KEYS:
-                logger.warning(
-                    f"模板数据键 '{key}' 与渲染器保留关键字冲突，"
-                    f"在模板 '{component.template_name}' 中"
-                    f"请使用 'data.{key}' 访问。"
-                )
-            else:
-                unpacked_data[key] = value
-
-        template_context = {
+        template_context: dict[str, Any] = {
             "data": component,
-            "theme": theme_context_dict,
+            "theme": theme_context,
             "frameless": kwargs.get("frameless", False),
         }
-        template_context.update(unpacked_data)
+        template_context.update(self._unpack_render_data(component))
         template_context.update(kwargs)
+        fragment = await template.render_async(**template_context)
 
-        html_fragment = await template.render_async(**template_context)
+        if kwargs.get("frameless", False):
+            return fragment
 
-        if not kwargs.get("frameless", False):
-            base_template = self.jinja_env.get_template(
-                "partials/_base.html"
+        base_template = self.jinja_env.get_template("partials/_base.html")
+        return await base_template.render_async(
+            data=component,
+            theme_css=await self._theme_css(),
+            collected_inline_css=context.collected_inline_css,
+            required_scripts=list(context.collected_scripts),
+            collected_asset_styles=list(context.collected_asset_styles),
+            body_content=fragment,
+        )
+
+    def _unpack_render_data(self, component: Renderable) -> dict[str, Any]:
+        """展开组件渲染数据为模板上下文，保留键冲突时的告警。
+
+        与渲染器保留键冲突的数据只能通过 data.<key> 访问。
+
+        参数:
+            component: 待渲染的组件。
+
+        返回:
+            dict[str, Any]: 展开后的模板上下文数据。
+        """
+        unpacked: dict[str, Any] = {}
+        for key, value in component.get_render_data().items():
+            if key in RESERVED_TEMPLATE_KEYS:
+                logger.warning(
+                    f"模板数据键 '{key}' 与渲染器保留键冲突，"
+                    f"请通过 data.{key} 访问（组件: {component.template_name}）"
+                )
+            else:
+                unpacked[key] = value
+        return unpacked
+
+    async def _theme_css(self) -> str:
+        """渲染主题核心 CSS，按主题名缓存。
+
+        返回:
+            str: 由 theme.css.jinja 生成的完整主题样式。
+        """
+        assert self.current_theme is not None
+        theme_name = self.current_theme.name
+        if theme_name not in self._theme_css_cache:
+            template = self.jinja_env.get_template("theme.css.jinja")
+            self._theme_css_cache[theme_name] = await template.render_async(
+                theme=model_dump(self.current_theme)
             )
-            page_context = {
-                "data": component,
-                "theme_css": theme_css_content,
-                "collected_inline_css": context.collected_inline_css,
-                "required_scripts": list(context.collected_scripts),
-                "collected_asset_styles": list(
-                    context.collected_asset_styles
-                ),
-                "body_content": html_fragment,
-            }
-            return await base_template.render_async(**page_context)
-
-        return html_fragment
+        return self._theme_css_cache[theme_name]

@@ -1,3 +1,5 @@
+"""笔记本（Notebook）页面组件数据模型。"""
+
 from collections.abc import Iterable
 from typing import Literal
 
@@ -9,7 +11,7 @@ __all__ = ["NotebookData", "NotebookElement"]
 
 
 class NotebookElement(BaseModel):
-    """一个 Notebook 页面中的单个元素"""
+    """Notebook 页面中的单个元素。"""
 
     type: Literal[
         "heading",
@@ -42,12 +44,12 @@ class NotebookElement(BaseModel):
 
 
 class NotebookData(ContainerComponent):
-    """Notebook转图片的数据模型"""
+    """Notebook 页面数据模型。"""
 
     style_name: str | None = None
-    """Notebook的样式名称"""
+    """Notebook 的样式名称"""
     elements: list[NotebookElement]
-    """构成Notebook页面的元素列表"""
+    """构成 Notebook 页面的元素列表"""
 
     @property
     def template_name(self) -> str:

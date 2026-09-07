@@ -1,3 +1,5 @@
+"""时间轴组件数据模型。"""
+
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -23,7 +25,7 @@ class TimelineItem(BaseModel):
 
 
 class Timeline(RenderableComponent):
-    """一个垂直时间轴组件，用于按顺序展示事件。"""
+    """按顺序展示事件的垂直时间轴组件。"""
 
     component_type: Literal["timeline"] = "timeline"
     items: list[TimelineItem] = Field(

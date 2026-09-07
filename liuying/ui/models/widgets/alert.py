@@ -1,3 +1,5 @@
+"""提示框组件数据模型。"""
+
 from typing import Literal
 
 from pydantic import Field
@@ -8,7 +10,7 @@ __all__ = ["Alert"]
 
 
 class Alert(RenderableComponent):
-    """一个带样式的提示框组件，用于显示重要信息。"""
+    """带样式的提示框组件。"""
 
     component_type: Literal["alert"] = "alert"
     type: Literal["info", "success", "warning", "error"] = Field(

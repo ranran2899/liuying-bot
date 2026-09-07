@@ -56,7 +56,7 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-_rule = admin_check(5) & ensure_group(Uninfo) & notice_rule([v11Event])
+_rule = admin_check(5) & ensure_group & notice_rule([v11Event])
 
 
 _mute_matcher = on_alconna(

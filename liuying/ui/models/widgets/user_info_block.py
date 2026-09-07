@@ -1,3 +1,5 @@
+"""用户信息块组件数据模型。"""
+
 from typing import Literal
 
 from pydantic import Field
@@ -8,7 +10,7 @@ __all__ = ["UserInfoBlock"]
 
 
 class UserInfoBlock(RenderableComponent):
-    """一个带头像、名称和副标题的用户信息块组件。"""
+    """带头像、名称和副标题的用户信息块组件。"""
 
     component_type: Literal["user_info_block"] = "user_info_block"
     avatar_url: str = Field(..., description="用户头像的URL")

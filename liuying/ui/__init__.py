@@ -1,4 +1,4 @@
-"""UI模块顶层接口，提供便捷的工厂函数和统一的渲染入口。"""
+"""UI 模块顶层接口，提供便捷的工厂函数和统一的渲染入口。"""
 
 from pathlib import Path
 from typing import Any
@@ -22,9 +22,9 @@ def template(path: str | Path, data: dict[str, Any]) -> TemplateComponent:
     返回:
         TemplateComponent: 可被 render() 处理的组件实例。
     """
-    if isinstance(path, str):
-        path = Path(path)
-    return TemplateComponent(template_path=path, data=data)
+    return TemplateComponent(
+        template_path=Path(path) if isinstance(path, str) else path, data=data
+    )
 
 
 def _apply_markdown_style(
@@ -89,18 +89,19 @@ async def _resolve_variant(
     component: Renderable, variant: str | None, user_id: str | None
 ) -> None:
     """解析并设置组件的变体/皮肤。"""
-    if variant and hasattr(component, "variant"):
+    if not hasattr(component, "variant"):
+        return
+    if variant:
         component.variant = variant
         return
-    if user_id and hasattr(component, "variant"):
-        template_path = getattr(component, "template_path", None)
-        if template_path:
-            from liuying.services.renderer import renderer_service
-            resolved = await renderer_service.resolve_user_variant(
-                str(template_path), user_id
-            )
-            if resolved:
-                component.variant = resolved
+    if user_id and (template_path := getattr(component, "template_path", None)):
+        from liuying.services.renderer import renderer_service
+
+        resolved = await renderer_service.resolve_user_variant(
+            str(template_path), user_id
+        )
+        if resolved:
+            component.variant = resolved
 
 
 async def render(
@@ -138,9 +139,7 @@ async def render(
 
     await _resolve_variant(component, variant, user_id)
 
-    return await renderer_service.render(
-        component, use_cache=use_cache, **kwargs
-    )
+    return await renderer_service.render(component, use_cache=use_cache, **kwargs)
 
 
 async def render_template(
@@ -165,14 +164,20 @@ async def render_template(
         bytes: 渲染后的图片数据。
     """
     return await render(
-        path, data, use_cache=use_cache,
-        variant=variant, user_id=user_id, **kwargs
+        path,
+        data,
+        use_cache=use_cache,
+        variant=variant,
+        user_id=user_id,
+        **kwargs,
     )
 
 
 async def render_markdown(
-    md: str, style: str | Path | None = "default",
-    use_cache: bool = False, **kwargs
+    md: str,
+    style: str | Path | None = "default",
+    use_cache: bool = False,
+    **kwargs,
 ) -> bytes:
     """将Markdown字符串渲染为图片。
 
@@ -204,6 +209,7 @@ async def render_full_result(
         RenderResult: 包含 image_bytes 和 html_content 的结果。
     """
     from liuying.services.renderer import renderer_service
+
     return await renderer_service.render_full_result(
         component, use_cache=use_cache, **kwargs
     )

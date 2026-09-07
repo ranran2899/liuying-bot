@@ -1,7 +1,4 @@
-"""
-核心构建器模块
-包含基础的UI构建器类
-"""
+"""核心（结构性）组件构建器。"""
 
 from .card import CardBuilder
 from .details import DetailsBuilder

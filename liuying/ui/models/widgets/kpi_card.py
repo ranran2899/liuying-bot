@@ -1,3 +1,5 @@
+"""KPI 统计卡片组件数据模型。"""
+
 from typing import Any, Literal
 
 from pydantic import Field
@@ -8,7 +10,7 @@ __all__ = ["KpiCard"]
 
 
 class KpiCard(RenderableComponent):
-    """一个用于展示关键性能指标（KPI）的统计卡片。"""
+    """关键性能指标（KPI）统计卡片。"""
 
     component_type: Literal["kpi_card"] = "kpi_card"
     label: str = Field(..., description="指标的标签或名称")

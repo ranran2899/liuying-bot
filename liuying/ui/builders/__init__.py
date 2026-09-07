@@ -1,21 +1,7 @@
-"""
-UI构建器模块
-提供所有UI组件的链式构建器
-"""
+"""UI 构建器模块，按子文件夹组织全部组件的链式构建器。"""
 
 from .base import BaseBuilder
 from .charts import EChartsBuilder, bar_chart, line_chart, pie_chart, radar_chart
-from .components import (
-    AlertBuilder,
-    AvatarBuilder,
-    AvatarGroupBuilder,
-    BadgeBuilder,
-    DividerBuilder,
-    KpiCardBuilder,
-    ProgressBarBuilder,
-    TimelineBuilder,
-    UserInfoBlockBuilder,
-)
 from .core import (
     CardBuilder,
     DetailsBuilder,
@@ -26,10 +12,16 @@ from .core import (
     TableBuilder,
     TextBuilder,
 )
-from .presets import (
-    PluginHelpPageBuilder,
-    PluginMenuBuilder,
-    SignCardBuilder,
+from .widgets import (
+    AlertBuilder,
+    AvatarBuilder,
+    AvatarGroupBuilder,
+    BadgeBuilder,
+    DividerBuilder,
+    KpiCardBuilder,
+    ProgressBarBuilder,
+    TimelineBuilder,
+    UserInfoBlockBuilder,
 )
 
 __all__ = [
@@ -47,10 +39,7 @@ __all__ = [
     "ListBuilder",
     "MarkdownBuilder",
     "NotebookBuilder",
-    "PluginHelpPageBuilder",
-    "PluginMenuBuilder",
     "ProgressBarBuilder",
-    "SignCardBuilder",
     "TableBuilder",
     "TextBuilder",
     "TimelineBuilder",

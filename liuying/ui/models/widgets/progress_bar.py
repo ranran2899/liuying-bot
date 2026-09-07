@@ -1,3 +1,5 @@
+"""进度条组件数据模型。"""
+
 from typing import Literal
 
 from pydantic import Field
@@ -8,7 +10,7 @@ __all__ = ["ProgressBar"]
 
 
 class ProgressBar(RenderableComponent):
-    """一个进度条组件。"""
+    """进度条组件。"""
 
     component_type: Literal["progress_bar"] = "progress_bar"
     progress: float = Field(..., ge=0, le=100, description="进度百分比 (0-100)")

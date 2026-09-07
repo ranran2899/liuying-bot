@@ -1,3 +1,5 @@
+"""徽章组件数据模型。"""
+
 from typing import Literal
 
 from pydantic import Field
@@ -8,7 +10,7 @@ __all__ = ["Badge"]
 
 
 class Badge(RenderableComponent):
-    """一个简单的徽章组件，用于显示状态或标签。"""
+    """显示状态或标签的徽章组件。"""
 
     component_type: Literal["badge"] = "badge"
     text: str = Field(..., description="徽章上显示的文本")

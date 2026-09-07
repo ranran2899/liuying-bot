@@ -1,7 +1,4 @@
-"""
-UI数据模型模块
-提供所有UI组件的数据模型定义
-"""
+"""UI 数据模型模块，按子文件夹组织全部组件模型。"""
 
 from .charts import (
     BaseChartData,
@@ -11,19 +8,6 @@ from .charts import (
     EChartsSeries,
     EChartsTitle,
     EChartsTooltip,
-)
-from .components import (
-    Alert,
-    Avatar,
-    AvatarGroup,
-    Badge,
-    Divider,
-    KpiCard,
-    ProgressBar,
-    Rectangle,
-    Timeline,
-    TimelineItem,
-    UserInfoBlock,
 )
 from .core import (
     BaseCell,
@@ -63,14 +47,18 @@ from .core import (
     TextElement,
     TextSpan,
 )
-from .presets import (
-    HelpCategory,
-    HelpItem,
-    PluginHelpPageData,
-    PluginMenuCategory,
-    PluginMenuData,
-    PluginMenuItem,
-    SignCardData,
+from .widgets import (
+    Alert,
+    Avatar,
+    AvatarGroup,
+    Badge,
+    Divider,
+    KpiCard,
+    ProgressBar,
+    Rectangle,
+    Timeline,
+    TimelineItem,
+    UserInfoBlock,
 )
 
 __all__ = [
@@ -96,8 +84,6 @@ __all__ = [
     "EChartsTitle",
     "EChartsTooltip",
     "HeadingElement",
-    "HelpCategory",
-    "HelpItem",
     "ImageCell",
     "ImageElement",
     "KpiCard",
@@ -111,10 +97,6 @@ __all__ = [
     "MarkdownElement",
     "NotebookData",
     "NotebookElement",
-    "PluginHelpPageData",
-    "PluginMenuCategory",
-    "PluginMenuData",
-    "PluginMenuItem",
     "ProgressBar",
     "ProgressBarCell",
     "QuoteElement",
@@ -122,7 +104,6 @@ __all__ = [
     "Rectangle",
     "RenderableComponent",
     "RichTextCell",
-    "SignCardData",
     "StatusBadgeCell",
     "TableCell",
     "TableData",

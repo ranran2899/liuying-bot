@@ -1,3 +1,5 @@
+"""渲染服务包：组装渲染门面并注册启动生命周期。"""
+
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 
 from .context import RenderContext

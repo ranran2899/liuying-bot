@@ -1,7 +1,4 @@
-"""
-小组件构建器模块
-包含各种UI小组件的构建器
-"""
+"""小组件（widgets）构建器集合。"""
 
 from .alert import AlertBuilder
 from .avatar import AvatarBuilder, AvatarGroupBuilder

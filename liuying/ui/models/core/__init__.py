@@ -1,7 +1,4 @@
-"""
-核心模型模块
-包含基础的数据模型类
-"""
+"""核心（结构性）组件数据模型。"""
 
 from .base import ContainerComponent, RenderableComponent
 from .card import CardData

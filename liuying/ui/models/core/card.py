@@ -1,10 +1,14 @@
+"""通用卡片组件数据模型。"""
+
 from collections.abc import Iterable
 
 from .base import ContainerComponent, RenderableComponent
 
+__all__ = ["CardData"]
+
 
 class CardData(ContainerComponent):
-    """通用卡片的数据模型，可以包含头部、内容和尾部"""
+    """通用卡片数据模型，可包含头部、内容与尾部。"""
 
     header: RenderableComponent | None = None
     """卡片的头部内容组件"""
@@ -18,7 +22,7 @@ class CardData(ContainerComponent):
         return "components/core/card"
 
     def get_children(self) -> Iterable[RenderableComponent]:
-        """让CSS收集器能够遍历卡片的子组件"""
+        """返回头、内容与尾部子组件供依赖收集。"""
         if self.header:
             yield self.header
         if self.content:

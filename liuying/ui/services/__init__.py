@@ -1,4 +1,4 @@
-"""UI渲染服务便捷入口。"""
+"""UI 渲染服务便捷入口。"""
 
 from liuying.ui import render, render_template
 
