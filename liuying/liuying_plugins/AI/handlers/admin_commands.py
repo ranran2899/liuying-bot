@@ -88,6 +88,33 @@ class AdminCommandsHelper:
         return None
 
 
+def _validate_switch_args(
+    scope_id: str | None, feature: str, state: str
+) -> str | None:
+    """校验开关命令参数
+
+    校验顺序：空作用域ID -> 状态合法性 -> 功能名合法性。
+
+    参数:
+        scope_id: 群号/用户ID，全局开关传None跳过空值校验
+        feature: 功能名
+        state: 状态文本
+
+    返回:
+        str | None: 错误提示文本，校验通过返回None
+    """
+    if scope_id is not None and not scope_id.strip():
+        return "请提供群号/用户ID"
+    if AdminCommandsHelper._parse_state(state) is None:
+        return "状态值无效，请用 on/off"
+    if (feature or "").strip().lower() not in FEATURE_LIST:
+        return (
+            f"未知功能: {feature}\n"
+            f"可用: {', '.join(FEATURE_LIST)}"
+        )
+    return None
+
+
 def setup_admin_matchers() -> None:
     """注册AI管理员命令matcher
 
@@ -194,18 +221,10 @@ def setup_admin_matchers() -> None:
     ) -> None:
         """设置全局开关"""
         feature = (feature or "").strip().lower()
+        if err := _validate_switch_args(None, feature, state):
+            await MessageUtils.build_message(err).finish()
+            return
         enabled = AdminCommandsHelper._parse_state(state)
-        if enabled is None:
-            await MessageUtils.build_message(
-                "状态值无效，请用 on/off"
-            ).finish()
-            return
-        if feature not in FEATURE_LIST:
-            await MessageUtils.build_message(
-                f"未知功能: {feature}\n可用: {', '.join(FEATURE_LIST)}"
-            ).finish()
-            return
-
         ok = runtime_switch.set_global(feature, enabled)
         msg = (
             f"已设置全局开关 {feature} = {enabled}"
@@ -224,24 +243,10 @@ def setup_admin_matchers() -> None:
         """设置群组级开关"""
         group_id = (group_id or "").strip()
         feature = (feature or "").strip().lower()
+        if err := _validate_switch_args(group_id, feature, state):
+            await MessageUtils.build_message(err).finish()
+            return
         enabled = AdminCommandsHelper._parse_state(state)
-
-        if not group_id:
-            await MessageUtils.build_message(
-                "请提供群号"
-            ).finish()
-            return
-        if enabled is None:
-            await MessageUtils.build_message(
-                "状态值无效，请用 on/off"
-            ).finish()
-            return
-        if feature not in FEATURE_LIST:
-            await MessageUtils.build_message(
-                f"未知功能: {feature}"
-            ).finish()
-            return
-
         ok = runtime_switch.set_group(group_id, feature, enabled)
         msg = (
             f"已设置群 {group_id} 开关 {feature} = {enabled}"
@@ -260,24 +265,10 @@ def setup_admin_matchers() -> None:
         """设置用户级开关"""
         user_id = (user_id or "").strip()
         feature = (feature or "").strip().lower()
+        if err := _validate_switch_args(user_id, feature, state):
+            await MessageUtils.build_message(err).finish()
+            return
         enabled = AdminCommandsHelper._parse_state(state)
-
-        if not user_id:
-            await MessageUtils.build_message(
-                "请提供用户ID"
-            ).finish()
-            return
-        if enabled is None:
-            await MessageUtils.build_message(
-                "状态值无效，请用 on/off"
-            ).finish()
-            return
-        if feature not in FEATURE_LIST:
-            await MessageUtils.build_message(
-                f"未知功能: {feature}"
-            ).finish()
-            return
-
         ok = runtime_switch.set_user(user_id, feature, enabled)
         msg = (
             f"已设置用户 {user_id} 开关 {feature} = {enabled}"

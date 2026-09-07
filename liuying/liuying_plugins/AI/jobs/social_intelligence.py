@@ -64,30 +64,34 @@ class SocialIntelligenceHelper:
     """
 
     @staticmethod
-    def _parse_group_style(
-        style_json: str | None
-    ) -> dict[str, Any]:
-        """解析群风格JSON
+    def _parse_group_style(style_raw: str | None) -> str:
+        """解析群风格为prompt文本
+
+        兼容两种存储格式：profile.py 写入的JSON对象，
+        与 group_style_autobuild 写入的纯文本摘要。
 
         参数:
-            style_json: 群风格JSON字符串
+            style_raw: 群风格原始字符串
 
         返回:
-            dict: 群风格字典
+            str: prompt文本，空串表示未设置
         """
-        if not style_json:
-            return {}
+        if not style_raw or not style_raw.strip():
+            return ""
         try:
-            result = json.loads(style_json)
-            return result if isinstance(result, dict) else {}
+            data = json.loads(style_raw)
+            if isinstance(data, dict):
+                return ProfileToolkit.build_group_style_prompt_block(data)
         except (json.JSONDecodeError, TypeError):
-            return {}
+            pass
+        return f"群风格: {style_raw.strip()}"
 
     @staticmethod
     async def _generate_and_send_to_groups(
         build_prompt: Any,
         *,
         scenario: str,
+        generate_once: bool = False,
     ) -> int:
         """生成文案并发送到所有活跃群
 
@@ -96,8 +100,11 @@ class SocialIntelligenceHelper:
         - 门控检查：LLM二次判断是否适合发送
 
         参数:
-            build_prompt: 接收(group, time_period)返回prompt的函数
+            build_prompt: 接收(group, time_period)返回prompt的函数，
+                generate_once=True 时 group 传 None 只调用一次
             scenario: 场景标记
+            generate_once: prompt不依赖群时只生成一次文案，
+                所有群复用，避免重复LLM调用
 
         返回:
             int: 发送成功的群数
@@ -115,6 +122,21 @@ class SocialIntelligenceHelper:
         daily_quota = get_config("SOCIAL_QUOTA", {}).get("per_user", 5)
         cooldown = get_config("SOCIAL_QUOTA", {}).get("cooldown", 3600)
         gate_enabled = get_config("SOCIAL_GATE_ENABLED", False)
+
+        shared_text: str | None = None
+        if generate_once:
+            prompt = await build_prompt(None, time_period)
+            if not prompt:
+                return 0
+            shared_text = await llm_helper.chat_text(
+                [{"role": "user", "content": prompt}],
+                options=model_router.resolve(
+                    ROLE_WARMUP
+                ).apply_to_options(),
+            )
+            if not shared_text or len(shared_text) >= 100:
+                return 0
+
         sent = 0
         for group in groups:
             if not context_manager.is_group_active_hour(
@@ -139,17 +161,20 @@ class SocialIntelligenceHelper:
                 continue
 
             try:
-                prompt = await build_prompt(group, time_period)
-                if not prompt:
-                    continue
-                text = await llm_helper.chat_text(
-                    [{"role": "user", "content": prompt}],
-                    options=model_router.resolve(
-                        ROLE_WARMUP
-                    ).apply_to_options(),
-                )
-                if not text or len(text) >= 100:
-                    continue
+                if shared_text is not None:
+                    text = shared_text
+                else:
+                    prompt = await build_prompt(group, time_period)
+                    if not prompt:
+                        continue
+                    text = await llm_helper.chat_text(
+                        [{"role": "user", "content": prompt}],
+                        options=model_router.resolve(
+                            ROLE_WARMUP
+                        ).apply_to_options(),
+                    )
+                    if not text or len(text) >= 100:
+                        continue
 
                 # 社交门控：LLM二次判断是否适合发送
                 if gate_enabled:
@@ -290,12 +315,22 @@ class SocialIntelligenceHelper:
                 )
 
     @staticmethod
-    async def _morning_greeting() -> None:
-        """早安问候任务"""
-        festival = SocialIntelligenceHelper._get_festival()
-        festival_line = (
-            f"今日节日: {festival}\n" if festival else ""
-        )
+    async def _greeting(
+        scenario: str,
+        with_festival: bool,
+    ) -> None:
+        """早晚安问候任务
+
+        参数:
+            scenario: 场景标记（早安问候/晚安问候）
+            with_festival: 是否注入当日节日信息
+        """
+        festival_line = ""
+        if with_festival:
+            festival = SocialIntelligenceHelper._get_festival()
+            festival_line = (
+                f"今日节日: {festival}\n" if festival else ""
+            )
         persona_name = (
             persona_manager.get_default_persona().get("name") or "AI"
         )
@@ -303,15 +338,15 @@ class SocialIntelligenceHelper:
         async def _build_prompt(
             group: GroupContextSnapshot, time_period: str
         ) -> str:
-            style = (
+            group_style_str = (
                 SocialIntelligenceHelper._parse_group_style(
                     group.style
                 )
+                or "群风格: 未设置"
             )
-            style_prompt = ProfileToolkit.build_group_style_prompt_block(style)
-            group_style_str = style_prompt or "群风格: 未设置"
             return (
-                f"你是{persona_name}，请生成一句自然的早安问候语。\n\n"
+                f"你是{persona_name}，请生成一句自然的"
+                f"{scenario.replace('问候', '')}问候语。\n\n"
                 f"当前时段: {time_period}\n"
                 f"{festival_line}{group_style_str}\n\n"
                 "要求：\n"
@@ -322,39 +357,21 @@ class SocialIntelligenceHelper:
             )
 
         await SocialIntelligenceHelper._generate_and_send_to_groups(
-            _build_prompt, scenario="早安问候"
+            _build_prompt, scenario=scenario
+        )
+
+    @staticmethod
+    async def _morning_greeting() -> None:
+        """早安问候任务"""
+        await SocialIntelligenceHelper._greeting(
+            "早安问候", with_festival=True
         )
 
     @staticmethod
     async def _evening_greeting() -> None:
         """晚安问候任务"""
-        persona_name = (
-            persona_manager.get_default_persona().get("name") or "AI"
-        )
-
-        async def _build_prompt(
-            group: GroupContextSnapshot, time_period: str
-        ) -> str:
-            style = (
-                SocialIntelligenceHelper._parse_group_style(
-                    group.style
-                )
-            )
-            style_prompt = ProfileToolkit.build_group_style_prompt_block(style)
-            group_style_str = style_prompt or "群风格: 未设置"
-            return (
-                f"你是{persona_name}，请生成一句自然的晚安问候语。\n\n"
-                f"当前时段: {time_period}\n"
-                f"{group_style_str}\n\n"
-                "要求：\n"
-                "- 简短自然，不超过30字\n"
-                f"- 符合{persona_name}的性格和当前时段氛围\n"
-                "- 不要使用模板化用语\n\n"
-                "直接输出问候语，不要解释。"
-            )
-
-        await SocialIntelligenceHelper._generate_and_send_to_groups(
-            _build_prompt, scenario="晚安问候"
+        await SocialIntelligenceHelper._greeting(
+            "晚安问候", with_festival=False
         )
 
     @staticmethod
@@ -362,7 +379,7 @@ class SocialIntelligenceHelper:
         """新闻/话题推送任务"""
 
         async def _build_prompt(
-            _group: GroupContextSnapshot, time_period: str
+            _group: GroupContextSnapshot | None, time_period: str
         ) -> str:
             return (
                 "请生成一条适合在群聊分享的轻松话题或新闻摘要。\n\n"
@@ -374,40 +391,25 @@ class SocialIntelligenceHelper:
                 "直接输出内容，不要解释。"
             )
 
+        # prompt不依赖群，只生成一次文案复用给所有群
         await SocialIntelligenceHelper._generate_and_send_to_groups(
-            _build_prompt, scenario="新闻推送"
+            _build_prompt, scenario="新闻推送", generate_once=True
         )
 
     @staticmethod
     async def _topic_followup() -> None:
         """话题延续任务
 
-        集成社交配额与门控检查。
+        复用 _generate_and_send_to_groups 的配额/门控/静默时段检查。
         """
-        groups = await GroupContextSnapshot.filter(
-            is_active=True
-        ).all()
 
-        daily_quota = get_config("SOCIAL_QUOTA", {}).get("per_user", 5)
-        cooldown = get_config("SOCIAL_QUOTA", {}).get("cooldown", 3600)
-        gate_enabled = get_config("SOCIAL_GATE_ENABLED", False)
-        scenario = "话题延续"
-
-        for group in groups:
+        async def _build_prompt(
+            group: GroupContextSnapshot, _time_period: str
+        ) -> str:
             summary = group.summary or ""
             if not summary:
-                continue
-
-            # 配额检查
-            if social_quota.is_quota_exceeded(
-                group.group_id,
-                scenario=scenario,
-                daily_quota_per_user=daily_quota,
-                cooldown_seconds=cooldown,
-            ):
-                continue
-
-            prompt = (
+                return ""
+            return (
                 "基于最近的群聊摘要，生成一句自然的延续话题。\n\n"
                 f"群聊摘要: {summary[:200]}\n\n"
                 "要求：\n"
@@ -415,45 +417,10 @@ class SocialIntelligenceHelper:
                 "- 像真人继续之前的聊天\n\n"
                 "直接输出内容，不要解释。"
             )
-            try:
-                text = await llm_helper.chat_text(
-                    [{"role": "user", "content": prompt}],
-                    options=model_router.resolve(
-                        ROLE_WARMUP
-                    ).apply_to_options(),
-                )
-                if not text or len(text) >= 100:
-                    continue
 
-                # 社交门控
-                if gate_enabled:
-                    allow, rewritten, _ = (
-                        await social_gate.gate_should_send(
-                            scenario=scenario,
-                            user_id=group.group_id,
-                            draft=text,
-                            now_str=datetime.now().strftime(
-                                "%Y-%m-%d %H:%M"
-                            ),
-                        )
-                    )
-                    if not allow:
-                        continue
-                    if rewritten:
-                        text = rewritten
-
-                await SocialIntelligenceHelper._send_to_group(
-                    group.group_id, text
-                )
-                social_quota.mark_sent(
-                    group.group_id, scenario=scenario
-                )
-            except Exception as e:
-                logger.debug(
-                    f"话题延续失败 {group.group_id}: {e}",
-                    command="AI",
-                    e=e,
-                )
+        await SocialIntelligenceHelper._generate_and_send_to_groups(
+            _build_prompt, scenario="话题延续"
+        )
 
 
 def _make_handler(func: Any) -> Any:

@@ -86,12 +86,6 @@ class TokenLedgerRecord(Model):
     )
     """记录时间"""
 
-    cache_type = "AI_TOKEN_LEDGER"
-    """缓存类型"""
-
-    cache_key_field = "id"
-    """缓存键字段"""
-
     @classmethod
     def _run_script(cls):
         """数据库初始化脚本"""

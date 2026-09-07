@@ -93,36 +93,6 @@ class AclChecker:
         return await UserPermLevel.get_level(user_id, bot_id, group_id)
 
     @staticmethod
-    async def check_admin(
-        user_id: str,
-        level: int | None = None,
-        *,
-        bot_id: str | None = None,
-        group_id: str | None = None,
-    ) -> bool:
-        """检查用户是否具有指定管理员等级
-
-        超级用户直接通过。
-
-        参数:
-            user_id: 用户ID
-            level: 需要的管理员等级，None时用基础管理员等级
-            bot_id: 机器人ID
-            group_id: 群组ID
-
-        返回:
-            bool: 是否通过
-        """
-        if level is None:
-            level = AclChecker.ADMIN_LEVEL_BASIC
-        if await AclChecker.check_superuser(user_id):
-            return True
-        user_level = await AclChecker.get_user_level(
-            user_id, bot_id, group_id
-        )
-        return user_level >= level
-
-    @staticmethod
     async def check_blacklist(
         user_id: str,
         group_id: str | None = None,

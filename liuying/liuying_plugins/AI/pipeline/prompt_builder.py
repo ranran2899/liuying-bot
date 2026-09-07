@@ -2,11 +2,8 @@
 
 从 ReplyProcessor 中抽出的提示词组装逻辑，负责整合人格、
 上下文、情绪、记忆、群风格、话题线程、社交上下文、
-安全过滤、回复风格策略、环境感知等所有提示词片段，
-并通过提示词钩子注册表支持热插拔注入。
+安全过滤、回复风格策略、环境感知等所有提示词片段。
 """
-
-from datetime import datetime
 
 from liuying.utils.log import logger
 
@@ -22,7 +19,6 @@ from ..core.llm import llm_helper
 from ..core.memory import memory_manager
 from ..core.peer_awareness import peer_awareness
 from ..core.persona import persona_manager
-from ..core.prompt_hooks import HookContext, hook_registry
 from ..core.safety import SafetyFilter
 from .humanize import HumanizeToolkit
 from .style_policy import ReplyStylePolicy
@@ -34,7 +30,6 @@ class PromptBuilder:
 
     使用用户当前激活的人格构建提示词，并注入对应人格的
     情绪状态与记忆，确保人设间数据隔离。
-    同时执行提示词钩子注册表中的钩子，支持热插拔注入。
     """
 
     async def build_system_prompt(
@@ -81,32 +76,7 @@ class PromptBuilder:
                     e=e,
                 )
 
-        # 构建提示词钩子上下文
-        hook_ctx = HookContext(
-            user_id=ctx.user_id,
-            group_id=ctx.group_id or "",
-            is_private=ctx.is_private,
-            message_text=ctx.text,
-            has_image_input=ctx.image_data is not None,
-            current_time_str=datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-            persona_name=ctx.persona_name,
-        )
-        registry = hook_registry
-
-        # system_prelude 钩子：在基础提示词之前注入
-        prelude_chunks = await registry.run_all(
-            hook_ctx, phase="system_prelude"
-        )
-
         parts = [base_prompt, context_prompt, emotion_prompt, memory_prompt]
-
-        # system_context 钩子：在记忆之后注入上下文补充
-        context_chunks = await registry.run_all(
-            hook_ctx, phase="system_context"
-        )
-        parts.extend(context_chunks)
 
         parts.append(context_manager.get_time_flavor_prompt())
 
@@ -176,15 +146,5 @@ class PromptBuilder:
         anti_loop = ContextPolicy.build_anti_loop_hint(history)
         if anti_loop:
             parts.append(anti_loop)
-
-        # system_postlude 钩子：在所有提示词组装完成后注入
-        postlude_chunks = await registry.run_all(
-            hook_ctx, phase="system_postlude"
-        )
-        parts.extend(postlude_chunks)
-
-        # prelude 作为最前置内容
-        if prelude_chunks:
-            parts = prelude_chunks + parts
 
         return "".join(parts)

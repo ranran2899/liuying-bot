@@ -61,12 +61,6 @@ class KnowledgeQueryLog(Model):
     )
     """额外信息JSON"""
 
-    cache_type = "AI_KNOWLEDGE_QUERY_LOG"
-    """缓存类型"""
-
-    cache_key_field = "id"
-    """缓存键字段"""
-
     @classmethod
     def _run_script(cls):
         """数据库初始化脚本"""

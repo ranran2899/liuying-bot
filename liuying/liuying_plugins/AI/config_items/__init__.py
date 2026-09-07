@@ -10,7 +10,6 @@ from .humanize_config import HUMANIZE_CONFIGS
 from .llm_config import LLM_CONFIGS
 from .memory_config import MEMORY_CONFIGS
 from .misc_config import MISC_CONFIGS
-from .poke_config import POKE_CONFIGS
 from .safety_config import SAFETY_CONFIGS
 from .social_config import SOCIAL_CONFIGS
 from .tts_config import TTS_CONFIGS
@@ -23,7 +22,6 @@ __all__ = [
     "LLM_CONFIGS",
     "MEMORY_CONFIGS",
     "MISC_CONFIGS",
-    "POKE_CONFIGS",
     "SAFETY_CONFIGS",
     "SOCIAL_CONFIGS",
     "TTS_CONFIGS",

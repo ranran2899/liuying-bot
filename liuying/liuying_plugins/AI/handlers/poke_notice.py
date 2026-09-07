@@ -33,10 +33,8 @@ def setup_poke_notice() -> None:
             bot: Bot对象
             event: 事件对象
         """
-        poke_cfg = get_config("POKE", {}) or {}
-        if not poke_cfg.get("enabled", True):
-            return
-
+        # 廉价过滤前置：绝大多数notice事件不是戳一戳，
+        # 避免白读一次配置
         notice_type = str(
             getattr(event, "notice_type", "") or ""
         ).strip()
@@ -44,6 +42,10 @@ def setup_poke_notice() -> None:
             getattr(event, "sub_type", "") or ""
         ).strip()
         if notice_type != "notify" or sub_type != "poke":
+            return
+
+        poke_cfg = get_config("POKE", {}) or {}
+        if not poke_cfg.get("enabled", True):
             return
 
         self_id = str(getattr(bot, "self_id", "") or "")

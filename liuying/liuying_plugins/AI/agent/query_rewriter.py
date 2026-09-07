@@ -10,7 +10,7 @@
 - 多候选词生成，首轮失败可依次重试
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import json
 import re
 from typing import Any
@@ -22,9 +22,6 @@ from ..core.llm.model_router import ROLE_INTENT, model_router
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.S)
 """JSON 块提取正则"""
-
-_DEFAULT_RECOMMENDED_TOOLS = ["web_search"]
-"""默认推荐工具"""
 
 # 口语化前缀包装词（"我问的是"、"请问"等）
 _QUERY_WRAPPER_LEADING_RE = re.compile(
@@ -49,28 +46,6 @@ _CHINESE_WEB_SLANG_HINT_RE = re.compile(
 _MAX_QUERY_CANDIDATES = 6
 """最多保留的候选查询数"""
 
-_MAX_CONTEXT_CLUES = 5
-"""最多保留的上下文线索数"""
-
-
-@dataclass(slots=True)
-class QueryRewriteContext:
-    """查询改写输入上下文
-
-    Attributes:
-        history_new: 最近对话文本（多行）
-        history_last: 当前最新一句
-        trigger_reason: 触发原因
-        images: 图片URL列表
-        quoted_message: 引用消息文本
-    """
-
-    history_new: str = ""
-    history_last: str = ""
-    trigger_reason: str = ""
-    images: list[str] = field(default_factory=list)
-    quoted_message: str = ""
-
 
 @dataclass(slots=True)
 class ContextualQueryRewrite:
@@ -79,18 +54,10 @@ class ContextualQueryRewrite:
     Attributes:
         primary_query: 最适合首轮检索的查询
         query_candidates: 首轮失败后可依次尝试的候选查询
-        context_clues: 影响检索的上下文线索
-        need_image_understanding: 是否需要图片理解
-        recommended_tools: 按优先级排序的推荐工具名
-        search_plan: 检索计划（1-3步中文短句）
     """
 
     primary_query: str
     query_candidates: list[str]
-    context_clues: list[str]
-    need_image_understanding: bool
-    recommended_tools: list[str]
-    search_plan: list[str] = field(default_factory=list)
 
 
 def _normalize_text(text: Any) -> str:
@@ -325,13 +292,12 @@ def _fallback_rewrite(
     history_new: str,
     history_last: str,
     trigger_reason: str,
-    images: list[str] | None = None,
     quoted_message: str = "",
     topic_hint: str = "",
 ) -> ContextualQueryRewrite:
     """规则兜底改写：LLM不可用时仍能生成可用查询
 
-    提取实体锚点、构建候选词、识别口语化梗，生成检索计划。
+    提取实体锚点、构建候选词、识别口语化梗。
     """
     colloquial_hint = _looks_like_colloquial_query(history_last)
     anchor = _pick_recent_entity_anchor(
@@ -380,27 +346,11 @@ def _fallback_rewrite(
         query_candidates = _normalize_str_list(
             [primary_query, *clues], limit=_MAX_QUERY_CANDIDATES
         )
-    need_image_understanding = bool(images)
-    if need_image_understanding:
-        recommended_tools = ["web_search"]
-    elif colloquial_hint:
-        recommended_tools = ["web_search"]
-    else:
-        recommended_tools = list(_DEFAULT_RECOMMENDED_TOOLS)
-    search_plan = [
-        "先结合最近对话、群聊话题和引用内容确定用户真正想找的对象",
-        "若像梗、黑话、外号或谐音，先补成正式名/出处/作品线索再检索",
-        "如果首轮结果不稳，再依次尝试候选检索词",
-    ]
     return ContextualQueryRewrite(
         primary_query=primary_query,
         query_candidates=query_candidates or (
             [primary_query] if primary_query else []
         ),
-        context_clues=clues,
-        need_image_understanding=need_image_understanding,
-        recommended_tools=recommended_tools,
-        search_plan=search_plan,
     )
 
 
@@ -410,7 +360,6 @@ def _coerce_rewrite_payload(
     history_new: str,
     history_last: str,
     trigger_reason: str,
-    images: list[str] | None = None,
     quoted_message: str = "",
     topic_hint: str = "",
 ) -> ContextualQueryRewrite:
@@ -422,7 +371,6 @@ def _coerce_rewrite_payload(
         history_new=history_new,
         history_last=history_last,
         trigger_reason=trigger_reason,
-        images=images,
         quoted_message=quoted_message,
         topic_hint=topic_hint,
     )
@@ -441,29 +389,9 @@ def _coerce_rewrite_payload(
     if not query_candidates and fallback.query_candidates:
         query_candidates = list(fallback.query_candidates)
 
-    context_clues = (
-        _normalize_str_list(payload.get("context_clues", []), _MAX_CONTEXT_CLUES)
-        or list(fallback.context_clues)
-    )
-    recommended_tools = (
-        _normalize_str_list(payload.get("recommended_tools", []), _MAX_QUERY_CANDIDATES)
-        or list(fallback.recommended_tools)
-    )
-    search_plan = (
-        _normalize_str_list(payload.get("search_plan", []), 4)
-        or list(fallback.search_plan)
-    )
-    need_image_understanding = bool(
-        payload.get("need_image_understanding", fallback.need_image_understanding)
-    )
-
     return ContextualQueryRewrite(
         primary_query=primary_query,
         query_candidates=query_candidates,
-        context_clues=context_clues,
-        need_image_understanding=need_image_understanding,
-        recommended_tools=recommended_tools,
-        search_plan=search_plan,
     )
 
 
@@ -511,16 +439,11 @@ async def contextual_query_rewriter(
         "遇到中文互联网梗、黑话、缩写、别称、外号、谐音梗、空耳、错别字时，"
         "要主动补出更正式的实体名、出处、原句或作品线索，"
         "并把它们放进 query_candidates。"
-        "若图片对识别对象很关键，请把 need_image_understanding 设为 true。"
         "只输出 JSON，不要输出解释、markdown 或代码块。\n\n"
         "JSON 字段：\n"
         "{\n"
         '  "primary_query": "最适合作为首轮检索的查询",\n'
-        '  "query_candidates": ["首轮失败后可依次尝试的候选查询"],\n'
-        '  "context_clues": ["影响检索的上下文线索"],\n'
-        '  "need_image_understanding": true,\n'
-        '  "recommended_tools": ["按优先级排序的工具名"],\n'
-        '  "search_plan": ["1-3步中文短句，说明应该怎样检索"]\n'
+        '  "query_candidates": ["首轮失败后可依次尝试的候选查询"]\n'
         "}"
     )
     user_text = (
@@ -557,7 +480,6 @@ async def contextual_query_rewriter(
         history_new=history_new,
         history_last=history_last,
         trigger_reason=trigger_reason,
-        images=images,
         quoted_message=quoted_message,
         topic_hint=topic_hint,
     )
@@ -565,6 +487,5 @@ async def contextual_query_rewriter(
 
 __all__ = [
     "ContextualQueryRewrite",
-    "QueryRewriteContext",
     "contextual_query_rewriter",
 ]

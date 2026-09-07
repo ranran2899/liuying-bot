@@ -18,7 +18,7 @@ from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..core.memory import memory_manager
 from ..core.persona import persona_manager
 
-__all__ = ["DiaryHelper", "setup_diary_job"]
+__all__ = ["setup_diary_job"]
 
 
 _DIARY_ANGLE_POOL: tuple[str, ...] = (

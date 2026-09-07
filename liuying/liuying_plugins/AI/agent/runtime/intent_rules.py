@@ -122,21 +122,10 @@ class IntentRule:
         )
 
 
-class IntentRuleManager:
-    """意图规则管理器
-
-    管理意图规则列表，提供按优先级匹配的方法。
-    支持运行时动态添加和移除规则。
-    """
-
-    def __init__(self) -> None:
-        """初始化规则管理器"""
-        self._rules: list[IntentRule] = []
-        self._load_default_rules()
-
-    def _load_default_rules(self) -> None:
-        """加载默认意图规则"""
-        self._rules = [
+def _build_default_rules() -> list[IntentRule]:
+    """构建默认意图规则表（模块级单例，按优先级升序）"""
+    return sorted(
+        [
             IntentRule(
                 name="silence",
                 keywords=["ai关闭", "ai禁用", "关闭ai"],
@@ -210,7 +199,25 @@ class IntentRuleManager:
                 intent_tags=[INTENT_TAG_ADMIN],
                 reason="管理操作命令",
             ),
-        ]
+        ],
+        key=lambda r: r.priority,
+    )
+
+
+_DEFAULT_RULES: list[IntentRule] = _build_default_rules()
+"""默认规则表（静态，模块级构建一次）"""
+
+
+class IntentRuleManager:
+    """意图规则管理器
+
+    管理意图规则列表，提供按优先级匹配的方法。
+    规则表为静态常量，匹配时无需重复排序。
+    """
+
+    def __init__(self) -> None:
+        """初始化规则管理器"""
+        self._rules: list[IntentRule] = _DEFAULT_RULES
 
     def match(self, text: str) -> IntentRule | None:
         """按优先级匹配文本到意图规则
@@ -221,7 +228,7 @@ class IntentRuleManager:
         返回:
             IntentRule | None: 匹配的最高优先级规则
         """
-        for rule in sorted(self._rules, key=lambda r: r.priority):
+        for rule in self._rules:
             if any(kw in text for kw in rule.keywords):
                 return rule
         return None

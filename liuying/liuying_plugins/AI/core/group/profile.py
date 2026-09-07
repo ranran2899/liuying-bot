@@ -16,10 +16,8 @@ from ..tools.json_utils import extract_json_payload
 
 __all__ = [
     "ProfileToolkit",
-    "extract_group_knowledge",
     "extract_group_style",
     "group_profile",
-    "summarize_conversation",
 ]
 
 
@@ -116,92 +114,6 @@ async def extract_group_style(
             e=e,
         )
         return {}
-
-
-async def extract_group_knowledge(
-    group_id: str,
-    conversation: str,
-    llm_helper: Any,
-) -> list[dict[str, Any]]:
-    """LLM抽取群知识
-
-    参数:
-        group_id: 群组ID
-        conversation: 群聊对话文本
-        llm_helper: LLM助手
-
-    返回:
-        list[dict]: 知识条目列表
-    """
-    if not conversation.strip():
-        return []
-
-    prompt = (
-        "你是群聊知识抽取器。从下面的群聊中抽取群知识。\n"
-        "每条知识包含：\n"
-        "- term: 术语/梗名\n"
-        "- definition: 含义解释\n"
-        "- aliases: 别名列表\n"
-        "- is_meme: 是否为梗（true/false）\n"
-        "- safe_usage: 安全用法说明\n\n"
-        "只输出JSON数组，不要markdown。\n"
-        '格式：[{"term":"...","definition":"...","aliases":[],"is_meme":false,"safe_usage":"..."}]\n\n'
-        "群聊内容：\n"
-        f"{conversation[:2000]}"
-    )
-    try:
-        response = await llm_helper.chat_text(
-            [{"role": "user", "content": prompt}],
-            options={"temperature": 0.3},
-        )
-        result = extract_json_payload(response)
-        if isinstance(result, list):
-            return result
-        return []
-    except Exception as e:
-        logger.warning(
-            f"抽取群知识失败 {group_id}: {e}",
-            command="AI",
-            e=e,
-        )
-        return []
-
-
-async def summarize_conversation(
-    conversation: str,
-    llm_helper: Any,
-) -> str:
-    """LLM生成会话摘要
-
-    参数:
-        conversation: 对话文本
-        llm_helper: LLM助手
-
-    返回:
-        str: 摘要文本
-    """
-    if not conversation.strip():
-        return ""
-
-    prompt = (
-        "请将以下对话压缩成2-4句中文摘要。\n"
-        "保留人物关系、话题延续、已确认事实和未完成事项。\n"
-        "直接输出摘要，不要列表，不要解释。\n\n"
-        "对话内容：\n"
-        f"{conversation[:3000]}"
-    )
-    try:
-        return await llm_helper.chat_text(
-            [{"role": "user", "content": prompt}],
-            options={"temperature": 0.3},
-        )
-    except Exception as e:
-        logger.warning(
-            f"生成会话摘要失败: {e}",
-            command="AI",
-            e=e,
-        )
-        return ""
 
 
 class GroupProfileManager:

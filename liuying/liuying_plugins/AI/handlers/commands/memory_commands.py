@@ -18,6 +18,29 @@ from ...models.conversation_record import ConversationRecord
 __all__ = ["setup_memory_commands"]
 
 
+async def _resolve_scene(
+    session: Uninfo,
+) -> tuple[str, str | None, str]:
+    """解析会话场景三元组
+
+    参数:
+        session: 会话信息
+
+    返回:
+        tuple[str, str | None, str]:
+            (user_id, group_id, persona_name)，
+            group_id 群聊为场景ID、私聊为None；
+            persona_name 为用户当前激活人格
+    """
+    user_id = session.user.id
+    group_id = session.scene.id if session.scene.is_group else None
+    # get_user_persona_name 内部已捕获异常并回退默认人格
+    persona_name = await persona_manager.get_user_persona_name(
+        user_id
+    )
+    return user_id, group_id, persona_name
+
+
 def setup_memory_commands() -> None:
     """注册记忆相关matcher
 
@@ -52,13 +75,8 @@ def setup_memory_commands() -> None:
 
         仅展示当前用户当前人格的记忆，确保人设间数据隔离。
         """
-        user_id = session.user.id
-        group_id = (
-            session.scene.id if session.scene.is_group else None
-        )
-        # get_user_persona_name 内部已捕获异常并回退默认人格
-        persona_name = await persona_manager.get_user_persona_name(
-            user_id
+        user_id, group_id, persona_name = await _resolve_scene(
+            session
         )
         memories = await memory_manager.get_memory_summary(
             user_id, group_id, limit=10, persona_name=persona_name
@@ -80,13 +98,8 @@ def setup_memory_commands() -> None:
 
         仅清空当前用户当前人格的对话记录。
         """
-        user_id = session.user.id
-        group_id = (
-            session.scene.id if session.scene.is_group else None
-        )
-        # get_user_persona_name 内部已捕获异常并回退默认人格
-        persona_name = await persona_manager.get_user_persona_name(
-            user_id
+        user_id, group_id, persona_name = await _resolve_scene(
+            session
         )
         count = await ConversationRecord.clear_history(
             user_id, group_id, persona_name=persona_name
@@ -101,13 +114,8 @@ def setup_memory_commands() -> None:
 
         清除当前用户当前bot人格的所有记忆数据（含搜索索引）。
         """
-        user_id = session.user.id
-        group_id = (
-            session.scene.id if session.scene.is_group else None
-        )
-        # get_user_persona_name 内部已捕获异常并回退默认人格
-        persona_name = await persona_manager.get_user_persona_name(
-            user_id
+        user_id, group_id, persona_name = await _resolve_scene(
+            session
         )
         # 纯ORM操作，让异常自然向上传播暴露数据库问题
         count = await memory_manager.clear_user_memory(

@@ -410,47 +410,6 @@ class RuntimeSwitchManager:
                 )
             return result
 
-    def get_global_state(self) -> dict[str, bool]:
-        """获取全局开关状态快照
-
-        返回:
-            dict: {feature: enabled}
-        """
-        with self._lock:
-            if not self._initialized:
-                self.initialize()
-            return dict(self._global_state)
-
-    def get_group_overrides(
-        self, group_id: str
-    ) -> dict[str, bool]:
-        """获取群组级覆盖快照
-
-        参数:
-            group_id: 群组ID
-
-        返回:
-            dict: {feature: enabled}
-        """
-        with self._lock:
-            cfg = self._group_overrides.get(group_id)
-            return dict(cfg) if cfg else {}
-
-    def get_user_overrides(
-        self, user_id: str
-    ) -> dict[str, bool]:
-        """获取用户级覆盖快照
-
-        参数:
-            user_id: 用户ID
-
-        返回:
-            dict: {feature: enabled}
-        """
-        with self._lock:
-            cfg = self._user_overrides.get(user_id)
-            return dict(cfg.user) if cfg else {}
-
     def health_check(self) -> dict[str, Any]:
         """功能体检：返回所有功能状态与计数
 

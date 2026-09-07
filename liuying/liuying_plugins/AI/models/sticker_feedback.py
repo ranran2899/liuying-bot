@@ -60,12 +60,6 @@ class StickerFeedback(Model):
     )
     """反馈时间"""
 
-    cache_type = "AI_STICKER_FEEDBACK"
-    """缓存类型"""
-
-    cache_key_field = "id"
-    """缓存键字段"""
-
     @classmethod
     def _run_script(cls):
         """数据库初始化脚本"""
@@ -104,48 +98,3 @@ class StickerFeedback(Model):
             feedback_type=feedback_type,
             comment=comment[:500],
         )
-
-    @classmethod
-    async def get_by_sticker(
-        cls, sticker_id: int, limit: int = 50
-    ) -> list["StickerFeedback"]:
-        """获取表情包的所有反馈
-
-        参数:
-            sticker_id: 表情包ID
-            limit: 返回上限
-
-        返回:
-            list[StickerFeedback]: 反馈列表
-        """
-        return await cls.filter(
-            sticker_id=sticker_id
-        ).order_by("-create_time").limit(limit).all()
-
-    @classmethod
-    async def get_stats(
-        cls, sticker_id: int
-    ) -> dict[str, int]:
-        """获取反馈统计
-
-        使用SQL聚合查询避免全量加载记录到内存。
-
-        参数:
-            sticker_id: 表情包ID
-
-        返回:
-            dict: 各反馈类型计数
-        """
-        sql = (
-            "SELECT feedback_type, COUNT(id) AS cnt "
-            "FROM ai_sticker_feedback "
-            "WHERE sticker_id = :sticker_id "
-            "GROUP BY feedback_type"
-        )
-        result = await cls.filter().raw(
-            sql, {"sticker_id": sticker_id}
-        )
-        stats: dict[str, int] = {}
-        for row in result.fetchall():
-            stats[row.feedback_type] = int(row.cnt or 0)
-        return stats

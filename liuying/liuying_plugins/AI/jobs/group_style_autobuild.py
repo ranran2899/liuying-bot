@@ -55,7 +55,7 @@ async def _analyze_group_style(
             role="user",
         )
         .filter(create_time__gte=since)
-        .order_by("create_time")
+        .order_by("-create_time")
         .limit(_SAMPLE_LIMIT)
         .all()
     )

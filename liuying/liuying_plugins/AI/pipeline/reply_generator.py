@@ -171,6 +171,7 @@ class ReplyGenerator:
                     group_id=ctx.group_id,
                     use_llm_planning=True,
                     persona_name=ctx.persona_name,
+                    has_image=vision_provider is not None,
                 )
                 if (
                     result.response

@@ -84,12 +84,6 @@ class ConversationRecord(Model):
     )
     """创建时间"""
 
-    cache_type = "AI_CONVERSATION"
-    """缓存类型"""
-
-    cache_key_field = ("user_id", "group_id", "persona_name")
-    """缓存键字段"""
-
     @classmethod
     def _run_script(cls):
         """数据库初始化脚本
@@ -130,47 +124,6 @@ class ConversationRecord(Model):
         if group_id:
             query = query.filter(group_id=group_id)
         return await query.order_by("create_time").limit(limit).all()
-
-    @classmethod
-    async def add_record(
-        cls,
-        user_id: str,
-        role: str,
-        content: str,
-        group_id: str | None = None,
-        bot_id: str | None = None,
-        platform: str | None = None,
-        tokens: int = 0,
-        metadata_json: str = "{}",
-        persona_name: str = _DEFAULT_PERSONA,
-    ) -> "ConversationRecord":
-        """添加对话记录
-
-        参数:
-            user_id: 用户ID
-            role: 角色
-            content: 内容
-            group_id: 群组ID
-            bot_id: 机器人ID
-            platform: 平台
-            tokens: token消耗
-            metadata_json: 元信息JSON
-            persona_name: bot人格名
-
-        返回:
-            ConversationRecord: 创建的记录
-        """
-        return await cls.create(
-            user_id=user_id,
-            role=role,
-            content=content,
-            group_id=group_id,
-            bot_id=bot_id,
-            platform=platform,
-            tokens=tokens,
-            metadata_json=metadata_json,
-            persona_name=persona_name,
-        )
 
     @classmethod
     async def clear_history(

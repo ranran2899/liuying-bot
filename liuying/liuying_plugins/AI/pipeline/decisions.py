@@ -43,8 +43,8 @@ class ReplyDecisions:
     async def decide_sticker(
         text: str,
         ctx: ReplyContext,
+        persona: dict[str, Any],
         agent_result: AgentResult | None = None,
-        persona: dict[str, Any] | None = None,
     ) -> Image | None:
         """贴纸决策
 
@@ -54,20 +54,13 @@ class ReplyDecisions:
         参数:
             text: 回复文本
             ctx: 回复上下文
+            persona: 调用方透传的用户人格配置
             agent_result: Agent结果（用于提取情绪提示）
-            persona: 调用方透传的用户人格配置，
-                None时自行获取（兼容独立调用）
 
         返回:
             Image | None: 贴纸图片对象，不发时返回None
         """
         try:
-            persona = (
-                persona
-                or await persona_manager.get_user_persona_config(
-                    ctx.user_id
-                )
-            )
             persona_mood = persona_manager.get_persona_sticker_mood(
                 persona
             )
@@ -104,7 +97,7 @@ class ReplyDecisions:
     async def decide_tts(
         text: str,
         ctx: ReplyContext,
-        persona: dict[str, Any] | None = None,
+        persona: dict[str, Any],
     ) -> bytes | None:
         """TTS决策
 
@@ -115,8 +108,7 @@ class ReplyDecisions:
         参数:
             text: 回复文本
             ctx: 回复上下文
-            persona: 调用方透传的用户人格配置，
-                None时自行获取（兼容独立调用）
+            persona: 调用方透传的用户人格配置
 
         返回:
             bytes | None: 音频数据，不发时返回None
@@ -133,12 +125,6 @@ class ReplyDecisions:
         if random.random() >= tts_auto_cfg.get("probability", 0.2):
             return None
         try:
-            persona = (
-                persona
-                or await persona_manager.get_user_persona_config(
-                    ctx.user_id
-                )
-            )
             tts_config = persona_manager.get_persona_tts_config(
                 persona
             )
@@ -169,9 +155,10 @@ class ReplyDecisions:
         """
         if not ctx.group_id:
             return None
-        if not get_config("REACTION", {}).get("enabled", True):
+        reaction_cfg = get_config("REACTION", {})
+        if not reaction_cfg.get("enabled", True):
             return None
-        prob = get_config("REACTION", {}).get("probability", 0.15)
+        prob = reaction_cfg.get("probability", 0.15)
         if random.random() >= prob:
             return None
         return HumanizeToolkit.pick_reaction_face_id("neutral")
@@ -202,7 +189,7 @@ class ReplyDecisions:
     async def maybe_prepend_catchphrase(
         text: str,
         ctx: ReplyContext,
-        persona: dict[str, Any] | None = None,
+        persona: dict[str, Any],
     ) -> str:
         """按概率在回复前插入人格口头禅
 
@@ -212,18 +199,11 @@ class ReplyDecisions:
         参数:
             text: 拟人化后的回复文本
             ctx: 回复上下文
-            persona: 调用方透传的用户人格配置，
-                None时自行获取（兼容独立调用）
+            persona: 调用方透传的用户人格配置
 
         返回:
             str: 可能前置了口头禅的文本
         """
-        persona = (
-            persona
-            or await persona_manager.get_user_persona_config(
-                ctx.user_id
-            )
-        )
         traits = persona.get("traits") or {}
         if not isinstance(traits, dict):
             return text

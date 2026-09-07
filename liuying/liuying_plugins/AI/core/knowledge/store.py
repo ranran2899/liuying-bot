@@ -9,7 +9,6 @@
 """
 
 from datetime import datetime, timedelta
-from typing import Any
 
 import nonebot
 
@@ -51,32 +50,6 @@ class KnowledgeStore:
         self._last_stats_time: float = 0.0
         """统计缓存时间"""
 
-    def _cache_get(self, key: str) -> Any | None:
-        """从缓存获取
-
-        参数:
-            key: 缓存键
-
-        返回:
-            Any | None: 缓存值或None
-        """
-        return self._cache.get(key)
-
-    def _cache_set(self, key: str, value: Any) -> None:
-        """设置缓存
-
-        参数:
-            key: 缓存键
-            value: 缓存值
-        """
-        self._cache.set(key, value)
-
-    def invalidate_cache(self) -> None:
-        """清空缓存（插件状态变更后调用）"""
-        self._cache.clear()
-        self._last_stats = None
-        self._last_stats_time = 0.0
-
     async def _build_view(self, info: PluginInfo) -> PluginView:
         """构建插件视图
 
@@ -103,12 +76,12 @@ class KnowledgeStore:
         if not plugin_name:
             return None
         cache_key = f"name:{plugin_name}"
-        cached = self._cache_get(cache_key)
+        cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
         if info := await PluginInfo.get_by_module(plugin_name):
             view = await self._build_view(info)
-            self._cache_set(cache_key, view)
+            self._cache.set(cache_key, view)
             return view
         return None
 
@@ -127,7 +100,7 @@ class KnowledgeStore:
             list[PluginView]: 插件视图列表
         """
         cache_key = f"list:{menu_type or 'all'}:{limit}"
-        cached = self._cache_get(cache_key)
+        cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
         query = PluginInfo.visible_query()
@@ -138,36 +111,8 @@ class KnowledgeStore:
             if menu_type and view.menu_type != menu_type:
                 continue
             views.append(view)
-        self._cache_set(cache_key, views)
+        self._cache.set(cache_key, views)
         return views
-
-    async def search_by_keyword(
-        self, keyword: str, limit: int = 10
-    ) -> list[PluginView]:
-        """关键词搜索
-
-        参数:
-            keyword: 关键词
-            limit: 返回上限
-
-        返回:
-            list[PluginView]: 匹配的插件视图列表
-        """
-        if not keyword:
-            return []
-        all_items = await self.list_enabled(limit=500)
-        results: list[PluginView] = []
-        kw = keyword.lower()
-        for item in all_items:
-            if (
-                kw in (item.keywords or "").lower()
-                or kw in (item.display_name or "").lower()
-                or kw in (item.description or "").lower()
-            ):
-                results.append(item)
-                if len(results) >= limit:
-                    break
-        return results
 
     async def recall(
         self,
@@ -365,35 +310,6 @@ class KnowledgeStore:
         )
         return "\n\n".join(blocks)
 
-    async def build_full_catalog_block(
-        self, menu_type: str | None = None
-    ) -> str:
-        """构建完整插件目录块（供AI总览）
-
-        参数:
-            menu_type: 菜单类型过滤，None时不过滤
-
-        返回:
-            str: 目录块文本
-        """
-        items = await self.list_enabled(menu_type=menu_type, limit=300)
-        if not items:
-            return "（暂无可用插件）"
-
-        by_menu: dict[str, list[PluginView]] = {}
-        for item in items:
-            by_menu.setdefault(item.menu_type or "其他", []).append(item)
-
-        parts: list[str] = ["## 插件目录总览"]
-        for menu, group in sorted(by_menu.items()):
-            parts.append(f"\n### {menu}")
-            for item in group:
-                line = f"- {item.display_name or item.plugin_name}"
-                if item.description:
-                    line += f": {item.description[:80]}"
-                parts.append(line)
-        return "\n".join(parts)
-
     async def get_stats(self) -> KnowledgeStats:
         """获取知识库统计
 
@@ -439,39 +355,6 @@ class KnowledgeStore:
         self._last_stats = stats
         self._last_stats_time = now_ts
         return stats
-
-    async def get_hot_plugins(
-        self, days: int = 7, limit: int = 10
-    ) -> list[dict[str, Any]]:
-        """获取热门插件
-
-        参数:
-            days: 统计天数
-            limit: 返回上限
-
-        返回:
-            list[dict]: 热门插件列表
-        """
-        return await KnowledgeQueryLog.get_hot_plugins(
-            days=days, limit=limit
-        )
-
-    async def set_plugin_enabled(
-        self, plugin_name: str, enabled: bool
-    ) -> None:
-        """设置插件启用状态
-
-        通过更新 PluginInfo.status 实现。
-
-        参数:
-            plugin_name: 插件模块名
-            enabled: 是否启用
-        """
-        if not (info := await PluginInfo.get_by_module(plugin_name)):
-            return
-        info.status = enabled
-        await info.save(update_fields=["status"])
-        self.invalidate_cache()
 
     async def prune_stale(self, days: int = 30) -> int:
         """清理过期查询日志

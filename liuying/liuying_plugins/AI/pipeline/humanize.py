@@ -8,8 +8,6 @@
 import random
 import re
 
-from .text_policy import ReplyTextPolicy
-
 _BASE_TYPING_DELAY = 0.5
 """基础打字延迟（秒）"""
 
@@ -259,18 +257,19 @@ class HumanizeToolkit:
         """碎片化输出主入口
 
         先按空行切段，再对超长段做二次切分。
+        调用方需保证text已经过ReplyTextPolicy清理
+        （当前唯一调用链 processor -> build_segments 已保证）。
 
         参数:
-            text: 原始回复文本
+            text: 原始回复文本（已清理）
             max_segment_chars: 单段最大字符数，<=0时不做二次切分
 
         返回:
             list[str]: 碎片段列表
         """
-        cleaned = ReplyTextPolicy.normalize_visible_reply_text(text)
-        if not cleaned:
+        if not text:
             return []
-        segments = HumanizeToolkit.split_text_into_segments(cleaned)
+        segments = HumanizeToolkit.split_text_into_segments(text)
         if max_segment_chars > 0:
             expanded: list[str] = []
             for seg in segments:

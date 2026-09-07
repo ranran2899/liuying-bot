@@ -42,9 +42,6 @@ LATENCY_CLASS_SLOW = "slow"
 DEFAULT_AGENT_MAX_STEPS = 10
 """默认Agent最大步数"""
 
-DEFAULT_TIME_BUDGET = 180.0
-"""默认时间预算（秒）"""
-
 DEFAULT_TOOL_TIMEOUT = 30.0
 """默认工具超时（秒）"""
 

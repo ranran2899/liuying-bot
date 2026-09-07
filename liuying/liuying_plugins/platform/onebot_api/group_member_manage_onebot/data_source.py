@@ -5,12 +5,13 @@ from liuying.utils.log import logger
 _ADMIN_ROLES = frozenset({"admin", "owner"})
 
 
-async def _check_bot_admin(bot: Bot, group_id: str) -> str | None:
+async def _check_bot_admin(bot: Bot, group_id: str, action: str) -> str | None:
     """检查bot是否有管理员权限
 
     参数:
         bot: Bot实例
         group_id: 群组ID
+        action: 操作名称，用于提示信息
 
     返回:
         str | None: 无权限时返回提示信息，有权限返回None
@@ -20,12 +21,12 @@ async def _check_bot_admin(bot: Bot, group_id: str) -> str | None:
         user_id=bot.self_id,
     )
     if bot_info["role"] not in _ADMIN_ROLES:
-        return "没有管理员权限，无法执行此操作"
+        return f"我还没有管理员权限，无法{action}"
     return None
 
 
-class QunGuanManage:
-    """群管功能管理类"""
+class GroupMemberManage:
+    """OneBot群成员管理，提供禁言/解禁/踢出操作"""
 
     @classmethod
     async def mute_user(
@@ -49,8 +50,8 @@ class QunGuanManage:
             str: 操作结果信息
         """
         try:
-            if error := await _check_bot_admin(bot, group_id):
-                return error.replace("执行此操作", "禁言用户")
+            if error := await _check_bot_admin(bot, group_id, "禁言用户"):
+                return error
 
             await bot.set_group_ban(
                 group_id=group_id,
@@ -59,13 +60,22 @@ class QunGuanManage:
             )
 
             logger.info(
-                f"管理员 {operator_id} 在群 {group_id} 禁言用户 {user_id} "
-                f"{duration} 分钟"
+                f"管理员 {operator_id} 在群 {group_id} 禁言用户 {user_id}"
+                f" {duration} 分钟",
+                "群成员管理",
+                session=operator_id,
+                group_id=group_id,
             )
-            return f"已成功禁言用户 {user_id}，时长: {duration} 分钟"
+            return f"已将用户 {user_id} 禁言 {duration} 分钟"
 
         except Exception as e:
-            logger.error(f"禁言用户失败: {e}")
+            logger.error(
+                "禁言用户失败",
+                "群成员管理",
+                session=operator_id,
+                group_id=group_id,
+                e=e,
+            )
             return f"禁言用户失败: {e!s}"
 
     @classmethod
@@ -88,8 +98,8 @@ class QunGuanManage:
             str: 操作结果信息
         """
         try:
-            if error := await _check_bot_admin(bot, group_id):
-                return error.replace("执行此操作", "解除用户禁言")
+            if error := await _check_bot_admin(bot, group_id, "解除禁言"):
+                return error
 
             await bot.set_group_ban(
                 group_id=group_id,
@@ -98,12 +108,21 @@ class QunGuanManage:
             )
 
             logger.info(
-                f"管理员 {operator_id} 在群 {group_id} 解除用户 {user_id} 的禁言"
+                f"管理员 {operator_id} 在群 {group_id} 解除用户 {user_id} 的禁言",
+                "群成员管理",
+                session=operator_id,
+                group_id=group_id,
             )
-            return f"已成功解除用户 {user_id} 的禁言"
+            return f"已解除用户 {user_id} 的禁言"
 
         except Exception as e:
-            logger.error(f"解除用户禁言失败: {e}")
+            logger.error(
+                "解除用户禁言失败",
+                "群成员管理",
+                session=operator_id,
+                group_id=group_id,
+                e=e,
+            )
             return f"解除用户禁言失败: {e!s}"
 
     @classmethod
@@ -126,8 +145,8 @@ class QunGuanManage:
             str: 操作结果信息
         """
         try:
-            if error := await _check_bot_admin(bot, group_id):
-                return error.replace("执行此操作", "踢出用户")
+            if error := await _check_bot_admin(bot, group_id, "踢出用户"):
+                return error
 
             await bot.set_group_kick(
                 group_id=group_id,
@@ -135,9 +154,20 @@ class QunGuanManage:
                 reject_add_request=False,
             )
 
-            logger.info(f"管理员 {operator_id} 在群 {group_id} 踢出用户 {user_id}")
-            return f"已成功踢出用户 {user_id}"
+            logger.info(
+                f"管理员 {operator_id} 在群 {group_id} 踢出用户 {user_id}",
+                "群成员管理",
+                session=operator_id,
+                group_id=group_id,
+            )
+            return f"已将用户 {user_id} 踢出群聊"
 
         except Exception as e:
-            logger.error(f"踢出用户失败: {e}")
+            logger.error(
+                "踢出用户失败",
+                "群成员管理",
+                session=operator_id,
+                group_id=group_id,
+                e=e,
+            )
             return f"踢出用户失败: {e!s}"

@@ -53,7 +53,6 @@ class EmotionManager:
         user_id: str,
         group_id: str | None,
         messages: list[dict[str, str]],
-        llm_helper=None,
         persona_name: str = _DEFAULT_PERSONA,
     ) -> EmotionState:
         """对话后更新情绪状态
@@ -62,15 +61,11 @@ class EmotionManager:
             user_id: 用户ID
             group_id: 群组ID
             messages: 对话消息列表
-            llm_helper: LLM助手，None时延迟导入
             persona_name: bot人格名
 
         返回:
             EmotionState: 更新后的情绪状态
         """
-        if llm_helper is None:
-            llm_helper = _default_llm_helper
-
         state = await self.get_state(
             user_id, group_id, persona_name=persona_name
         )
@@ -102,7 +97,7 @@ class EmotionManager:
         )
 
         try:
-            result = await llm_helper.chat_text(
+            result = await _default_llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
                 options={"temperature": 0.3},
             )

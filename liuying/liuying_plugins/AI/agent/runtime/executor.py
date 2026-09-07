@@ -21,7 +21,7 @@ from .constants import (
     DEFAULT_TOOL_TIMEOUT,
     EVIDENCE_KIND_CONTEXT,
 )
-from .evidence import RETRYABLE_LOOKUP_TOOLS, EvidenceComposer
+from .evidence import RETRYABLE_LOOKUP_TOOLS, EvidenceComposer, is_empty_result
 from .tool_catalog import tool_catalog
 
 # 时效性搜索工具白名单（注入当前日期提升结果新鲜度）
@@ -641,7 +641,7 @@ class ToolExecutor:
             exclude.update(record.tool_name for record in batch)
             if any(
                 record.success
-                and not self._is_empty_tool_result(record.result)
+                and not is_empty_result(record.result)
                 for record in batch
             ):
                 return records
@@ -779,7 +779,7 @@ class ToolExecutor:
             last_record = record
             # 成功且非空结果，直接返回
             if record.success and record.result.strip():
-                if not self._is_empty_tool_result(record.result):
+                if not is_empty_result(record.result):
                     return record
             logger.debug(
                 f"工具 '{tool_name}' 查询变体返回空结果，"
@@ -834,32 +834,3 @@ class ToolExecutor:
                 variant["query"] = short_query
                 variants.append(variant)
         return variants
-
-    @staticmethod
-    def _is_empty_tool_result(text: str) -> bool:
-        """判断工具结果是否为空
-
-        参数:
-            text: 工具结果文本
-
-        返回:
-            bool: 是否为空结果
-        """
-        if not text or not text.strip():
-            return True
-        lowered = text.strip().lower()
-        markers = (
-            "未找到",
-            "没有找到",
-            "无结果",
-            "no_results",
-            "暂无",
-            "搜索失败",
-            "未检索到",
-        )
-        return any(marker in lowered for marker in markers)
-
-    def reset(self) -> None:
-        """重置执行器状态（清空指标与证据）"""
-        self._metrics = ExecutionMetrics()
-        self._evidence.clear()

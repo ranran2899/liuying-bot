@@ -22,6 +22,34 @@ _CRON_HELP = (
 )
 
 
+async def _run_task_action(
+    session: Uninfo,
+    task_no: str,
+    action: str,
+    verb: str,
+) -> str:
+    """执行单个任务操作并生成结果文案
+
+    参数:
+        session: 会话信息
+        task_no: 用户输入的任务编号字符串
+        action: task_service 的操作名（cancel/pause/resume）
+        verb: 操作动词，用于提示与结果文案
+
+    返回:
+        str: 结果文案
+    """
+    no = TaskCommandsHelper._parse_no(task_no)
+    if no is None:
+        return f"请输入任务编号，如: bot任务{verb} 1"
+    service_fn = getattr(task_service, f"{action}_task")
+    ok = await service_fn(session.user.id, no)
+    fail_hint = "或未暂停" if action == "resume" else f"或已{verb}"
+    if ok:
+        return f"任务 #{no} 已{verb}"
+    return f"未找到任务 #{no} {fail_hint}"
+
+
 def setup_task_commands() -> None:
     """注册用户定时任务相关matcher"""
     if not get_config("USER_TASKS_ENABLED", True):
@@ -145,20 +173,8 @@ def setup_task_commands() -> None:
         session: Uninfo, task_no: str = ""
     ) -> None:
         """取消定时任务"""
-        no = TaskCommandsHelper._parse_no(task_no)
-        if no is None:
-            await MessageUtils.build_message(
-                "请输入任务编号，如: bot任务取消 1"
-            ).finish()
-            return
-
-        ok = await task_service.cancel_task(
-            session.user.id, no
-        )
-        msg = (
-            f"任务 #{no} 已取消"
-            if ok
-            else f"未找到任务 #{no} 或已取消"
+        msg = await _run_task_action(
+            session, task_no, "cancel", "取消"
         )
         await MessageUtils.build_message(msg).finish()
 
@@ -167,20 +183,8 @@ def setup_task_commands() -> None:
         session: Uninfo, task_no: str = ""
     ) -> None:
         """暂停定时任务"""
-        no = TaskCommandsHelper._parse_no(task_no)
-        if no is None:
-            await MessageUtils.build_message(
-                "请输入任务编号，如: bot任务暂停 1"
-            ).finish()
-            return
-
-        ok = await task_service.pause_task(
-            session.user.id, no
-        )
-        msg = (
-            f"任务 #{no} 已暂停"
-            if ok
-            else f"未找到任务 #{no} 或已暂停"
+        msg = await _run_task_action(
+            session, task_no, "pause", "暂停"
         )
         await MessageUtils.build_message(msg).finish()
 
@@ -189,20 +193,8 @@ def setup_task_commands() -> None:
         session: Uninfo, task_no: str = ""
     ) -> None:
         """恢复定时任务"""
-        no = TaskCommandsHelper._parse_no(task_no)
-        if no is None:
-            await MessageUtils.build_message(
-                "请输入任务编号，如: bot任务恢复 1"
-            ).finish()
-            return
-
-        ok = await task_service.resume_task(
-            session.user.id, no
-        )
-        msg = (
-            f"任务 #{no} 已恢复"
-            if ok
-            else f"未找到任务 #{no} 或未暂停"
+        msg = await _run_task_action(
+            session, task_no, "resume", "恢复"
         )
         await MessageUtils.build_message(msg).finish()
 

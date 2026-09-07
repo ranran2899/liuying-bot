@@ -191,7 +191,7 @@ class ReplyPipeline:
 
         async def _persist_records() -> None:
             """顺序写入用户和助手对话记录（保持时间顺序）"""
-            await ConversationRecord.add_record(
+            await ConversationRecord.create(
                 user_id=ctx.user_id,
                 role="user",
                 content=user_text,
@@ -200,7 +200,7 @@ class ReplyPipeline:
                 platform=ctx.platform,
                 persona_name=ctx.persona_name,
             )
-            await ConversationRecord.add_record(
+            await ConversationRecord.create(
                 user_id=ctx.user_id,
                 role="assistant",
                 content=reply_text,

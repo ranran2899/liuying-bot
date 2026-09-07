@@ -18,7 +18,6 @@ from .config_items import (
     LLM_CONFIGS,
     MEMORY_CONFIGS,
     MISC_CONFIGS,
-    POKE_CONFIGS,
     SAFETY_CONFIGS,
     SOCIAL_CONFIGS,
     TTS_CONFIGS,
@@ -32,8 +31,7 @@ _MODULE = "AI"
 
 
 PluginConfig: list[RegisterConfig] = [
-    *    MISC_CONFIGS,
-    *POKE_CONFIGS,
+    *MISC_CONFIGS,
     *LLM_CONFIGS,
     *TTS_CONFIGS,
     *VISION_CONFIGS,

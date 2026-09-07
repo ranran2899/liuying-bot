@@ -92,16 +92,6 @@ class ToolRegistry:
             tool.name, tool.to_metadata()
         )
 
-    def unregister(self, name: str) -> None:
-        """注销工具
-
-        参数:
-            name: 工具名
-        """
-        tool = self._tools.pop(name, None)
-        if tool:
-            tool_catalog.unregister_tool(name)
-
     def get(self, name: str) -> AgentTool | None:
         """获取工具
 

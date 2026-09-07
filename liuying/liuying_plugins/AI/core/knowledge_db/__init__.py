@@ -8,10 +8,6 @@ SQLite 数据库文件（data/db/knowledge_base.db）。
     ```python
     from ..knowledge_db import knowledge_base
 
-    # 知识条目 CRUD
-    doc_id = await knowledge_base.add_entry("标题", "内容")
-    entry = await knowledge_base.get_entry(doc_id)
-
     # 文档索引（供 AI 记忆系统等使用）
     await knowledge_base.index_document(1, "文本", embedding=[...])
 

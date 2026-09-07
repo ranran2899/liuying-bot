@@ -14,29 +14,22 @@ _CLEANUP_TASK_ID = "ai_knowledge_cleanup"
 """知识库清理任务ID"""
 
 
-class KnowledgeRefreshHelper:
-    """知识库清理辅助工具类
+async def _knowledge_cleanup_task() -> None:
+    """知识库清理任务
 
-    封装知识库查询日志清理任务逻辑。
+    每天凌晨4点执行，清理30天前的查询日志。
     """
-
-    @staticmethod
-    async def _knowledge_cleanup_task() -> None:
-        """知识库清理任务
-
-        每天凌晨4点执行，清理30天前的查询日志。
-        """
-        try:
-            count = await knowledge_store.prune_stale(days=30)
-            if count > 0:
-                logger.info(
-                    f"知识库查询日志清理: {count} 条",
-                    command="AI",
-                )
-        except Exception as e:
-            logger.warning(
-                f"知识库清理失败: {e}", command="AI", e=e
+    try:
+        count = await knowledge_store.prune_stale(days=30)
+        if count > 0:
+            logger.info(
+                f"知识库查询日志清理: {count} 条",
+                command="AI",
             )
+    except Exception as e:
+        logger.warning(
+            f"知识库清理失败: {e}", command="AI", e=e
+        )
 
 
 async def setup_knowledge_jobs() -> None:
@@ -46,7 +39,7 @@ async def setup_knowledge_jobs() -> None:
     """
     await task_manager.add_cron(
         task_id=_CLEANUP_TASK_ID,
-        func=KnowledgeRefreshHelper._knowledge_cleanup_task,
+        func=_knowledge_cleanup_task,
         hour=4,
         minute=0,
         name="AI知识库清理",

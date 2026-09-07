@@ -81,7 +81,6 @@ class TurnPlanner:
     def plan_fast(
         self,
         user_message: str,
-        context_summary: str = "",
         has_image: bool = False,
     ) -> TurnPlan:
         """快速规则决策（无LLM调用）
@@ -92,7 +91,6 @@ class TurnPlanner:
 
         参数:
             user_message: 用户消息
-            context_summary: 上下文摘要
             has_image: 是否包含图片
 
         返回:
@@ -182,7 +180,7 @@ class TurnPlanner:
             TurnPlan: 规划结果
         """
         if not use_llm:
-            plan = self.plan_fast(user_message, context_summary, has_image)
+            plan = self.plan_fast(user_message, has_image)
         else:
             plan = await self._plan_with_llm(
                 user_message, context_summary, has_image

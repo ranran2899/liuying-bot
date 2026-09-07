@@ -37,7 +37,7 @@ __plugin_meta__ = PluginMetadata(
 
 _matcher = on_alconna(
     Alconna("更新群组成员信息"),
-    rule=admin_check(1) & ensure_group & notice_rule([v11Event, v12Event]),
+    rule=admin_check(1) & ensure_group(Uninfo) & notice_rule([v11Event, v12Event]),
     priority=5,
     block=True,
 )

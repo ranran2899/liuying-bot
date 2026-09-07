@@ -71,19 +71,15 @@ class ReplyBuffer:
         返回:
             float: 窗口时长（秒）
         """
-        if is_private:
-            return float(
-                get_config(
-                    "REPLY_BUFFER_PRIVATE_DELAY",
-                    _DEFAULT_PRIVATE_DELAY,
-                )
-            )
-        return float(
-            get_config(
-                "REPLY_BUFFER_GROUP_DELAY",
-                _DEFAULT_GROUP_DELAY,
-            )
+        buffer_cfg = get_config("REPLY_BUFFER", {})
+        key = "private_delay" if is_private else "group_delay"
+        default = (
+            _DEFAULT_PRIVATE_DELAY if is_private else _DEFAULT_GROUP_DELAY
         )
+        try:
+            return float(buffer_cfg.get(key, default))
+        except (TypeError, ValueError):
+            return float(default)
 
     async def submit(
         self,

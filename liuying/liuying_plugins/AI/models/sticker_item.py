@@ -237,20 +237,6 @@ class StickerItem(Model):
         return await query.order_by("-usage_count").limit(limit).all()
 
     @classmethod
-    async def list_disabled(
-        cls, limit: int = 100
-    ) -> list["StickerItem"]:
-        """列出禁用表情包
-
-        参数:
-            limit: 返回上限
-
-        返回:
-            list[StickerItem]: 禁用表情包列表
-        """
-        return await cls.filter(is_disabled=True).limit(limit).all()
-
-    @classmethod
     async def increment_usage(cls, item_id: int) -> None:
         """增加使用计数（原子UPDATE）
 
@@ -357,17 +343,6 @@ class StickerItem(Model):
             return [str(t) for t in tags if t]
         except (json.JSONDecodeError, TypeError):
             return []
-
-    def get_extra(self) -> dict[str, Any]:
-        """解析额外信息
-
-        返回:
-            dict: 额外信息字典
-        """
-        try:
-            return json.loads(self.extra or "{}")
-        except (json.JSONDecodeError, TypeError):
-            return {}
 
     @property
     def score(self) -> float:

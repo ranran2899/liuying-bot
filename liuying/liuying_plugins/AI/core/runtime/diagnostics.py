@@ -70,7 +70,7 @@ class Diagnostics:
         """
         ok = True
         checks: dict[str, bool] = {}
-        if not get_config("ENABLE_AI", True):
+        if not get_config("ENABLE_AI", False):
             ok = False
             checks["ai_enabled"] = False
         else:

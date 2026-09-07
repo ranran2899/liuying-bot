@@ -10,7 +10,6 @@ from enum import StrEnum
 
 from liuying.utils.log import logger
 
-from ...models.sticker_item import StickerItem
 from ..llm import llm_helper
 from ..llm.model_router import ROLE_STICKER, model_router
 from ..tools.json_utils import extract_json_payload
@@ -165,107 +164,6 @@ class StickerSemanticsAnalyzer:
             )
         self._update_cache(sticker_id, result)
         return result
-
-    async def analyze_batch(
-        self, stickers: list[dict]
-    ) -> dict[int, StickerSemantics]:
-        """批量分析贴纸语义
-
-        参数:
-            stickers: 贴纸字典列表，每项含 id/description/filename
-
-        返回:
-            dict: 贴纸ID -> 语义分析结果
-        """
-        results: dict[int, StickerSemantics] = {}
-        for sticker in stickers:
-            sid = sticker.get("id", 0)
-            desc = sticker.get("description", "")
-            fname = sticker.get("filename", "")
-            if not sid:
-                continue
-            result = await self.analyze_sticker(sid, desc, fname)
-            results[sid] = result
-        return results
-
-    async def analyze_unlabeled_stickers(
-        self, limit: int = 20
-    ) -> int:
-        """分析未标注的贴纸（定时任务入口）
-
-        参数:
-            limit: 单次处理上限
-
-        返回:
-            int: 处理的贴纸数量
-        """
-        stickers = await StickerItem.filter(
-            is_disabled=False,
-        ).limit(limit).all()
-        count = 0
-        for sticker in stickers:
-            if sticker.id in self._cache:
-                cached = self._cache[sticker.id]
-                if cached.analyzed:
-                    continue
-            desc = sticker.description or ""
-            fname = sticker.name or ""
-            result = await self.analyze_sticker(
-                sticker.id, desc, fname
-            )
-            if result.analyzed:
-                count += 1
-        if count > 0:
-            logger.info(
-                f"贴纸语义分析完成: {count} 张",
-                command="AI",
-            )
-        return count
-
-    def get_cached(self, sticker_id: int) -> StickerSemantics | None:
-        """获取缓存的分析结果
-
-        参数:
-            sticker_id: 贴纸ID
-
-        返回:
-            StickerSemantics | None: 缓存结果或None
-        """
-        return self._cache.get(sticker_id)
-
-    def find_by_mood(
-        self, mood: str
-    ) -> list[int]:
-        """按心情标签查找贴纸ID
-
-        参数:
-            mood: 心情标签
-
-        返回:
-            list[int]: 匹配的贴纸ID列表
-        """
-        return [
-            sid
-            for sid, sem in self._cache.items()
-            if sem.mood == mood and sem.analyzed
-        ]
-
-    def find_by_scene(
-        self, scene: str
-    ) -> list[int]:
-        """按场景标签查找贴纸ID
-
-        参数:
-            scene: 场景标签
-
-        返回:
-            list[int]: 匹配的贴纸ID列表
-        """
-        return [
-            sid
-            for sid, sem in self._cache.items()
-            if sem.scene == scene and sem.analyzed
-        ]
 
     @staticmethod
     def _parse_analysis(raw: str) -> dict:

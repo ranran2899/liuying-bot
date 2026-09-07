@@ -400,7 +400,7 @@ class ReplyProcessor:
         # gather确保任一协程异常时取消其他任务，避免悬挂任务
         sticker_path, tts_audio, _ = await asyncio.gather(
             ReplyDecisions.decide_sticker(
-                humanized_text, ctx, agent_result, persona
+                humanized_text, ctx, persona, agent_result
             ),
             ReplyDecisions.decide_tts(humanized_text, ctx, persona),
             ReplyPipeline.persist_conversation(
@@ -457,9 +457,10 @@ class ReplyProcessor:
         is_private: bool = False,
         image_data: bytes | None = None,
         image_mime: str = "image/jpeg",
-        persona_name: str = "default",
     ) -> ReplyResult:
         """便捷入口：通过参数构造上下文处理回复
+
+        人格名由 handle 内统一解析并覆盖，不在此传入。
 
         参数:
             user_id: 用户ID
@@ -471,7 +472,6 @@ class ReplyProcessor:
             is_private: 是否私聊
             image_data: 图片二进制数据，None表示无图片
             image_mime: 图片MIME类型，默认image/jpeg
-            persona_name: bot人格名，default时由handle内解析
 
         返回:
             ReplyResult: 回复结果
@@ -486,7 +486,6 @@ class ReplyProcessor:
             is_private=is_private,
             image_data=image_data,
             image_mime=image_mime,
-            persona_name=persona_name,
         )
         return await self.handle(ctx)
 

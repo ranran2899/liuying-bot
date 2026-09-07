@@ -388,13 +388,18 @@ class MemoryCurator:
         if not records:
             return 0, 0
 
-        entity_counter: dict[str, dict[str, Any]] = (
+        # 按用户分别累计实体与偏好，避免多用户场景下画像互相污染
+        entity_counters: dict[str, dict[str, dict[str, Any]]] = (
             defaultdict(
-                lambda: {"count": 0, "type": "generic"}
+                lambda: defaultdict(
+                    lambda: {"count": 0, "type": "generic"}
+                )
             )
         )
-        preference_counter: dict[str, dict[str, int]] = (
-            defaultdict(lambda: {"count": 0, "type": ""})
+        preference_counters: dict[str, dict[str, dict[str, Any]]] = (
+            defaultdict(
+                lambda: defaultdict(lambda: {"count": 0, "type": ""})
+            )
         )
 
         for record in records:
@@ -402,33 +407,33 @@ class MemoryCurator:
                 record.content or ""
             )
             for ent in entities:
-                entity_counter[ent.name]["count"] += 1
-                entity_counter[ent.name]["type"] = (
-                    ent.entity_type
-                )
+                info = entity_counters[record.user_id][ent.name]
+                info["count"] += 1
+                info["type"] = ent.entity_type
 
             prefs = CurationExtractor.detect_preferences(
                 record.content or ""
             )
             for pref in prefs:
-                key = pref["target"]
-                preference_counter[key]["count"] += 1
-                preference_counter[key]["type"] = pref["type"]
+                info = preference_counters[record.user_id][
+                    pref["target"]
+                ]
+                info["count"] += 1
+                info["type"] = pref["type"]
 
         extracted_count = 0
-        user_ids_processed: set[str] = set()
-        for record in records:
-            if record.user_id in user_ids_processed:
-                continue
-            user_ids_processed.add(record.user_id)
-
+        persona_updated = 0
+        user_ids = set(entity_counters) | set(preference_counters)
+        for uid in user_ids:
             user_entities = [
                 {
                     "name": name,
                     "count": info["count"],
                     "type": info["type"],
                 }
-                for name, info in entity_counter.items()
+                for name, info in entity_counters.get(
+                    uid, {}
+                ).items()
             ][:10]
             user_prefs = [
                 {
@@ -436,21 +441,23 @@ class MemoryCurator:
                     "count": info["count"],
                     "type": info["type"],
                 }
-                for target, info in preference_counter.items()
+                for target, info in preference_counters.get(
+                    uid, {}
+                ).items()
             ][:10]
 
             if not user_entities and not user_prefs:
                 continue
 
+            persona_updated += 1
             updated = await self._update_user_persona(
-                user_id=record.user_id,
+                user_id=uid,
                 entities=user_entities,
                 preferences=user_prefs,
             )
             if updated:
                 extracted_count += len(user_entities)
 
-        persona_updated = len(user_ids_processed)
         return extracted_count, persona_updated
 
     async def _update_user_persona(

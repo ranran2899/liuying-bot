@@ -165,17 +165,6 @@ class GroupMemberService:
         """
         self._cache.set(group_id, snapshot)
 
-    def invalidate_cache(self, group_id: str | None = None) -> None:
-        """清空缓存
-
-        参数:
-            group_id: 指定群组ID，None时清空全部
-        """
-        if group_id is None:
-            self._cache.clear()
-        else:
-            self._cache.pop(group_id, None)
-
     async def get_members_from_db(
         self, group_id: str
     ) -> GroupMemberSnapshot:
@@ -328,93 +317,6 @@ class GroupMemberService:
                     e=e,
                 )
         return None
-
-    async def is_member(
-        self,
-        group_id: str,
-        user_id: str,
-        bot: Any = None,
-    ) -> bool:
-        """检查用户是否为群成员
-
-        参数:
-            group_id: 群组ID
-            user_id: 用户ID
-            bot: Bot对象
-
-        返回:
-            bool: 是否为群成员
-        """
-        snapshot = await self.get_members(group_id, bot=bot)
-        return any(
-            m.user_id == user_id for m in snapshot.members
-        )
-
-    async def get_member_nickname(
-        self,
-        group_id: str,
-        user_id: str,
-        bot: Any = None,
-    ) -> str:
-        """获取群成员昵称
-
-        参数:
-            group_id: 群组ID
-            user_id: 用户ID
-            bot: Bot对象
-
-        返回:
-            str: 昵称（无则返回空串）
-        """
-        nickname = await GroupInfoUser.get_user_nickname(
-            user_id, group_id
-        )
-        if nickname:
-            return nickname
-
-        member = await self.get_member(
-            group_id, user_id, bot=bot
-        )
-        if member:
-            return member.nickname or member.username
-        return ""
-
-    async def get_group_stats(
-        self,
-        group_id: str,
-        bot: Any = None,
-    ) -> dict[str, Any]:
-        """获取群成员统计
-
-        参数:
-            group_id: 群组ID
-            bot: Bot对象
-
-        返回:
-            dict: 统计字典（含total/admin_count/owner等）
-        """
-        snapshot = await self.get_members(group_id, bot=bot)
-        admin_count = sum(
-            1 for m in snapshot.members if m.role == "admin"
-        )
-        owner_count = sum(
-            1 for m in snapshot.members if m.role == "owner"
-        )
-        return {
-            "group_id": group_id,
-            "total": snapshot.total,
-            "admin_count": admin_count,
-            "owner_count": owner_count,
-            "member_count": snapshot.total
-            - admin_count
-            - owner_count,
-            "source": snapshot.source,
-            "update_time": (
-                snapshot.update_time.strftime("%Y-%m-%d %H:%M")
-                if snapshot.update_time
-                else ""
-            ),
-        }
 
     async def find_members_by_name(
         self,

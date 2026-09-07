@@ -13,7 +13,6 @@ from .evolves import MemoryEvolveService
 from .extractors import EntityMention
 from .manager import MemoryManager, memory_manager
 from .search_ranker import SearchRanker, search_ranker
-from .summarizer import MemorySummarizer, memory_summarizer
 
 __all__ = [
     "BackgroundIntelligence",
@@ -22,11 +21,9 @@ __all__ = [
     "MemoryCurator",
     "MemoryEvolveService",
     "MemoryManager",
-    "MemorySummarizer",
     "SearchRanker",
     "background_intelligence",
     "memory_curator",
     "memory_manager",
-    "memory_summarizer",
     "search_ranker",
 ]

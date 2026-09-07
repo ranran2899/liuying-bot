@@ -135,7 +135,17 @@ class AgentRunner:
         user_message = ""
         for msg in reversed(messages):
             if msg.get("role") == "user":
-                user_message = msg.get("content", "")
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    # 多模态消息：提取文本段拼接，避免对list调strip
+                    user_message = "".join(
+                        part.get("text", "")
+                        for part in content
+                        if isinstance(part, dict)
+                        and part.get("type") == "text"
+                    )
+                else:
+                    user_message = content
                 break
 
         context_summary = AgentRunner._build_context_summary(messages)
@@ -163,7 +173,7 @@ class AgentRunner:
                 command="AI",
                 e=e,
             )
-            plan = planner.plan_fast(user_message, context_summary, has_image)
+            plan = planner.plan_fast(user_message, has_image)
 
         if not plan.user_message:
             plan.user_message = user_message

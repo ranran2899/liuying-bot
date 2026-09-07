@@ -1,174 +1,73 @@
 """杂项配置项
 
-包含主开关、人格、响应长度、协议扩展、日记、知识书等不便归类的配置。
+包含主开关、人格、响应长度、WebUI、日记等不便归类的配置。
 """
 
-from liuying.configs.utils import RegisterConfig
-
-from ._common import MODULE
+from ._common import RegisterConfig, cfg
 
 __all__ = ["MISC_CONFIGS"]
 
 MISC_CONFIGS: list[RegisterConfig] = [
-    RegisterConfig(
-        key="ENABLE_AI",
-        value=False,
-        module=MODULE,
-        help="是否启用AI对话",
-        default_value=False,
-        type=bool,
+    cfg(
+        "ENABLE_AI",
+        False,
+        "是否启用AI对话",
+        bool,
     ),
-    RegisterConfig(
-        key="DEFAULT_PERSONA",
-        value="liuying",
-        module=MODULE,
-        help="默认人格名",
-        default_value="liuying",
-        type=str,
+    cfg(
+        "DEFAULT_PERSONA",
+        "liuying",
+        "默认人格名",
+        str,
     ),
-    RegisterConfig(
-        key="MAX_RESPONSE_LENGTH",
-        value=200,
-        module=MODULE,
-        help="最大响应长度",
-        default_value=200,
-        type=int,
+    cfg(
+        "MAX_RESPONSE_LENGTH",
+        200,
+        "最大响应长度",
+        int,
     ),
-    RegisterConfig(
-        key="COST_GOLD",
-        value=0,
-        module=MODULE,
-        help="调用花费金币",
-        default_value=0,
-        type=int,
+    cfg(
+        "COST_GOLD",
+        0,
+        "调用花费金币",
+        int,
     ),
-    RegisterConfig(
-        key="PROTOCOL_EXTENSIONS",
-        value="auto",
-        module=MODULE,
-        help="协议扩展探测模式",
-        default_value="auto",
-        type=str,
+    cfg(
+        "WEBUI_ENABLED",
+        True,
+        "是否启用WebUI管理接口（挂载到本体web_ui插件）",
+        bool,
     ),
-    RegisterConfig(
-        key="DIARY_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用日记系统",
-        default_value=True,
-        type=bool,
+    cfg(
+        "DIARY_ENABLED",
+        True,
+        "是否启用日记系统",
+        bool,
     ),
-    RegisterConfig(
-        key="MEME_DICT_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用梗百科",
-        default_value=True,
-        type=bool,
+    cfg(
+        "PROACTIVE_DIAGNOSTICS_ENABLED",
+        False,
+        "是否启用主动诊断",
+        bool,
     ),
-    RegisterConfig(
-        key="GROUP_AUTO_BUILD_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用群知识/风格自动构建",
-        default_value=True,
-        type=bool,
+    cfg(
+        "PEER_BOT_IDS",
+        "",
+        "其他bot用户ID列表（逗号分隔），用于环境感知静默",
+        str,
     ),
-    RegisterConfig(
-        key="SESSION_STORE_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用会话存储",
-        default_value=True,
-        type=bool,
+    cfg(
+        "THREAD_TRACKER_ENABLED",
+        True,
+        "是否启用话题线程追踪",
+        bool,
     ),
-    RegisterConfig(
-        key="TIME_CONTEXT_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用时间上下文",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="FREE_SEARCH_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用免配置搜索引擎",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="LOREBOOK_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用知识书",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="BACKGROUND_INTELLIGENCE_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用后台智能处理",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="PROACTIVE_DIAGNOSTICS_ENABLED",
-        value=False,
-        module=MODULE,
-        help="是否启用主动诊断",
-        default_value=False,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="YAML_PIPELINE_ENABLED",
-        value=False,
-        module=MODULE,
-        help="是否启用YAML管道",
-        default_value=False,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="PEER_BOT_IDS",
-        value="",
-        module=MODULE,
-        help="其他bot用户ID列表（逗号分隔），用于环境感知静默",
-        default_value="",
-        type=str,
-    ),
-    RegisterConfig(
-        key="THREAD_TRACKER_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用话题线程追踪",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="TARGET_INFERENCE_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用消息目标推断（群聊精准回复，避免误回复@他人）",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="REPLY_TURN_TRACE_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用回复回合追踪（诊断各阶段耗时与状态）",
-        default_value=True,
-        type=bool,
-    ),
-    RegisterConfig(
-        key="PROMPT_HOOKS_ENABLED",
-        value=True,
-        module=MODULE,
-        help="是否启用提示词钩子注册表（热插拔提示词注入）",
-        default_value=True,
-        type=bool,
+    cfg(
+        "TARGET_INFERENCE_ENABLED",
+        True,
+        "是否启用消息目标推断（群聊精准回复，避免误回复@他人）",
+        bool,
     ),
 ]
 """杂项配置项列表"""
+

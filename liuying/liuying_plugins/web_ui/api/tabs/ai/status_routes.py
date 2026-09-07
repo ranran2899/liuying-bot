@@ -33,7 +33,7 @@ async def _() -> Result[dict]:
     """
     return Result.ok(
         {
-            "enabled": get_ai_config("ENABLE_AI", True),
+            "enabled": get_ai_config("ENABLE_AI", False),
             "persona": get_ai_config("DEFAULT_PERSONA", "liuying"),
             "agent_enabled": get_ai_config("AGENT", {}).get(
                 "enabled", True

@@ -80,12 +80,6 @@ class StickerUsage(Model):
     )
     """额外信息JSON"""
 
-    cache_type = "AI_STICKER_USAGE"
-    """缓存类型"""
-
-    cache_key_field = "id"
-    """缓存键字段"""
-
     @classmethod
     def _run_script(cls):
         """数据库初始化脚本"""
@@ -152,72 +146,3 @@ class StickerUsage(Model):
             return
         record.reaction = reaction
         await record.save(update_fields=["reaction"])
-
-    @classmethod
-    async def get_recent(
-        cls,
-        group_id: str = "",
-        user_id: str = "",
-        limit: int = 10,
-    ) -> list["StickerUsage"]:
-        """获取最近的使用记录
-
-        参数:
-            group_id: 群组ID（空串表示全部）
-            user_id: 用户ID（空串表示全部）
-            limit: 返回上限
-
-        返回:
-            list[StickerUsage]: 使用记录列表
-        """
-        query = cls.filter()
-        if group_id:
-            query = query.filter(group_id=group_id)
-        if user_id:
-            query = query.filter(user_id=user_id)
-        return await query.order_by("-sent_time").limit(limit).all()
-
-    @classmethod
-    async def get_stats_by_sticker(
-        cls, sticker_id: int
-    ) -> dict[str, Any]:
-        """获取单个表情包的反馈统计
-
-        使用SQL聚合查询避免全量加载记录到内存。
-
-        参数:
-            sticker_id: 表情包ID
-
-        返回:
-            dict: 统计字典
-        """
-        sql = (
-            "SELECT reaction, COUNT(id) AS cnt "
-            "FROM ai_sticker_usage "
-            "WHERE sticker_id = :sticker_id "
-            "GROUP BY reaction"
-        )
-        result = await cls.filter().raw(
-            sql, {"sticker_id": sticker_id}
-        )
-        counts: dict[str, int] = {}
-        total = 0
-        for row in result.fetchall():
-            reaction = row.reaction or "unknown"
-            cnt = int(row.cnt or 0)
-            counts[reaction] = cnt
-            total += cnt
-        positive = counts.get("positive", 0)
-        negative = counts.get("negative", 0)
-        rated = positive + negative
-        positive_rate = (
-            positive / rated if rated > 0 else 0.0
-        )
-        return {
-            "total": total,
-            "positive": positive,
-            "negative": negative,
-            "neutral": counts.get("neutral", 0),
-            "unknown": counts.get("unknown", 0),
-            "positive_rate": round(positive_rate, 3),
-        }

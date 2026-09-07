@@ -152,17 +152,18 @@ class MemoryDecayHelper:
 
         try:
             cutoff = datetime.now() - timedelta(hours=2)
-            records = await ConversationRecord.filter(
+            # 仅取聚合所需两列，避免整行拉取与ORM实例化开销
+            rows = await ConversationRecord.filter(
                 create_time__gt=cutoff,
                 role="user",
-            ).all()
+            ).values_list("user_id", "group_id")
 
             # 画像按用户存储，仅按 (user_id, group_id) 聚合计数
             counter: dict[
                 tuple[str, str | None], int
             ] = defaultdict(int)
-            for r in records:
-                counter[(r.user_id, r.group_id)] += 1
+            for user_id, group_id in rows:
+                counter[(user_id, group_id)] += 1
 
             updated = 0
             for (user_id, group_id), count in counter.items():

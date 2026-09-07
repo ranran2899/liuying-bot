@@ -51,11 +51,6 @@ class UserPersonaSelection(Model):
     """缓存键字段"""
 
     @classmethod
-    def _run_script(cls):
-        """数据库初始化脚本"""
-        return []
-
-    @classmethod
     async def get_persona_name(
         cls, user_id: str
     ) -> str | None:

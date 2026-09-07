@@ -218,9 +218,6 @@ class ProactiveHelper:
         仅向 favor_value >= _PROACTIVE_FAVOR_THRESHOLD 的用户发送，
         每次执行受 PROACTIVE_DAILY_LIMIT 限制。
         """
-        if not get_config("PROACTIVE", {}).get("enabled", True):
-            return
-
         hour = datetime.now().hour
         if hour not in (8, 22):
             return
@@ -284,7 +281,7 @@ class ProactiveHelper:
         """
         try:
             persona_name = (
-                persona_manager.get_user_persona_name(user_id)
+                await persona_manager.get_user_persona_name(user_id)
                 if user_id
                 else "AI"
             )

@@ -19,6 +19,7 @@ from liuying.services.cache import CacheDict
 
 from ..llm import llm_helper as _default_llm_helper
 from .capabilities import vision_router
+from .result_cache import image_result_cache
 
 __all__ = [
     "GifSummary",
@@ -270,6 +271,11 @@ async def summarize_image(
 
     use_prompt = prompt or "请用中文简要描述这张图片的内容，不超过50字。"
     data_url = VisionUtils.to_data_url(image_data, mime)
+
+    # 同一图片（内容哈希一致）命中缓存时跳过重复多模态调用
+    cached = image_result_cache.get(data_url)
+    if cached:
+        return ImageSummary(description=cached, success=True)
 
     messages: list[dict[str, Any]] = [
         {

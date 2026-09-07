@@ -8,7 +8,6 @@ record_stage/finish_trace），记录到内存缓存用于诊断。
 - handle 开始时 start_trace 创建追踪
 - 各阶段 record_stage 记录耗时和状态
 - handle 结束时 finish_trace 记录最终结果
-- 可通过 query_recent 查询最近的追踪记录
 """
 
 import contextvars
@@ -51,7 +50,6 @@ class ReplyTurnTrace:
     2. record_stage: 记录各阶段（如 load_history/generate_reply
        /review/humanize等）的耗时和状态
     3. finish_trace: 记录最终结果（success/silence/error等）
-    4. query_recent: 查询最近的追踪记录用于诊断
     """
 
     def __init__(self) -> None:
@@ -211,61 +209,6 @@ class ReplyTurnTrace:
             )[:64]
             if detail:
                 entry["detail"].update(detail)
-
-    def get_trace(
-        self, trace_id: str
-    ) -> dict[str, Any] | None:
-        """获取单个追踪记录
-
-        参数:
-            trace_id: 追踪ID
-
-        返回:
-            dict | None: 追踪记录，无数据返回None
-        """
-        trace = str(trace_id or "").strip()
-        if not trace:
-            return None
-        with self._lock:
-            entry = self._entries.get(trace)
-            if entry is None:
-                return None
-            return dict(entry)
-
-    def query_recent(
-        self,
-        *,
-        limit: int = 50,
-        group_id: str = "",
-        user_id: str = "",
-    ) -> list[dict[str, Any]]:
-        """查询最近的追踪记录
-
-        参数:
-            limit: 返回上限
-            group_id: 群组ID过滤
-            user_id: 用户ID过滤
-
-        返回:
-            list[dict]: 追踪记录列表（按时间倒序）
-        """
-        with self._lock:
-            entries = list(self._entries.values())
-        filtered = []
-        for entry in entries:
-            if group_id and entry.get(
-                "group_id", ""
-            ) != group_id:
-                continue
-            if user_id and entry.get(
-                "user_id", ""
-            ) != user_id:
-                continue
-            filtered.append(dict(entry))
-        filtered.sort(
-            key=lambda e: e.get("ts", 0), reverse=True
-        )
-        return filtered[: max(1, min(int(limit or 50), 200))]
 
     def _prune_old_entries(self) -> None:
         """清理过期记录"""

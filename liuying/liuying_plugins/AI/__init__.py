@@ -4,14 +4,9 @@ AI对话核心 + 主动行为 + 工具调用 + 拟人化发送 + 完整记忆系
 深度整合流萤本体系统：LLM/数据库/缓存/定时任务/好感度/权限。
 """
 
-from datetime import datetime
-
-import nonebot
 from nonebot.plugin import PluginMetadata
 
-from liuying.configs.path_config import DATA_PATH
 from liuying.configs.utils import Command, PluginExtraData, PluginSetting
-from liuying.utils.apscheduler import task_manager
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
@@ -24,8 +19,6 @@ from .agent.tools import (  # 公开API供第三方注册工具
 from .config import PluginConfig, get_config
 from .core.knowledge_db import knowledge_base
 from .core.llm import llm_helper, token_ledger
-from .core.memory import memory_manager
-from .core.persona import persona_manager
 from .core.runtime import runtime_switch
 from .handlers.admin_commands import setup_admin_matchers
 from .handlers.chat_matchers import setup_matchers
@@ -117,8 +110,8 @@ __plugin_meta__ = PluginMetadata(
         - bot人格切换 [名称]: 切换AI人格
         - 流萤AI状态: 查看AI子功能开关
         - 流萤AI开关 [功能] [on/off]: 全局AI子功能开关
-        - 流萤AI群开关 [群号] [功能] [on/off]: 群组级AI子功能开关
-        - 流萤AI用户开关 [用户ID] [功能] [on/off]: 用户级AI子功能开关
+        - 流萤AI群开关 [群号] [功能名] [on/off]: 群组级AI子功能开关
+        - 流萤AI用户开关 [用户ID] [功能名] [on/off]: 用户级AI子功能开关
         - 流萤AI重置: 重置所有运行时覆盖
         - 全局清空记忆: 清空所有用户的所有人格记忆与对话记录
 
@@ -168,21 +161,7 @@ async def _init_ai_plugin() -> None:
     # 通过 /liuying/api/ai/* 路由统一挂载，使用本体JWT认证。
 
     # 显式注入主插件服务给技能包
-    ai_data_dir = DATA_PATH / "ai"
-    ai_data_dir.mkdir(parents=True, exist_ok=True)
-
-    runtime = SkillRuntime(
-        plugin_config=get_config,
-        logger=logger,
-        get_now=datetime.now,
-        llm_helper=llm_helper,
-        memory_manager=memory_manager,
-        knowledge_base=knowledge_base,
-        persona_manager=persona_manager,
-        data_dir=ai_data_dir,
-        scheduler=task_manager,
-        get_bots=nonebot.get_bots,
-    )
+    runtime = SkillRuntime(llm_helper=llm_helper)
     tool_count = skill_loader.register_all(runtime=runtime)
     logger.debug(
         f"AI技能包已加载，注册工具{tool_count}个", command="AI"

@@ -180,23 +180,6 @@ class ThreadTracker:
         )
         return active[:_MAX_ACTIVE_THREADS]
 
-    def get_current_topic(
-        self, group_id: str
-    ) -> str:
-        """获取群组当前最活跃的话题摘要
-
-        参数:
-            group_id: 群组ID
-
-        返回:
-            str: 话题摘要文本，无活跃线程返回空串
-        """
-        active = self.get_active_threads(group_id)
-        if not active:
-            return ""
-        thread = active[0]
-        return thread.topic
-
     def get_thread_context(
         self,
         group_id: str,
@@ -224,25 +207,6 @@ class ThreadTracker:
         for msg in recent:
             lines.append(f"用户{msg.user_id}: {msg.text}")
         return "\n".join(lines)
-
-    def close_thread(
-        self, group_id: str, thread_id: int
-    ) -> bool:
-        """手动关闭话题线程
-
-        参数:
-            group_id: 群组ID
-            thread_id: 线程ID
-
-        返回:
-            bool: 是否成功关闭
-        """
-        threads = self._threads.get(group_id, {})
-        thread = threads.get(thread_id)
-        if thread and thread.is_active:
-            thread.is_active = False
-            return True
-        return False
 
     def _find_matching_thread(
         self, group_id: str, text: str

@@ -1,6 +1,6 @@
 """对话matcher辅助工具
 
-提供用户AI对话开关状态管理器与会话文本构建、图片描述提取、
+提供用户AI对话开关状态管理器与图片描述提取、
 回复发送、群禁言notice注册等辅助能力。
 """
 
@@ -71,20 +71,8 @@ _ai_user_states = _AIUserStateManager()
 class ChatMatchersHelper:
     """对话matcher辅助工具类
 
-    封装会话文本构建、图片描述提取、回复发送等辅助方法。
+    封装图片描述提取、回复发送等辅助方法。
     """
-
-    @staticmethod
-    def _build_session_text(text: str) -> str:
-        """构建会话文本
-
-        参数:
-            text: 原始文本
-
-        返回:
-            str: 清理后的文本
-        """
-        return text.strip()
 
     @staticmethod
     async def _describe_single_image(

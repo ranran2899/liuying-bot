@@ -7,7 +7,7 @@
     skillpacks/<name>/
         SKILL.md            # 人类可读说明，可含 YAML frontmatter 作为兜底元数据
         skill.yaml          # 机器可读元数据（权威来源）
-        agents/openai.yaml  # 面向 Agent 的展示元数据（display_name/icon）
+        agents/openai.yaml  # 面向 Agent 的展示元数据
         references/         # 设计说明与映射文档
         scripts/main.py     # 入口：register / build_tools / run 三段式
 
@@ -19,7 +19,6 @@
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
 import importlib.util
 from pathlib import Path
 import re
@@ -35,13 +34,8 @@ from ..agent.mcp_bridge import mcp_bridge
 from ..agent.runtime.tool_catalog import (
     apply_tool_metadata_defaults,
 )
-from ..agent.skill_isolation import skill_isolation_runner
 from ..agent.tools import AgentTool, ToolRegistry, tool_registry
 from ..config import get_config
-from ..core.knowledge_db import knowledge_base
-from ..core.llm import llm_helper
-from ..core.memory import memory_manager
-from ..core.persona import persona_manager
 from .api import SkillRuntime
 
 __all__ = [
@@ -77,24 +71,18 @@ class SkillSpec:
     Attributes:
         name: 技能名
         description: 描述
-        category: 分类
         entrypoint: 入口文件路径
         parameters: 参数JSON Schema
         enabled: 是否启用
-        metadata: 附加元信息（含 agents/openai.yaml 展示元数据）
-        isolation: 隔离配置（mode=process 时子进程隔离）
-        doc: SKILL.md 正文，用于人类阅读与技能清单展示
+        metadata: 附加元信息（skill.yaml 与 SKILL.md frontmatter 合并结果）
     """
 
     name: str
     description: str = ""
-    category: str = "general"
     entrypoint: Path | None = None
     parameters: dict[str, Any] = field(default_factory=dict)
     enabled: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
-    isolation: dict[str, Any] = field(default_factory=dict)
-    doc: str = ""
 
 
 @dataclass(slots=True)
@@ -137,25 +125,6 @@ def _read_yaml(path: Path) -> dict[str, Any]:
         )
         return {}
     return data if isinstance(data, dict) else {}
-
-
-def _build_default_runtime() -> SkillRuntime:
-    """构造默认SkillRuntime
-
-    在未显式传入 runtime 时，从全局单例构建。
-
-    返回:
-        SkillRuntime: 默认运行时实例
-    """
-    return SkillRuntime(
-        plugin_config=get_config,
-        logger=logger,
-        get_now=datetime.now,
-        llm_helper=llm_helper,
-        memory_manager=memory_manager,
-        knowledge_base=knowledge_base,
-        persona_manager=persona_manager,
-    )
 
 
 class SkillpackLoader:
@@ -233,27 +202,28 @@ class SkillpackLoader:
 
     def register_all(
         self,
+        runtime: SkillRuntime,
         registry: ToolRegistry = tool_registry,
-        runtime: SkillRuntime | None = None,
     ) -> int:
         """注册所有技能到工具注册表
 
         参数:
+            runtime: 技能运行时（依赖注入载体）
             registry: 工具注册表
-            runtime: 技能运行时（依赖注入载体），None 时构造默认实例
 
         返回:
             int: 注册成功的工具数
         """
-        use_runtime = runtime or _build_default_runtime()
         specs = self.discover_skills()
         report = SkillLoadReport(discovered=len(specs))
 
         for spec in specs:
-            if not spec.enabled or spec.entrypoint is None:
+            if not spec.enabled:
                 report.skipped.append(spec.name)
                 continue
-            count = self._register_one(spec, registry, use_runtime, report)
+            count = self._register_one(
+                spec, registry, runtime, report
+            )
             if count >= 0:
                 report.loaded += 1
                 report.tools += count
@@ -292,8 +262,6 @@ class SkillpackLoader:
         返回:
             int: 注册的工具数，失败返回 -1
         """
-        if spec.isolation.get("mode") == "process":
-            return self._register_isolated_skill(spec, registry)
         # 技能包为可插拔外部代码，单个技能的导入或构建异常
         # 不应中断整体注册流程，故在此收敛为加载报告。
         try:
@@ -325,19 +293,12 @@ class SkillpackLoader:
                 meta = data
                 break
 
-        doc = ""
         skill_md = skill_dir / "SKILL.md"
         if skill_md.exists():
-            front, doc = self._extract_frontmatter(
+            front, _ = self._extract_frontmatter(
                 skill_md.read_text(encoding="utf-8")
             )
             meta = front | meta
-
-        if agent_meta := _read_yaml(
-            skill_dir / "agents" / "openai.yaml"
-        ):
-            meta.setdefault("display_name", agent_meta.get("display_name"))
-            meta.setdefault("icon", agent_meta.get("icon"))
 
         name = str(meta.get("name") or skill_dir.name)
         entrypoint = self._resolve_entrypoint(skill_dir, meta)
@@ -350,13 +311,10 @@ class SkillpackLoader:
         return SkillSpec(
             name=name,
             description=str(meta.get("description", "")),
-            category=str(meta.get("category", "general")),
             entrypoint=entrypoint,
             parameters=meta.get("parameters") or {},
             enabled=bool(meta.get("enabled", True)),
             metadata=meta,
-            isolation=meta.get("isolation") or {},
-            doc=doc.strip(),
         )
 
     def _register_module(
@@ -381,10 +339,7 @@ class SkillpackLoader:
         """
         if register := getattr(module, "register", None):
             before = len(registry.list_names())
-            try:
-                register(runtime, registry)
-            except TypeError:
-                register(registry)
+            register(runtime, registry)
             return max(len(registry.list_names()) - before, 1)
 
         if build_tools := getattr(module, "build_tools", None):
@@ -424,52 +379,6 @@ class SkillpackLoader:
                 func=_run,
             )
         )
-        return 1
-
-    def _register_isolated_skill(
-        self, spec: SkillSpec, registry: ToolRegistry
-    ) -> int:
-        """注册子进程隔离执行的技能
-
-        参数:
-            spec: 技能规格
-            registry: 工具注册表
-
-        返回:
-            int: 注册的工具数
-        """
-        if spec.entrypoint is None:
-            return 0
-        entrypoint = spec.entrypoint
-        timeout = int(spec.isolation.get("timeout", 30))
-        inherit_env = bool(spec.isolation.get("inherit_env", False))
-
-        async def _isolated_run(**kwargs: Any) -> str:
-            """在子进程中隔离执行技能
-
-            参数:
-                **kwargs: 技能参数
-
-            返回:
-                str: 执行结果
-            """
-            return await skill_isolation_runner.run_in_subprocess(
-                script_path=entrypoint,
-                function="run",
-                kwargs=kwargs,
-                timeout=timeout,
-                inherit_env=inherit_env,
-            )
-
-        registry.register(
-            AgentTool(
-                name=spec.name,
-                description=f"[隔离] {spec.description}",
-                parameters=spec.parameters,
-                func=_isolated_run,
-            )
-        )
-        logger.info(f"隔离技能 {spec.name} 已注册", command="AI")
         return 1
 
     async def register_mcp_tools(

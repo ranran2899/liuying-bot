@@ -7,10 +7,9 @@
 """
 
 from dataclasses import dataclass, field
-import json
-import re
 from typing import Any
 
+from ...core.tools.json_utils import extract_json_payload
 from .constants import (
     DEFAULT_AGENT_MAX_STEPS,
     OUTPUT_MODE_CHAT_SHORT,
@@ -237,44 +236,6 @@ def _coerce_ambiguity(value: Any) -> str:
             return "medium"
         return "low"
     return _enum_value(value, ALLOWED_AMBIGUITY_LEVELS, "low")
-
-
-def extract_json_payload(raw: str) -> dict[str, Any] | None:
-    """三级降级提取JSON
-
-    1. 直接json.loads
-    2. 去除markdown围栏后json.loads
-    3. 正则提取{...}后json.loads
-
-    参数:
-        raw: LLM原始响应文本
-
-    返回:
-        dict | None: 解析后的字典，失败返回None
-    """
-    text = str(raw or "").strip()
-    if not text:
-        return None
-    try:
-        parsed = json.loads(text)
-        return parsed if isinstance(parsed, dict) else None
-    except Exception:
-        pass
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text).rstrip("`").strip()
-        try:
-            parsed = json.loads(text)
-            return parsed if isinstance(parsed, dict) else None
-        except Exception:
-            pass
-    match = re.search(r"\{[\s\S]*\}", text)
-    if not match:
-        return None
-    try:
-        parsed = json.loads(match.group(0))
-    except Exception:
-        return None
-    return parsed if isinstance(parsed, dict) else None
 
 
 def parse_turn_plan_payload(payload: Any) -> TurnPlan | None:

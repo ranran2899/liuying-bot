@@ -96,13 +96,16 @@ class PeerAwareness:
         返回:
             bool: 是否为其他bot
         """
-        configured = get_config("PEER_BOT_IDS", "")
+        configured = str(get_config("PEER_BOT_IDS", "") or "")
         if configured:
-            peer_ids = {
-                uid.strip()
-                for uid in str(configured).split(",")
-                if uid.strip()
-            }
+            raw, peer_ids = self._parsed_ids
+            if raw != configured:
+                peer_ids = frozenset(
+                    uid.strip()
+                    for uid in configured.split(",")
+                    if uid.strip()
+                )
+                self._parsed_ids = (configured, peer_ids)
             if user_id in peer_ids:
                 self._record_peer(user_id, group_id, nickname)
                 return True

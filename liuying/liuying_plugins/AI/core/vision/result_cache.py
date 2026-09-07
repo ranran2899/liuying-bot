@@ -95,21 +95,6 @@ class ImageResultCache:
         key = self._make_key(url)
         self._cache.set(key, result)
 
-    def invalidate(self, url: str) -> None:
-        """使指定URL的缓存失效
-
-        参数:
-            url: 图片URL
-        """
-        if not url:
-            return
-        key = self._make_key(url)
-        self._cache.pop(key, None)
-
-    def clear(self) -> None:
-        """清空全部缓存"""
-        self._cache.clear()
-
 
 image_result_cache = ImageResultCache()
 """图片理解结果缓存单例"""

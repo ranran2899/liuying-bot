@@ -15,7 +15,6 @@ from liuying.utils.log import logger
 
 from ...core.llm import llm_helper
 from ...core.llm.model_router import ROLE_CHAT, model_router
-from ...core.persona import persona_manager
 from ...core.tools.json_utils import extract_json_payload
 from .constants import (
     OUTPUT_MODE_CHAT_ANSWER,
@@ -145,27 +144,19 @@ class PersonaResponder:
     整合规划、证据、人格信息，调用LLM生成结构化角色化响应。
     """
 
-    def __init__(self, llm=None, persona_mgr=None) -> None:
+    def __init__(self, llm=None) -> None:
         """初始化响应器
 
         参数:
             llm: LLM助手，None时使用模块单例
-            persona_mgr: 人格管理器，None时使用模块单例
         """
         self._llm = llm
-        self._persona_manager = persona_mgr
 
     def _get_llm(self):
         """获取LLM助手，None时回退到模块单例"""
         if self._llm is None:
             self._llm = llm_helper
         return self._llm
-
-    def _get_persona_manager(self):
-        """获取人格管理器，None时回退到模块单例"""
-        if self._persona_manager is None:
-            self._persona_manager = persona_manager
-        return self._persona_manager
 
     async def respond(
         self,
@@ -353,7 +344,7 @@ class PersonaResponder:
         # 合并PromptBuilder系统提示词与响应器指令为单条system消息，
         # 减少消息数量和token冗余（两条system消息在多数provider下等价于
         # 拼接，合并后避免重复role标记开销）
-        system_prompt = self._extract_system_prompt(messages, user_id, group_id)
+        system_prompt = self._extract_system_prompt(messages)
         combined_system = f"{system_prompt}\n\n{responder_instruction}"
         llm_messages.append({"role": "system", "content": combined_system})
 
@@ -390,18 +381,14 @@ class PersonaResponder:
     def _extract_system_prompt(
         self,
         messages: list[dict[str, str]] | None,
-        user_id: str,
-        group_id: str | None,
     ) -> str:
         """从消息列表中提取系统提示词
 
-        优先使用PromptBuilder构建的完整系统提示词（messages中的首个system
-        消息），缺失时降级到persona_manager的兜底提示词。
+        上游 ReplyPipeline.build_messages 恒注入首个system消息，
+        此处直接提取首个非空system内容，缺失时返回空串。
 
         参数:
             messages: 消息列表
-            user_id: 用户ID（保留参数，降级时可用）
-            group_id: 群组ID（保留参数，降级时可用）
 
         返回:
             str: 系统提示词
@@ -410,10 +397,7 @@ class PersonaResponder:
             for msg in messages:
                 if msg.get("role") == "system" and msg.get("content"):
                     return msg["content"]
-
-        # 降级：messages无system消息时使用人格兜底提示词
-        persona_mgr = self._get_persona_manager()
-        return persona_mgr.get_persona_fallback_prompt()
+        return ""
 
     @staticmethod
     def _extract_chat_history(

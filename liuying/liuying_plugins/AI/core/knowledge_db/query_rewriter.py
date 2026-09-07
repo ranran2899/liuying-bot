@@ -2,7 +2,10 @@
 
 用LLM改写用户查询，识别梗/黑话/缩写并补出正式名，
 提升知识库召回准确率。失败时返回原始查询，不阻塞召回。
+短查询与近期重复查询直接跳过LLM调用，控制召回链路延迟。
 """
+
+import time
 
 from liuying.utils.log import logger
 
@@ -11,11 +14,17 @@ from ..tools.json_utils import extract_json_payload
 
 __all__ = ["rewrite_query"]
 
+# 改写结果缓存：同查询TTL内直接复用，避免重复LLM调用
+_REWRITE_TTL_SECONDS = 600.0
+_REWRITE_CACHE_MAX = 128
+_rewrite_cache: dict[str, tuple[float, str]] = {}
+
 
 async def rewrite_query(query: str) -> str:
     """改写查询以提升知识库召回准确率
 
     用LLM识别梗/黑话/缩写并补出正式名。
+    超短查询改写收益低直接返回；同查询命中TTL缓存时跳过LLM。
     失败时返回原始查询，不阻塞召回流程。
 
     参数:
@@ -26,6 +35,16 @@ async def rewrite_query(query: str) -> str:
     """
     if not query or not query.strip():
         return query
+    key = query.strip()
+    # 极短/超长查询改写收益低或成本高，直接跳过
+    if len(key) <= 4 or len(key) > 100:
+        return query
+
+    now = time.monotonic()
+    cached = _rewrite_cache.get(key)
+    if cached and now - cached[0] < _REWRITE_TTL_SECONDS:
+        return cached[1]
+
     prompt = (
         "请改写以下用户查询，使其更适合知识库检索。\n\n"
         f"原始查询: {query}\n\n"
@@ -53,6 +72,15 @@ async def rewrite_query(query: str) -> str:
         ).strip()
         if not rewritten:
             return query
+
+        if len(_rewrite_cache) >= _REWRITE_CACHE_MAX:
+            oldest = sorted(
+                _rewrite_cache.items(),
+                key=lambda kv: kv[1][0],
+            )[: _REWRITE_CACHE_MAX // 2]
+            for stale_key, _ in oldest:
+                _rewrite_cache.pop(stale_key, None)
+        _rewrite_cache[key] = (now, rewritten)
         return rewritten
     except Exception as e:
         logger.debug(

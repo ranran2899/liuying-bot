@@ -5,7 +5,6 @@
 人格间对话历史与记忆完全隔离。
 """
 
-from datetime import datetime
 import json
 from pathlib import Path
 import time
@@ -198,17 +197,6 @@ class PersonaManager:
             f"用户 {user_id} 切换人格: {name}",
             command="AI",
         )
-
-    async def clear_user_persona(self, user_id: str) -> bool:
-        """清除用户的人格选择（回退到全局默认）
-
-        参数:
-            user_id: 用户ID
-
-        返回:
-            bool: 是否清除成功
-        """
-        return await UserPersonaSelection.clear_persona_name(user_id)
 
     def _persona_exists(self, name: str) -> bool:
         """检查人格是否存在
@@ -461,7 +449,6 @@ class PersonaManager:
         self,
         user_id: str,
         history: list[dict[str, str]],
-        llm_helper=None,
     ) -> str:
         """更新用户画像
 
@@ -470,16 +457,12 @@ class PersonaManager:
         参数:
             user_id: 用户ID
             history: 对话历史
-            llm_helper: LLM助手，None时延迟导入
 
         返回:
             str: 生成的画像描述
         """
         if len(history) < 10:
             return await self.get_user_persona(user_id)
-
-        if llm_helper is None:
-            llm_helper = _default_llm_helper
 
         history_text = "\n".join(
             f"{msg.get('role', 'user')}: {msg.get('content', '')}"
@@ -497,7 +480,7 @@ class PersonaManager:
         )
 
         try:
-            persona = await llm_helper.chat_text(
+            persona = await _default_llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
                 options={"temperature": 0.4},
             )
@@ -512,24 +495,6 @@ class PersonaManager:
                 f"更新用户画像失败: {e}", command="AI", e=e
             )
             return await self.get_user_persona(user_id)
-
-    async def apply_user_correction(
-        self, user_id: str, correction: str
-    ) -> UserPersonaProfile:
-        """应用用户/管理员更正画像
-
-        参数:
-            user_id: 用户ID
-            correction: 更正内容
-
-        返回:
-            UserPersonaProfile: 更新后的画像
-        """
-        profile, _ = await UserPersonaProfile.get_or_create(user_id=user_id)
-        profile.user_correction = correction
-        profile.updated_at = datetime.now()
-        await profile.save(update_fields=["user_correction", "updated_at"])
-        return profile
 
     def get_persona_tts_config(self, persona: dict) -> dict:
         """从人格提取TTS配置
@@ -555,32 +520,6 @@ class PersonaManager:
             str: 贴纸情绪（warm/cool/neutral）
         """
         return persona.get("sticker_mood", "neutral")
-
-    def get_persona_fallback_prompt(self) -> str:
-        """获取全局默认人设的兜底提示词
-
-        供安全过滤重试、人格加载失败等场景使用。
-        从当前激活人格的YAML读取system_prompt，加载失败时
-        回退到liuying.yaml，再失败返回空串。
-
-        返回:
-            str: 兜底人设提示词
-        """
-        for name in (self.get_active_persona_name(), "liuying", "default"):
-            persona_path = self.personas_dir / f"{name}.yaml"
-            if not persona_path.exists():
-                continue
-            try:
-                with open(persona_path, encoding="utf-8") as f:
-                    persona = self._yaml.load(f) or {}
-                prompt = str(persona.get("system_prompt", "") or "").strip()
-                if prompt:
-                    return prompt
-            except Exception as e:
-                logger.warning(
-                    f"加载兜底人格 {name} 失败: {e}", command="AI"
-                )
-        return ""
 
     def _load_meme_seeds(self) -> dict:
         """加载网络梗词典

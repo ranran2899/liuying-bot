@@ -315,8 +315,10 @@ class VisionCapabilityRouter:
                 (self._preferred_vision_provider, self._preferred_vision_model)
             )
 
-        default_provider = get_config("CHAT_PROVIDER", None)
-        default_model = get_config("CHAT_MODEL", {}).get("model", None)
+        # 默认对话模型作为兜底候选（provider/model统一从CHAT_MODEL取）
+        chat_cfg = get_config("CHAT_MODEL", {})
+        default_provider = chat_cfg.get("provider", None)
+        default_model = chat_cfg.get("model", None)
         if default_provider and default_model:
             candidates.append((default_provider, default_model))
 
