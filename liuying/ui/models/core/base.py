@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from liuying.services.renderer.protocols import Renderable
+from liuying.services.renderer.core.protocols import Renderable
 from liuying.utils.pydantic_compat import compat_computed_field, model_dump
 
 __all__ = ["ContainerComponent", "RenderableComponent"]

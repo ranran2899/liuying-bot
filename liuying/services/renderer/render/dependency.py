@@ -7,11 +7,10 @@ from pathlib import Path, PurePosixPath
 from jinja2 import TemplateNotFound
 
 from liuying.services.log import logger
-
-from .config import RESOLVE_TIMEOUT
-from .context import RenderContext
-from .protocols import Renderable
-from .utils import rewrite_urls
+from liuying.services.renderer.core.config import RESOLVE_TIMEOUT
+from liuying.services.renderer.core.context import RenderContext
+from liuying.services.renderer.core.protocols import Renderable
+from liuying.services.renderer.core.utils import rewrite_urls
 
 
 class DependencyCollector:

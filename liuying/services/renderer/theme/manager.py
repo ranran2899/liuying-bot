@@ -21,22 +21,23 @@ from pydantic import BaseModel
 
 from liuying.configs.path_config import THEMES_PATH
 from liuying.services.log import logger
-from liuying.services.renderer.config import RESERVED_TEMPLATE_KEYS
-from liuying.services.renderer.protocols import Renderable
-from liuying.services.renderer.registry import asset_registry
-from liuying.services.renderer.resolver import ResourceResolver
-from liuying.services.renderer.store import (
+from liuying.services.renderer.core.config import (
+    RESERVED_TEMPLATE_KEYS,
+    RESOLVE_TIMEOUT,
+)
+from liuying.services.renderer.core.protocols import Renderable
+from liuying.services.renderer.core.utils import deep_merge_dict
+from liuying.services.renderer.theme.catalog import (
     ThemeCatalog,
     ThemeStoreItem,
     has_template_suffix,
 )
+from liuying.services.renderer.theme.registry import asset_registry
+from liuying.services.renderer.theme.resolver import ResourceResolver
 from liuying.utils.pydantic_compat import model_dump
 
 if TYPE_CHECKING:
-    from .context import RenderContext
-
-from .config import RESOLVE_TIMEOUT
-from .utils import deep_merge_dict
+    from ..core.context import RenderContext
 
 # Markdown 转 HTML 使用的扩展集合
 _MD_EXTENSIONS = [
@@ -529,8 +530,9 @@ class ThemeManager:
     ) -> str:
         """解析组件的实际模板路径，支持变体与 default 目录回退。
 
-        按优先级尝试：变体目录 -> skins/变体目录 -> default 目录 ->
-        组件根目录 -> 组件路径.html。
+        入口文件名按 manifest.json -> 页面 theme.json -> 默认 main.html
+        的顺序获取，模板路径按优先级尝试：变体目录 -> skins/变体目录 ->
+        default 目录 -> 组件根目录 -> 组件路径.html。
 
         参数:
             component: 待渲染的组件。
@@ -554,10 +556,12 @@ class ThemeManager:
             return component_path
 
         manifest = await self._safe_component_manifest(component_path)
-        entrypoint = (
-            manifest.get("entrypoint", "main.html") if manifest else "main.html"
-        )
         skin = variant or (manifest.get("skin") if manifest else None)
+        entrypoint = manifest.get("entrypoint") if manifest else None
+        if not entrypoint:
+            # 兼容旧页面资源：入口声明在页面主题 theme.json 中
+            theme_config = await self._safe_theme_config(component_path, skin)
+            entrypoint = (theme_config or {}).get("entrypoint") or "main.html"
 
         base = PurePosixPath(component_path)
         candidates: list[str] = []
@@ -760,10 +764,12 @@ class ThemeManager:
 
         variant = getattr(component, "variant", None)
         manifest = await self._safe_component_manifest(component_path)
-        entrypoint = (
-            manifest.get("entrypoint", "main.html") if manifest else "main.html"
-        )
         skin = variant or (manifest.get("skin") if manifest else None)
+        entrypoint = manifest.get("entrypoint") if manifest else None
+        if not entrypoint:
+            # 兼容旧页面资源：入口声明在页面主题 theme.json 中
+            theme_config = await self._safe_theme_config(component_path, skin)
+            entrypoint = (theme_config or {}).get("entrypoint") or "main.html"
         base = PurePosixPath(component_path)
         candidates: list[str] = []
         if skin and skin != "default":

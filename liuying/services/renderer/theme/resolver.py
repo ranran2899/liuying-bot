@@ -21,7 +21,7 @@ from liuying.configs.path_config import THEMES_PATH
 from liuying.services.log import logger
 
 if TYPE_CHECKING:
-    from .theme import ThemeManager
+    from .manager import ThemeManager
 
 
 class ResourceResolver:
@@ -175,7 +175,8 @@ class ResourceResolver:
         """当组件处于页面主题子目录时返回该目录。
 
         判定依据：组件根目录下存在与模板父目录同名的子目录，
-        且该子目录包含 main.html（排除 skins 与 assets 目录）。
+        且该子目录包含页面模板文件（排除 skins 与 assets 目录，
+        兼容入口为 main.html 与 dispatch.html 等分发型页面）。
 
         参数:
             template_file: 模板的物理路径。
@@ -188,7 +189,7 @@ class ResourceResolver:
         if component_root == parent or parent.name in ("skins", "assets"):
             return None
         candidate = component_root / parent.name
-        if (candidate / "main.html").exists() and parent != component_root:
+        if any(candidate.glob("*.html")):
             return candidate
         return None
 

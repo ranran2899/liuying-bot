@@ -10,8 +10,11 @@ from liuying.configs.config import Config
 from liuying.configs.path_config import UI_CACHE_PATH
 from liuying.services.cache import Cache
 from liuying.services.log import logger
-
-from .config import CACHE_CONFIG_KEY, CONFIG_MODULE, RENDER_CACHE_EXPIRE
+from liuying.services.renderer.core.config import (
+    CACHE_CONFIG_KEY,
+    CONFIG_MODULE,
+    RENDER_CACHE_EXPIRE,
+)
 
 
 def render_cache_key(payload: dict) -> str:

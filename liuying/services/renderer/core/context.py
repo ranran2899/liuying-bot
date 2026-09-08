@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 from .protocols import Renderable, ScreenshotEngine
 
 if TYPE_CHECKING:
-    from .service import RendererService
-    from .theme import ThemeManager
+    from ..render.service import RendererService
+    from ..theme.manager import ThemeManager
 
 
 @dataclass(slots=True)

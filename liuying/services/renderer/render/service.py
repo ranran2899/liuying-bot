@@ -22,32 +22,32 @@ from nonebot.utils import is_coroutine_callable
 from liuying.configs.config import Config
 from liuying.configs.path_config import THEMES_PATH
 from liuying.services.log import logger
-from liuying.services.renderer.cache import RenderCache, render_cache_key
-from liuying.services.renderer.config import (
+from liuying.services.renderer.core.config import (
     CONFIG_MODULE,
     DEBUG_CONFIG_KEY,
     RESERVED_TEMPLATE_KEYS,
 )
-from liuying.services.renderer.context import RenderContext
-from liuying.services.renderer.dependency import DependencyCollector
-from liuying.services.renderer.engine import get_screenshot_engine
-from liuying.services.renderer.protocols import (
+from liuying.services.renderer.core.context import RenderContext
+from liuying.services.renderer.core.protocols import (
     Renderable,
     RenderResult,
     ScreenshotEngine,
 )
-from liuying.services.renderer.registry import asset_registry
-from liuying.services.renderer.store import ThemeStoreItem
-from liuying.services.renderer.theme import (
-    RelativePathEnvironment,
-    ThemeManager,
-    markdown_filter,
-)
-from liuying.services.renderer.utils import (
+from liuying.services.renderer.core.utils import (
     deep_merge_dict,
     pydantic_tojson_filter,
     rewrite_urls,
 )
+from liuying.services.renderer.render.cache import RenderCache, render_cache_key
+from liuying.services.renderer.render.dependency import DependencyCollector
+from liuying.services.renderer.render.engine import get_screenshot_engine
+from liuying.services.renderer.theme.catalog import ThemeStoreItem
+from liuying.services.renderer.theme.manager import (
+    RelativePathEnvironment,
+    ThemeManager,
+    markdown_filter,
+)
+from liuying.services.renderer.theme.registry import asset_registry
 from liuying.utils.pydantic_compat import model_dump
 
 # 传递给截图引擎前需要剥离的选项（它们仅作用于 HTML 组装阶段）

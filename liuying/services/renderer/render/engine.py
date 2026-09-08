@@ -9,7 +9,7 @@ from typing import Any
 
 from nonebot_plugin_htmlrender import html_to_pic
 
-from .protocols import ScreenshotEngine
+from liuying.services.renderer.core.protocols import ScreenshotEngine
 
 # 默认视口：宽度固定，高度由内容自动撑开
 DEFAULT_VIEWPORT: dict[str, int] = {"width": 800, "height": 10}

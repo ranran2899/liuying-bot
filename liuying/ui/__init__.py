@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-from liuying.services.renderer.protocols import Renderable, RenderResult
+from liuying.services.renderer.core.protocols import Renderable, RenderResult
 
 from . import builders
 from .builders.core.layout import LayoutBuilder
