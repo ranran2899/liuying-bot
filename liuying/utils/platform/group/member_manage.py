@@ -1,10 +1,7 @@
 """统一群管理的平台实现
 
-各平台群管理接口差异较大，统一按 bot.adapter.name 分发：
-- OneBot V11/V12: set_group_ban / set_group_kick
-- QQ官方: /v2/groups/{group_openid}/restrict_chat_setting 禁言（内邀接口，
-  未开通权限时平台返回错误码11253，最长30天）、
-  /v2/groups/{group_openid}/batch_remove_members 踢人（内邀接口，单次最多20个）
+各平台群管理接口差异较大，统一按 bot.adapter.name 分发
+
 """
 
 from datetime import datetime, timedelta, timezone
@@ -21,8 +18,8 @@ async def ban_group_user(bot: Bot, user_id: str, group_id: str, duration: int) -
 
     参数:
         bot: Bot
-        user_id: 用户id（QQ官方适配器为成员openid）
-        group_id: 群组id（QQ官方适配器为群openid）
+        user_id: 用户id
+        group_id: 群组id
         duration: 禁言时长(分钟)
     """
     match bot.adapter.name:
@@ -50,9 +47,9 @@ async def kick_group_user(
 
     参数:
         bot: Bot
-        user_id: 用户id（QQ官方适配器为成员openid）
-        group_id: 群组id（QQ官方适配器为群openid）
-        reject_add_request: 是否拒绝该用户再次入群（QQ官方适配器即加入群黑名单）
+        user_id: 用户id
+        group_id: 群组id
+        reject_add_request: 是否拒绝该用户再次入群（一般情况下是拉入群黑名单）
     """
     match bot.adapter.name:
         case "OneBot V11" | "OneBot V12":
@@ -89,7 +86,9 @@ async def _ban_qq_official(
 ) -> None:
     """QQ官方禁言，user_id/group_id 均为openid"""
     duration = min(max(1, duration), 30 * 24 * 60)
-    expire_at = (datetime.now(timezone(timedelta(hours=8))) + timedelta(minutes=duration)).isoformat()
+    expire_at = (
+        datetime.now(timezone(timedelta(hours=8))) + timedelta(minutes=duration)
+    ).isoformat()
     await _qq_post(
         bot,
         f"v2/groups/{group_id}/restrict_chat_setting",

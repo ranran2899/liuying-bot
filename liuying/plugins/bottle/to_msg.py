@@ -607,8 +607,11 @@ class BottleMessageBuilder:
         返回:
             list: 消息列表
         """
-        if PlatformUtils.is_qbot(session) and not PlatformUtils.is_qq_guild(
+        if PlatformUtils.is_qbot(
             session
-        ):
+            ):
+         # and not PlatformUtils.is_qq_guild(
+         #   session
+       # ):
             return await cls.build_qq_markdown_message(bottle)
         return await cls.build_normal_message(bottle)

@@ -34,20 +34,6 @@ class PlatformUtils:
         )
 
     @classmethod
-    def is_qq_guild(cls, session: Uninfo) -> bool:
-        """判断qq官方适配器当前是否为频道场景
-
-        参数:
-            session: Uninfo
-
-        返回:
-            bool: 是否为频道场景
-        """
-        return session.scope == SupportScope.qq_api and (
-            session.scene.is_guild or session.scene.is_channel
-        )
-
-    @classmethod
     async def send_superuser(
         cls,
         bot: Bot | None,

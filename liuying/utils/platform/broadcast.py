@@ -11,7 +11,7 @@ from nonebot_plugin_alconna.uniseg import UniMessage
 from liuying.models._group import GroupConfig, GroupConsole
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
-from liuying.utils.platform.group import GroupUtils
+from liuying.utils.platform.group import GroupListUtils
 from liuying.utils.platform.helper import PlatformUtils
 
 
@@ -136,7 +136,7 @@ class BroadcastEngine:
         for bot in self.bot_list:
             if self.platform and self.platform != PlatformUtils.get_platform(bot):
                 continue
-            group_list, _ = await GroupUtils.get_group_list(bot)
+            group_list, _ = await GroupListUtils.get_group_list(bot)
             if not group_list:
                 continue
             for group in group_list:

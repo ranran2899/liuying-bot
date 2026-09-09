@@ -16,7 +16,7 @@ from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.platform import PlatformUtils
-from liuying.utils.platform.group import GroupUtils
+from liuying.utils.platform.group import GroupListUtils
 from liuying.utils.rules import admin_check, ensure_group, notice_rule
 
 from .data_source import MemberUpdateManage
@@ -80,7 +80,7 @@ async def _update_group_member():
     for bot in list(nonebot.get_bots().values()):
         if PlatformUtils.get_platform(bot) == "qq":
             try:
-                group_list, _ = await GroupUtils.get_group_list(bot)
+                group_list, _ = await GroupListUtils.get_group_list(bot)
                 if group_list:
                     for group in group_list:
                         try:

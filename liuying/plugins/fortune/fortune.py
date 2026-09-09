@@ -183,7 +183,7 @@ class FortuneHandler:
         # QQ官方适配器使用Markdown模板消息+按钮
         if (
             PlatformUtils.is_qbot(session)
-            and not PlatformUtils.is_qq_guild(session)
+            # and not PlatformUtils.is_qq_guild(session)
             and image_bytes
         ):
             url, width, height = await cls._upload_fortune_image(user_id, image_bytes)

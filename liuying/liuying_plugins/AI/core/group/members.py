@@ -2,7 +2,7 @@
 
 深度整合流萤本体群成员能力：
 - 优先使用 GroupInfoUser 数据库缓存（每5分钟由本体自动更新）
-- 回退到 GroupUtils.get_group_member_list 实时获取
+- 回退到 MemberListUtils.get_group_member_list 实时获取
 - 提供群成员列表/单成员信息/在线检查/昵称查询等接口
 - 注册为Agent工具供AI调用
 """
@@ -15,7 +15,7 @@ from liuying.models._group import GroupInfoUser
 from liuying.services.cache import CacheDict
 from liuying.utils.log import logger
 from liuying.utils.platform import UserData
-from liuying.utils.platform.group import GroupUtils
+from liuying.utils.platform.group import MemberListUtils
 from liuying.utils.platform.user import UserUtils
 
 _CACHE_TTL_SECONDS = 300
@@ -215,9 +215,7 @@ class GroupMemberService:
             GroupMemberSnapshot: 群成员快照
         """
         try:
-            users = await GroupUtils.get_group_member_list(
-                bot, group_id
-            )
+            users = await MemberListUtils.get_group_member_list(bot, group_id)
             members: list[GroupMemberInfo] = [
                 GroupMemberService._user_data_to_member(u, group_id) for u in users
             ]

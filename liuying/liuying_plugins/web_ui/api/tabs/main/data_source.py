@@ -18,7 +18,7 @@ from liuying.models.task_info import TaskInfo
 from liuying.utils.common_utils import CommonUtils
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
-from liuying.utils.platform.group import GroupUtils
+from liuying.utils.platform.group import GroupListUtils
 from liuying.utils.platform.user import UserUtils
 
 from ....config import GROUP_AVA_URL, QueryDateType
@@ -109,7 +109,7 @@ class ApiDataSource:
         # 群聊数量
         try:
             select_bot.group_count = len(
-                (await GroupUtils.get_group_list(select_bot.bot, True))[0]
+                (await GroupListUtils.get_group_list(select_bot.bot, True))[0]
             )
             # 好友数量
             select_bot.friend_count = len(

@@ -14,7 +14,7 @@ from liuying.models.statistics import Statistics
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.platform import PlatformUtils
-from liuying.utils.platform.group import GroupUtils
+from liuying.utils.platform.group import GroupListUtils
 from liuying.utils.platform.user import UserUtils
 
 from ....base_model import BaseResultModel, QueryModel
@@ -57,7 +57,7 @@ class ApiDataSource:
         )
         try:
             group, friend = await asyncio.gather(
-                GroupUtils.get_group_list(bot, True),
+                GroupListUtils.get_group_list(bot, True),
                 UserUtils.get_friend_list(bot),
             )
             bot_info.group_count = len(group[0])

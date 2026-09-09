@@ -9,7 +9,7 @@ from liuying.utils.enum import RequestHandleType, RequestType
 from liuying.utils.exception import NotFoundError
 from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
-from liuying.utils.platform.group import GroupUtils
+from liuying.utils.platform.group import GroupListUtils
 from liuying.utils.platform.user import UserUtils
 
 from ....base_model import Result
@@ -47,7 +47,7 @@ async def _(bot_id: str) -> Result:
     group_list_result = []
     try:
         bot = nonebot.get_bot(bot_id)
-        group_list, _ = await GroupUtils.get_group_list(bot)
+        group_list, _ = await GroupListUtils.get_group_list(bot)
         for g in group_list:
             ava_url = GROUP_AVA_URL.format(g.group_id, g.group_id)
             group_list_result.append(
@@ -250,7 +250,7 @@ async def _(param: LeaveGroup) -> Result:
         platform = PlatformUtils.get_platform(bot)
         if platform != "qq":
             return Result.warning_("该平台不支持退群操作...")
-        group_list, _ = await GroupUtils.get_group_list(bot)
+        group_list, _ = await GroupListUtils.get_group_list(bot)
         if param.group_id not in [g.group_id for g in group_list]:
             return Result.warning_("Bot未在该群聊中...")
         await bot.set_group_leave(group_id=param.group_id)

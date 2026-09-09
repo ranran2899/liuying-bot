@@ -125,7 +125,7 @@ reset_sign_cmd = on_alconna(
 
 async def _send_sign_card(session: Uninfo, user_id: str, image_bytes: bytes) -> None:
     """发送签到卡片，QQ官方非频道场景优先走Markdown卡片，失败回退图片发送"""
-    if PlatformUtils.is_qbot(session) and not PlatformUtils.is_qq_guild(session):
+    if PlatformUtils.is_qbot(session):
         url, width, height = await SignInManage.upload_image(user_id, image_bytes)
         if url:
             await MessageUtils.build_markdown_message(
