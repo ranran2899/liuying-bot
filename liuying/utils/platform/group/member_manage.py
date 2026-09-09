@@ -16,7 +16,7 @@ from nonebot.drivers import Request
 from liuying.utils.log import logger
 
 
-async def ban_user(bot: Bot, user_id: str, group_id: str, duration: int) -> None:
+async def ban_group_user(bot: Bot, user_id: str, group_id: str, duration: int) -> None:
     """统一群禁言，按适配器分发到各平台实现
 
     参数:
@@ -39,7 +39,7 @@ async def ban_user(bot: Bot, user_id: str, group_id: str, duration: int) -> None
             )
 
 
-async def kick_user(
+async def kick_group_user(
     bot: Bot,
     user_id: str,
     group_id: str,
@@ -79,17 +79,17 @@ async def _ban_onebot(
     )
 
 
-# QQ官方禁言最大时长30天(分钟)，到期时间使用东八区RFC3339格式
-_QQ_MAX_MINUTES = 30 * 24 * 60
-_QQ_TZ = timezone(timedelta(hours=8))
+# # QQ官方禁言最大时长30天(分钟)，到期时间使用东八区RFC3339格式
+# _QQ_MAX_MINUTES = 30 * 24 * 60
+# _QQ_TZ = timezone(timedelta(hours=8))
 
 
 async def _ban_qq_official(
     bot: Bot, user_id: str, group_id: str, duration: int
 ) -> None:
     """QQ官方禁言，user_id/group_id 均为openid"""
-    duration = min(max(1, duration), _QQ_MAX_MINUTES)
-    expire_at = (datetime.now(_QQ_TZ) + timedelta(minutes=duration)).isoformat()
+    duration = min(max(1, duration), 30 * 24 * 60)
+    expire_at = (datetime.now(timezone(timedelta(hours=8))) + timedelta(minutes=duration)).isoformat()
     await _qq_post(
         bot,
         f"v2/groups/{group_id}/restrict_chat_setting",
