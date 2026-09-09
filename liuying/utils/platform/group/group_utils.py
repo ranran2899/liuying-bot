@@ -13,23 +13,6 @@ class GroupUtils:
     """群组工具类"""
 
     @classmethod
-    async def ban_user(cls, bot: Bot, user_id: str, group_id: str, duration: int):
-        """禁言
-
-        参数:
-            bot: Bot
-            user_id: 用户id
-            group_id: 群组id
-            duration: 禁言时长(分钟)
-        """
-        if PlatformUtils.get_platform(bot) == "qq":
-            await bot.set_group_ban(
-                group_id=group_id,
-                user_id=user_id,
-                duration=duration * 60,
-            )
-
-    @classmethod
     async def get_group_member_list(cls, bot: Bot, group_id: str) -> list[UserData]:
         """获取群组/频道成员列表
 

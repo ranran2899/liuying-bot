@@ -1,3 +1,6 @@
+"""平台工具类"""
+
+
 from liuying.utils.platform.broadcast import BroadcastEngine, broadcast_group
 from liuying.utils.platform.group import GroupUtils
 from liuying.utils.platform.helper import PlatformUtils

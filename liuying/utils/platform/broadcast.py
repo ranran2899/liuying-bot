@@ -18,7 +18,7 @@ from liuying.utils.platform.helper import PlatformUtils
 class BroadcastEngine:
     """
     广播引擎
-    
+
     用于发送消息到指定群聊或所有群聊或指定bot或所有bot或指定平台或所有平台的bot
     """
     def __init__(
