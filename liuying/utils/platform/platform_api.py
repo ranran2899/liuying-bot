@@ -10,11 +10,11 @@ from nonebot.adapters import Bot
 from nonebot_plugin_alconna.uniseg import UniMessage
 
 from liuying.utils.platform.avatar_utils import AvatarUtils
-from liuying.utils.platform.bot import get_bot_info
+from liuying.utils.platform.bot import BotInfoUtils
 from liuying.utils.platform.broadcast import broadcast_group
 from liuying.utils.platform.group import GroupListUtils, GroupUtils
 from liuying.utils.platform.group.member_list import MemberListUtils
-from liuying.utils.platform.group.member_manage import ban_group_user, kick_group_user
+from liuying.utils.platform.group.member_manage import MemberManageUtils
 from liuying.utils.platform.helper import PlatformHelper
 from liuying.utils.platform.user import UserUtils
 
@@ -26,23 +26,13 @@ class PlatformUtils(
     GroupListUtils,
     GroupUtils,
     MemberListUtils,
+    BotInfoUtils,
+    MemberManageUtils,
 ):
     """平台工具统一入口
 
     继承聚合各工具类的全部公开方法，并将包内模块级公开函数封装为类方法
     """
-
-    @classmethod
-    async def get_bot_info(cls, bot: Bot) -> tuple[str, str]:
-        """统一获取机器人昵称与头像url
-
-        参数:
-            bot: Bot
-
-        返回:
-            tuple[str, str]: (昵称, 头像url)
-        """
-        return await get_bot_info(bot)
 
     @classmethod
     async def broadcast_group(
@@ -77,39 +67,4 @@ class PlatformUtils(
             check_func=check_func,
             log_cmd=log_cmd,
             platform=platform,
-        )
-
-    @classmethod
-    async def ban_group_user(
-        cls, bot: Bot, user_id: str, group_id: str, duration: int
-    ) -> None:
-        """统一群禁言
-
-        参数:
-            bot: Bot
-            user_id: 用户id
-            group_id: 群组id
-            duration: 禁言时长(分钟)
-        """
-        await ban_group_user(bot, user_id, group_id, duration)
-
-    @classmethod
-    async def kick_group_user(
-        cls,
-        bot: Bot,
-        user_id: str,
-        group_id: str,
-        *,
-        reject_add_request: bool = False,
-    ) -> None:
-        """统一踢出群成员
-
-        参数:
-            bot: Bot
-            user_id: 用户id
-            group_id: 群组id
-            reject_add_request: 是否拒绝该用户再次入群
-        """
-        await kick_group_user(
-            bot, user_id, group_id, reject_add_request=reject_add_request
         )

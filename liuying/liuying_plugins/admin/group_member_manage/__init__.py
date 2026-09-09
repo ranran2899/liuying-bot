@@ -1,7 +1,4 @@
-from collections.abc import Awaitable, Callable
-
 from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import Event as v11Event
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import (
     Alconna,
@@ -16,13 +13,12 @@ from liuying.configs.utils import PluginExtraData
 from liuying.models._user import UserPermLevel
 from liuying.utils.enum import PluginType
 from liuying.utils.message import MessageUtils
-from liuying.utils.rules import admin_check, ensure_group, notice_rule
-
-from .data_source import GroupMemberManage
+from liuying.utils.platform import PlatformUtils
+from liuying.utils.rules import admin_check, ensure_group
 
 __plugin_meta__ = PluginMetadata(
-    name="QQ群成员管理",
-    description="OneBot平台群管功能，支持禁言、解禁和踢出成员",
+    name="群成员管理",
+    description="群管功能，支持禁言、解禁和踢出成员",
     usage="""
     管理员命令
         格式:
@@ -37,7 +33,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     extra=PluginExtraData(
         author="liuying",
-        version="2.0",
+        version="3.0",
         admin_level=5,
         plugin_type=PluginType.SUPER_AND_ADMIN,
         superuser_help="""
@@ -56,7 +52,7 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-_rule = admin_check(5) & ensure_group & notice_rule([v11Event])
+_rule = admin_check(5) & ensure_group
 
 
 _mute_matcher = on_alconna(
@@ -99,73 +95,44 @@ def _resolve_target(user: Match[At | str]) -> str:
     return user.result.target if isinstance(user.result, At) else str(user.result)
 
 
-async def _handle(
-    bot: Bot,
-    session: Uninfo,
-    user: Match[At | str],
-    operate: Callable[[str, str], Awaitable[str]],
-) -> None:
-    """通用处理：解析目标用户、校验权限并执行操作
-
-    参数:
-        bot: Bot实例
-        session: 会话信息
-        user: 目标用户匹配结果
-        operate: 接收群组ID与用户ID并返回结果消息的操作
-    """
-    target_user_id = _resolve_target(user)
-    group_id = session.group.id if session.group else ""
-    if await UserPermLevel.get_level(target_user_id, bot.self_id, group_id) >= 5:
-        await MessageUtils.build_message("不能操作5级权限的用户").finish(reply_to=True)
-
-    result = await operate(group_id, target_user_id)
-    await MessageUtils.build_message(result).finish(reply_to=True)
-
-
 @_mute_matcher.handle()
 async def _(bot: Bot, session: Uninfo, user: Match[At | str], duration: Match[int]):
     """处理禁言命令"""
-    await _handle(
-        bot,
-        session,
-        user,
-        lambda group_id, user_id: GroupMemberManage.mute_user(
-            bot=bot,
-            group_id=group_id,
-            user_id=user_id,
-            duration=max(1, duration.result),
-            operator_id=session.user.id,
-        ),
-    )
+    target_user_id = _resolve_target(user)
+    group_id = session.group.id if session.group else ""
+    if await UserPermLevel.get_level(target_user_id, bot.self_id, group_id) >= 5:
+        await MessageUtils.build_message("不能禁言5级的管理员").finish(reply_to=True)
+
+    minutes = max(1, duration.result)
+    await PlatformUtils.ban_group_user(bot, target_user_id, group_id, minutes)
+    await MessageUtils.build_message(
+        f"已将 {target_user_id} 禁言 {minutes} 分钟"
+    ).finish(reply_to=True)
 
 
 @_unmute_matcher.handle()
 async def _(bot: Bot, session: Uninfo, user: Match[At | str]):
     """处理解禁命令"""
-    await _handle(
-        bot,
-        session,
-        user,
-        lambda group_id, user_id: GroupMemberManage.unmute_user(
-            bot=bot,
-            group_id=group_id,
-            user_id=user_id,
-            operator_id=session.user.id,
-        ),
+    target_user_id = _resolve_target(user)
+    group_id = session.group.id if session.group else ""
+    if await UserPermLevel.get_level(target_user_id, bot.self_id, group_id) >= 5:
+        await MessageUtils.build_message("不能帮解禁5级权限的用户哦~").finish(reply_to=True)
+
+    await PlatformUtils.unban_group_user(bot, target_user_id, group_id)
+    await MessageUtils.build_message(f"已将 {target_user_id} 解禁").finish(
+        reply_to=True
     )
 
 
 @_kick_matcher.handle()
 async def _(bot: Bot, session: Uninfo, user: Match[At | str]):
     """处理踢人命令"""
-    await _handle(
-        bot,
-        session,
-        user,
-        lambda group_id, user_id: GroupMemberManage.kick_user(
-            bot=bot,
-            group_id=group_id,
-            user_id=user_id,
-            operator_id=session.user.id,
-        ),
+    target_user_id = _resolve_target(user)
+    group_id = session.group.id if session.group else ""
+    if await UserPermLevel.get_level(target_user_id, bot.self_id, group_id) >= 5:
+        await MessageUtils.build_message("无法踢出5级权限的用户").finish(reply_to=True)
+
+    await PlatformUtils.kick_group_user(bot, target_user_id, group_id)
+    await MessageUtils.build_message(f"已将 {target_user_id} 踢出群聊").finish(
+        reply_to=True
     )

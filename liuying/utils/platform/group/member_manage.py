@@ -9,145 +9,178 @@ from typing import Any
 
 from nonebot.adapters import Bot
 from nonebot.drivers import Request
-from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.log import logger
 
 
-async def ban_group_user(
-    bot: Bot, user_id: str, group_id: str, duration: int
-) -> None:
-    """统一群禁言，按适配器分发到各平台实现
+class MemberManageUtils:
+    """统一群管理工具类"""
 
-    参数:
-        bot: Bot
-        user_id: 用户id
-        group_id: 群组id
-        duration: 禁言时长(分钟)
-    """
-    # if not isinstance(bot, Bot):
-    #     return
-    match bot.adapter.get_name():
-        case "OneBot V11" | "OneBot V12":
-            await _ban_onebot(bot, user_id, group_id, duration)
-        case "QQ":
-            await _ban_qq_official(bot, user_id, group_id, duration)
-        case _:
-            logger.warning(
-                f"适配器 {bot.adapter.get_name()} 暂不支持禁言，已忽略",
-                command="GroupManage",
-                group_id=group_id,
-                user_id=user_id,
-            )
+    @classmethod
+    async def ban_group_user(
+        cls, bot: Bot, user_id: str, group_id: str, duration: int
+    ) -> None:
+        """统一群禁言，按适配器分发到各平台实现
 
+        参数:
+            bot: Bot
+            user_id: 用户id
+            group_id: 群组id
+            duration: 禁言时长(分钟)
+        """
+        match bot.adapter.get_name():
+            case "OneBot V11" | "OneBot V12":
+                await cls._ban_onebot(bot, user_id, group_id, duration)
+            case "QQ":
+                await cls._ban_qq_official(bot, user_id, group_id, duration)
+            case _:
+                logger.warning(
+                    f"适配器 {bot.adapter.get_name()} 暂不支持禁言，已忽略",
+                    command="GroupManage",
+                    group_id=group_id,
+                    user_id=user_id,
+                )
 
-async def kick_group_user(
-    bot: Bot,
-    user_id: str,
-    group_id: str,
-    *,
-    reject_add_request: bool = False,
-) -> None:
-    """统一踢出群成员，按适配器分发到各平台实现
+    @classmethod
+    async def unban_group_user(cls, bot: Bot, user_id: str, group_id: str) -> None:
+        """统一解除群禁言，按适配器分发到各平台实现
 
-    参数:
-        bot: Bot
-        user_id: 用户id
-        group_id: 群组id
-        reject_add_request: 是否拒绝该用户再次入群（一般情况下是拉入群黑名单）
-    """
-    # if not isinstance(bot, Bot):
-    #     return
-    match bot.adapter.get_name():
-        case "OneBot V11" | "OneBot V12":
-            await _kick_onebot(bot, user_id, group_id, reject_add_request)
-        case "QQ":
-            await _kick_qq_official(bot, user_id, group_id, reject_add_request)
-        case _:
-            logger.warning(
-                f"适配器 {bot.adapter.get_name()} 暂不支持踢出群成员，已忽略",
-                command="GroupManage",
-                group_id=group_id,
-                user_id=user_id,
-            )
+        参数:
+            bot: Bot
+            user_id: 用户id
+            group_id: 群组id
+        """
+        match bot.adapter.get_name():
+            case "OneBot V11" | "OneBot V12":
+                await cls._ban_onebot(bot, user_id, group_id, 0)
+            case "QQ":
+                await cls._unban_qq_official(bot, user_id, group_id)
+            case _:
+                logger.warning(
+                    f"适配器 {bot.adapter.get_name()} 暂不支持解除禁言，已忽略",
+                    command="GroupManage",
+                    group_id=group_id,
+                    user_id=user_id,
+                )
 
+    @classmethod
+    async def kick_group_user(
+        cls,
+        bot: Bot,
+        user_id: str,
+        group_id: str,
+        *,
+        reject_add_request: bool = False,
+    ) -> None:
+        """统一踢出群成员，按适配器分发到各平台实现
 
-async def _ban_onebot(
-    bot: Bot, user_id: str, group_id: str, duration: int
-) -> None:
-    """OneBot V11/V12 禁言"""
-    await bot.set_group_ban(
-        group_id=group_id,
-        user_id=user_id,
-        duration=duration * 60,
-    )
+        参数:
+            bot: Bot
+            user_id: 用户id
+            group_id: 群组id
+            reject_add_request: 是否拒绝该用户再次入群（一般情况下是拉入群黑名单）
+        """
+        match bot.adapter.get_name():
+            case "OneBot V11" | "OneBot V12":
+                await cls._kick_onebot(bot, user_id, group_id, reject_add_request)
+            case "QQ":
+                await cls._kick_qq_official(bot, user_id, group_id, reject_add_request)
+            case _:
+                logger.warning(
+                    f"适配器 {bot.adapter.get_name()} 暂不支持踢出群成员，已忽略",
+                    command="GroupManage",
+                    group_id=group_id,
+                    user_id=user_id,
+                )
 
+    @classmethod
+    async def _ban_onebot(
+        cls, bot: Bot, user_id: str, group_id: str, duration: int
+    ) -> None:
+        """OneBot V11/V12 禁言"""
+        await bot.set_group_ban(
+            group_id=group_id,
+            user_id=user_id,
+            duration=duration * 60,
+        )
 
-# # QQ官方禁言最大时长30天(分钟)，到期时间使用东八区RFC3339格式
-# _QQ_MAX_MINUTES = 30 * 24 * 60
-# _QQ_TZ = timezone(timedelta(hours=8))
+    @classmethod
+    async def _ban_qq_official(
+        cls, bot: Bot, user_id: str, group_id: str, duration: int
+    ) -> None:
+        """QQ官方禁言，user_id/group_id 均为openid"""
+        duration = min(max(1, duration), 30 * 24 * 60)
+        expire_at = (
+            datetime.now(timezone(timedelta(hours=8))) + timedelta(minutes=duration)
+        ).isoformat()
+        await cls._qq_restrict(bot, group_id, user_id, "add", expire_at)
 
+    @classmethod
+    async def _unban_qq_official(cls, bot: Bot, user_id: str, group_id: str) -> None:
+        """QQ官方解除禁言，user_id/group_id 均为openid"""
+        await cls._qq_restrict(bot, group_id, user_id, "del", "")
 
-async def _ban_qq_official(
-    bot: Bot, user_id: str, group_id: str, duration: int
-) -> None:
-    """QQ官方禁言，user_id/group_id 均为openid"""
-    duration = min(max(1, duration), 30 * 24 * 60)
-    expire_at = (
-        datetime.now(timezone(timedelta(hours=8))) + timedelta(minutes=duration)
-    ).isoformat()
-    await _qq_post(
-        bot,
-        f"v2/groups/{group_id}/restrict_chat_setting",
-        {
-            "members": [
-                {"op": "add", "member_openid": user_id, "mute_expire_at": expire_at}
-            ]
-        },
-    )
+    @classmethod
+    async def _qq_restrict(
+        cls, bot: Bot, group_id: str, member_openid: str, op: str, expire_at: str
+    ) -> None:
+        """QQ官方群禁言设置，op 为 add(禁言) 或 del(解禁)，均为openid"""
+        await cls._qq_post(
+            bot,
+            f"v2/groups/{group_id}/restrict_chat_setting",
+            {
+                "members": [
+                    {
+                        "op": op,
+                        "member_openid": member_openid,
+                        "mute_expire_at": expire_at,
+                    }
+                ]
+            },
+        )
 
+    @classmethod
+    async def _kick_onebot(
+        cls, bot: Bot, user_id: str, group_id: str, reject_add_request: bool
+    ) -> None:
+        """OneBot V11/V12 踢出群成员"""
+        await bot.set_group_kick(
+            group_id=group_id,
+            user_id=user_id,
+            reject_add_request=reject_add_request,
+        )
 
-async def _kick_onebot(
-    bot: Bot, user_id: str, group_id: str, reject_add_request: bool
-) -> None:
-    """OneBot V11/V12 踢出群成员"""
-    await bot.set_group_kick(
-        group_id=group_id,
-        user_id=user_id,
-        reject_add_request=reject_add_request,
-    )
+    @classmethod
+    async def _kick_qq_official(
+        cls, bot: Bot, user_id: str, group_id: str, reject_add_request: bool
+    ) -> None:
+        """QQ官方踢出群成员，即批量移除接口单成员场景，user_id/group_id 均为openid"""
+        await cls._qq_post(
+            bot,
+            f"v2/groups/{group_id}/batch_remove_members",
+            {
+                "member_openids": [user_id],
+                "add_to_member_blacklist": reject_add_request,
+            },
+        )
 
+    @classmethod
+    async def _qq_post(cls, bot: Bot, path: str, json_body: dict[str, Any]) -> Any:
+        """调用QQ开放平台POST接口
 
-async def _kick_qq_official(
-    bot: Bot, user_id: str, group_id: str, reject_add_request: bool
-) -> None:
-    """QQ官方踢出群成员，即批量移除接口单成员场景，user_id/group_id 均为openid"""
-    await _qq_post(
-        bot,
-        f"v2/groups/{group_id}/batch_remove_members",
-        {
-            "member_openids": [user_id],
-            "add_to_member_blacklist": reject_add_request,
-        },
-    )
+        适配器未封装以上API，复用其请求管道自动携带QQBot鉴权并刷新token
 
+        参数:
+            bot: Bot
+            path: 接口路径(相对api_base)
+            json_body: 请求体
 
-async def _qq_post(bot: Bot, path: str, json_body: dict[str, Any]) -> Any:
-    """调用QQ开放平台POST接口
-
-    适配器未封装以上API，复用其请求管道自动携带QQBot鉴权并刷新token
-
-    参数:
-        bot: Bot
-        path: 接口路径(相对api_base)
-        json_body: 请求体
-
-    返回:
-        Any: 接口响应解析结果
-    """
-    request = Request(
-        "POST",
-        bot.adapter.get_api_base().joinpath(path),
-        json=json_body,
-    )
-    return await bot._request(request)
+        返回:
+            Any: 接口响应解析结果
+        """
+        request = Request(
+            "POST",
+            bot.adapter.get_api_base().joinpath(path),
+            json=json_body,
+        )
+        return await bot._request(request)

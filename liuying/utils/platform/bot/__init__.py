@@ -1,5 +1,5 @@
-from liuying.utils.platform.bot.bot_info import get_bot_info
+from liuying.utils.platform.bot.bot_info import BotInfoUtils
 
 __all__ = [
-    "get_bot_info",
+    "BotInfoUtils",
 ]
