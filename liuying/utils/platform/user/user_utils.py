@@ -3,7 +3,6 @@ from nonebot_plugin_uninfo import SceneType, get_interface
 from nonebot_plugin_uninfo.model import Member, User
 
 from liuying.models._bot import BotFriend
-from liuying.utils.http.http_utils import AsyncHttpx
 from liuying.utils.platform.helper import PlatformUtils
 from liuying.utils.platform.models import UserData, build_user_data
 
@@ -50,56 +49,6 @@ class UserUtils:
             if user
             else None
         )
-
-    @classmethod
-    def _build_qq_avatar_url(cls, user_id: str, appid: str | None = None) -> str:
-        """构建QQ头像URL"""
-        if user_id.isdigit():
-            return f"http://q1.qlogo.cn/g?b=qq&nk={user_id}&s=640"
-        return f"https://q.qlogo.cn/qqapp/{appid}/{user_id}/640"
-
-    @classmethod
-    def _resolve_qq_avatar_url(
-        cls, user_id: str, platform: str, appid: str | None = None
-    ) -> str | None:
-        """按平台解析QQ头像URL，非QQ平台返回None"""
-        if platform != "qq":
-            return None
-        return cls._build_qq_avatar_url(user_id, appid)
-
-    @classmethod
-    async def get_user_avatar(
-        cls, user_id: str, platform: str, appid: str | None = None
-    ) -> bytes | None:
-        """快捷获取用户头像
-
-        参数:
-            user_id: 用户id
-            platform: 平台
-            appid: 应用id
-
-        返回:
-            bytes | None: 头像数据
-        """
-        if url := cls._resolve_qq_avatar_url(user_id, platform, appid):
-            return await AsyncHttpx.get_content(url)
-        return None
-
-    @classmethod
-    def get_user_avatar_url(
-        cls, user_id: str, platform: str, appid: str | None = None
-    ) -> str | None:
-        """快捷获取用户头像url
-
-        参数:
-            user_id: 用户id
-            platform: 平台
-            appid: 应用id
-
-        返回:
-            str | None: 头像url
-        """
-        return cls._resolve_qq_avatar_url(user_id, platform, appid)
 
     @classmethod
     async def update_friend(cls, bot: Bot) -> int:

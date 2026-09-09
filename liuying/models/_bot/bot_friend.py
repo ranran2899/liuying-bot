@@ -33,14 +33,18 @@ class BotFriend(Model):
         String(255), nullable=False, index=True, comment="用户id"
     )
     """用户id"""
-    user_name: Mapped[str] = mapped_column(
-        String(255), default="", comment="用户名称"
+    user_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="用户名称"
     )
     """用户名称"""
+    user_avatar: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="用户头像url"
+    )
+    """用户头像url"""
     nickname: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="用户自定义昵称"
     )
-    """私聊下自定义昵称"""
+    """私聊下自定义昵称(备注)"""
     platform: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="平台"
     )
@@ -168,4 +172,5 @@ class BotFriend(Model):
         return [
             # "ALTER TABLE bot_friends "
             # "ALTER COLUMN user_id TYPE VARCHAR(255);",
+            "ALTER TABLE bot_friends ADD COLUMN user_avatar VARCHAR(255);",
         ]

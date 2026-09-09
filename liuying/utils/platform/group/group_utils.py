@@ -1,4 +1,3 @@
-import httpx
 from nonebot.adapters import Bot
 
 from liuying.models._group import GroupConsole
@@ -49,29 +48,3 @@ class GroupUtils:
             )
         return len(create_list)
 
-    @classmethod
-    async def get_group_avatar(cls, gid: str, platform: str) -> bytes | None:
-        """快捷获取群头像
-
-        参数:
-            gid: 群组id
-            platform: 平台
-
-        返回:
-            bytes | None: 群头像数据
-        """
-        if platform != "qq":
-            return None
-        url = f"http://p.qlogo.cn/gh/{gid}/{gid}/640/"
-        async with httpx.AsyncClient() as client:
-            for _ in range(3):
-                try:
-                    return (await client.get(url)).content
-                except Exception:
-                    logger.error(
-                        "获取群头像错误",
-                        command="Util",
-                        target=gid,
-                        platform=platform,
-                    )
-        return None
