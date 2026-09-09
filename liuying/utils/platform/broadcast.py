@@ -12,7 +12,7 @@ from liuying.models._group import GroupConfig, GroupConsole
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.platform.group import GroupListUtils
-from liuying.utils.platform.helper import PlatformUtils
+from liuying.utils.platform.helper import PlatformHelper
 
 
 class BroadcastEngine:
@@ -115,7 +115,7 @@ class BroadcastEngine:
                 group_id=group.group_id,
             )
             return
-        if target := PlatformUtils.get_target(
+        if target := PlatformHelper.get_target(
             group_id=group.group_id,
             channel_id=group.channel_id,
         ):
@@ -134,7 +134,7 @@ class BroadcastEngine:
             int: 成功发送次数
         """
         for bot in self.bot_list:
-            if self.platform and self.platform != PlatformUtils.get_platform(bot):
+            if self.platform and self.platform != PlatformHelper.get_platform(bot):
                 continue
             group_list, _ = await GroupListUtils.get_group_list(bot)
             if not group_list:

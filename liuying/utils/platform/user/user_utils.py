@@ -3,7 +3,7 @@ from nonebot_plugin_uninfo import SceneType, get_interface
 from nonebot_plugin_uninfo.model import Member, User
 
 from liuying.models._bot import BotFriend
-from liuying.utils.platform.helper import PlatformUtils
+from liuying.utils.platform.helper import PlatformHelper
 from liuying.utils.platform.models import UserData, build_user_data
 
 
@@ -88,4 +88,4 @@ class UserUtils:
         return [
             BotFriend(bot_id=bot.self_id, user_id=u.id, user_name=u.name)
             for u in user_list
-        ], PlatformUtils.get_platform(bot)
+        ], PlatformHelper.get_platform(bot)

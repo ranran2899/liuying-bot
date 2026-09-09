@@ -9,8 +9,6 @@ from liuying.utils.enum import RequestHandleType, RequestType
 from liuying.utils.exception import NotFoundError
 from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
-from liuying.utils.platform.group import GroupListUtils
-from liuying.utils.platform.user import UserUtils
 
 from ....base_model import Result
 from ....config import AVA_URL, GROUP_AVA_URL
@@ -47,7 +45,7 @@ async def _(bot_id: str) -> Result:
     group_list_result = []
     try:
         bot = nonebot.get_bot(bot_id)
-        group_list, _ = await GroupListUtils.get_group_list(bot)
+        group_list, _ = await PlatformUtils.get_group_list(bot)
         for g in group_list:
             ava_url = GROUP_AVA_URL.format(g.group_id, g.group_id)
             group_list_result.append(
@@ -89,7 +87,7 @@ async def _(group: UpdateGroup) -> Result[str]:
 async def _(bot_id: str) -> Result[list[Friend]]:
     try:
         bot = nonebot.get_bot(bot_id)
-        friend_list, _ = await UserUtils.get_friend_list(bot)
+        friend_list, _ = await PlatformUtils.get_friend_list(bot)
         result_list = []
         for f in friend_list:
             ava_url = AVA_URL.format(f.user_id)
@@ -250,7 +248,7 @@ async def _(param: LeaveGroup) -> Result:
         platform = PlatformUtils.get_platform(bot)
         if platform != "qq":
             return Result.warning_("该平台不支持退群操作...")
-        group_list, _ = await GroupListUtils.get_group_list(bot)
+        group_list, _ = await PlatformUtils.get_group_list(bot)
         if param.group_id not in [g.group_id for g in group_list]:
             return Result.warning_("Bot未在该群聊中...")
         await bot.set_group_leave(group_id=param.group_id)
@@ -275,7 +273,7 @@ async def _(param: DeleteFriend) -> Result:
         platform = PlatformUtils.get_platform(bot)
         if platform != "qq":
             return Result.warning_("该平台不支持删除好友操作...")
-        friend_list, _ = await UserUtils.get_friend_list(bot)
+        friend_list, _ = await PlatformUtils.get_friend_list(bot)
         if param.user_id not in [f.user_id for f in friend_list]:
             return Result.warning_("Bot未有其好友...")
         await bot.delete_friend(user_id=param.user_id)

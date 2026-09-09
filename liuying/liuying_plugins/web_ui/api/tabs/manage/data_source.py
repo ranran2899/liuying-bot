@@ -9,7 +9,7 @@ from liuying.models.statistics import Statistics
 from liuying.models.task_info import TaskInfo
 from liuying.utils.common_utils import CommonUtils
 from liuying.utils.enum import RequestType
-from liuying.utils.platform.user import UserUtils
+from liuying.utils.platform import PlatformUtils
 
 from ....config import AVA_URL, GROUP_AVA_URL
 from .model import (
@@ -105,7 +105,7 @@ class ApiDataSource:
             UserDetail | None: 详情数据
         """
         bot = nonebot.get_bot(bot_id)
-        friend_list, _ = await UserUtils.get_friend_list(bot)
+        friend_list, _ = await PlatformUtils.get_friend_list(bot)
         fd = [x for x in friend_list if x.user_id == user_id]
         if not fd:
             return None

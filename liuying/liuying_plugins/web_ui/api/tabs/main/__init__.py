@@ -12,8 +12,7 @@ from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from liuying.models._bot import BotConsole
 from liuying.utils.common_utils import CommonUtils
 from liuying.utils.log import logger
-from liuying.utils.platform.group import GroupListUtils
-from liuying.utils.platform.user import UserUtils
+from liuying.utils.platform import PlatformUtils
 
 from ....base_model import Result
 from ....config import QueryDateType
@@ -108,8 +107,8 @@ async def _(bot_id: str) -> Result[dict[str, int]]:
     try:
         bot = nonebot.get_bot(bot_id)
         data = {
-            "friend_count": len((await UserUtils.get_friend_list(bot))[0]),
-            "group_count": len((await GroupListUtils.get_group_list(bot))[0]),
+            "friend_count": len((await PlatformUtils.get_friend_list(bot))[0]),
+            "group_count": len((await PlatformUtils.get_group_list(bot))[0]),
         }
         return Result.ok(data, "拿到信息啦!")
     except (ValueError, KeyError):

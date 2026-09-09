@@ -1,6 +1,6 @@
 """统一群管理的平台实现
 
-各平台群管理接口差异较大，统一按 bot.adapter.name 分发
+各平台群管理接口差异较大，统一按适配器名分发
 
 """
 
@@ -9,11 +9,14 @@ from typing import Any
 
 from nonebot.adapters import Bot
 from nonebot.drivers import Request
+from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.log import logger
 
 
-async def ban_group_user(bot: Bot, user_id: str, group_id: str, duration: int) -> None:
+async def ban_group_user(
+    bot: Bot, user_id: str, group_id: str, duration: int
+) -> None:
     """统一群禁言，按适配器分发到各平台实现
 
     参数:
@@ -22,14 +25,16 @@ async def ban_group_user(bot: Bot, user_id: str, group_id: str, duration: int) -
         group_id: 群组id
         duration: 禁言时长(分钟)
     """
-    match bot.adapter.name:
+    # if not isinstance(bot, Bot):
+    #     return
+    match bot.adapter.get_name():
         case "OneBot V11" | "OneBot V12":
             await _ban_onebot(bot, user_id, group_id, duration)
         case "QQ":
             await _ban_qq_official(bot, user_id, group_id, duration)
         case _:
             logger.warning(
-                f"适配器 {bot.adapter.name} 暂不支持禁言，已忽略",
+                f"适配器 {bot.adapter.get_name()} 暂不支持禁言，已忽略",
                 command="GroupManage",
                 group_id=group_id,
                 user_id=user_id,
@@ -51,14 +56,16 @@ async def kick_group_user(
         group_id: 群组id
         reject_add_request: 是否拒绝该用户再次入群（一般情况下是拉入群黑名单）
     """
-    match bot.adapter.name:
+    # if not isinstance(bot, Bot):
+    #     return
+    match bot.adapter.get_name():
         case "OneBot V11" | "OneBot V12":
             await _kick_onebot(bot, user_id, group_id, reject_add_request)
         case "QQ":
             await _kick_qq_official(bot, user_id, group_id, reject_add_request)
         case _:
             logger.warning(
-                f"适配器 {bot.adapter.name} 暂不支持踢出群成员，已忽略",
+                f"适配器 {bot.adapter.get_name()} 暂不支持踢出群成员，已忽略",
                 command="GroupManage",
                 group_id=group_id,
                 user_id=user_id,

@@ -2,7 +2,7 @@ from nonebot.adapters import Bot
 from nonebot_plugin_uninfo import SceneType, get_interface
 
 from liuying.models._group import GroupConsole
-from liuying.utils.platform.helper import PlatformUtils
+from liuying.utils.platform.helper import PlatformHelper
 
 
 class GroupListUtils:
@@ -23,7 +23,7 @@ class GroupListUtils:
         """
         if not (interface := get_interface(bot)):
             return [], ""
-        platform = PlatformUtils.get_platform(bot)
+        platform = PlatformHelper.get_platform(bot)
         result_list = []
         for scene in await interface.get_scenes(SceneType.GROUP):
             result_list.append(

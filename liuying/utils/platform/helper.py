@@ -16,7 +16,8 @@ def _normalize_platform(scope: str) -> str:
     return "qq" if platform.startswith("qq") else platform
 
 
-class PlatformUtils:
+class PlatformHelper:
+    """平台助手类"""
     @classmethod
     def is_qbot(cls, session: Uninfo | Bot) -> bool:
         """判断bot是否为qq官bot
@@ -72,7 +73,7 @@ class PlatformUtils:
             except Exception as e:
                 logger.error(
                     "发送消息给超级用户失败",
-                    command="PlatformUtils:send_superuser",
+                    command="PlatformHelper:send_superuser",
                     target=sid,
                     e=e,
                 )

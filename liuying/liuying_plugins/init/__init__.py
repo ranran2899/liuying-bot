@@ -8,7 +8,6 @@ from nonebot.adapters import Bot
 from liuying.models._group import GroupConsole
 from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
-from liuying.utils.platform.group import GroupListUtils
 
 nonebot.load_plugins(str(Path(__file__).parent.resolve()))
 
@@ -27,7 +26,7 @@ async def _(bot: Bot) -> None:
 
     logger.debug(f"更新Bot: {bot.self_id} 的群认证...")
 
-    group_list, _ = await GroupListUtils.get_group_list(bot)
+    group_list, _ = await PlatformUtils.get_group_list(bot)
     db_group_list = await GroupConsole.filter().values_list("group_id", flat=True)
 
     create_list = []
