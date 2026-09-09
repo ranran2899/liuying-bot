@@ -1,8 +1,10 @@
 import nonebot
 from nonebot import on_notice
 from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent, Event as v11Event
-from nonebot.adapters.onebot.v12 import GroupMemberIncreaseEvent, Event as v12Event
+from nonebot.adapters.onebot.v11 import Event as v11Event
+from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent
+from nonebot.adapters.onebot.v12 import Event as v12Event
+from nonebot.adapters.onebot.v12 import GroupMemberIncreaseEvent
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import Alconna, Arparma, on_alconna
 from nonebot_plugin_uninfo import Uninfo
@@ -14,6 +16,7 @@ from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 from liuying.utils.platform import PlatformUtils
+from liuying.utils.platform.group import GroupUtils
 from liuying.utils.rules import admin_check, ensure_group, notice_rule
 
 from .data_source import MemberUpdateManage
@@ -77,7 +80,7 @@ async def _update_group_member():
     for bot in list(nonebot.get_bots().values()):
         if PlatformUtils.get_platform(bot) == "qq":
             try:
-                group_list, _ = await PlatformUtils.get_group_list(bot)
+                group_list, _ = await GroupUtils.get_group_list(bot)
                 if group_list:
                     for group in group_list:
                         try:

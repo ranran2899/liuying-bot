@@ -9,7 +9,8 @@ from liuying.configs.utils import PluginExtraData
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
-from liuying.utils.platform import PlatformUtils
+from liuying.utils.platform.group import GroupUtils
+from liuying.utils.platform.user import UserUtils
 
 __plugin_meta__ = PluginMetadata(
     name="更新群组/好友信息",
@@ -54,7 +55,7 @@ async def _(
     arparma: Arparma,
 ):
     try:
-        num = await PlatformUtils.update_group(bot)
+        num = await GroupUtils.update_group(bot)
         logger.info(
             f"更新群聊信息完成，共更新了 {num} 个群组的信息!",
             arparma.header_result,
@@ -75,7 +76,7 @@ async def _(
     arparma: Arparma,
 ):
     try:
-        num = await PlatformUtils.update_friend(bot)
+        num = await UserUtils.update_friend(bot)
         logger.info(
             f"更新好友信息完成，共更新了 {num} 个好友的信息!",
             arparma.header_result,

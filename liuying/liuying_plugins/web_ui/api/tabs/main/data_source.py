@@ -18,7 +18,8 @@ from liuying.models.task_info import TaskInfo
 from liuying.utils.common_utils import CommonUtils
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
-from liuying.utils.platform import PlatformUtils
+from liuying.utils.platform.group import GroupUtils
+from liuying.utils.platform.user import UserUtils
 
 from ....config import GROUP_AVA_URL, QueryDateType
 from .model import (
@@ -108,11 +109,11 @@ class ApiDataSource:
         # 群聊数量
         try:
             select_bot.group_count = len(
-                (await PlatformUtils.get_group_list(select_bot.bot, True))[0]
+                (await GroupUtils.get_group_list(select_bot.bot, True))[0]
             )
             # 好友数量
             select_bot.friend_count = len(
-                (await PlatformUtils.get_friend_list(select_bot.bot))[0]
+                (await UserUtils.get_friend_list(select_bot.bot))[0]
             )
         except Exception as e:
             logger.warning("获取bot好友/群组数量失败...", command="WebUi", e=e)

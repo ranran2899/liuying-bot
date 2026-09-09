@@ -14,6 +14,7 @@ from liuying.models._group import GroupConfig, GroupConsole
 from liuying.utils.common_utils import CommonUtils
 from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
+from liuying.utils.platform.group import GroupUtils
 
 from .models import BroadcastDetailResult, BroadcastResult
 from .utils import custom_nodes_to_v11_nodes, uni_message_to_v11_list_of_dicts
@@ -76,7 +77,7 @@ class BroadcastManager:
     @classmethod
     async def get_all_groups(cls, bot: Bot) -> tuple[list[GroupConsole], str]:
         """获取群组列表"""
-        return await PlatformUtils.get_group_list(bot)
+        return await GroupUtils.get_group_list(bot)
 
     @classmethod
     async def send(

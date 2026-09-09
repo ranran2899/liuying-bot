@@ -17,6 +17,7 @@ from liuying.configs.config import BotConfig, Config
 from liuying.configs.path_config import DATA_PATH
 from liuying.utils.log import logger
 from liuying.utils.platform import PlatformUtils
+from liuying.utils.platform.user import UserUtils
 
 from .base_model import SystemFolderSize, SystemStatus, User
 
@@ -252,7 +253,7 @@ async def _get_onebot_info(bot: Bot, default_id: str) -> tuple[str, str]:
             logger.warning("调用接口get_login_info失败", command="WebUi", e=e)
     try:
         ava_url = (
-            PlatformUtils.get_user_avatar_url(
+            UserUtils.get_user_avatar_url(
                 default_id, "qq", BotConfig.get_qbot_uid(default_id)
             )
             or ""

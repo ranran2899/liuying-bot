@@ -11,10 +11,16 @@ from nonebot_plugin_alconna.uniseg import UniMessage
 from liuying.models._group import GroupConfig, GroupConsole
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
+from liuying.utils.platform.group import GroupUtils
 from liuying.utils.platform.helper import PlatformUtils
 
 
 class BroadcastEngine:
+    """
+    广播引擎
+    
+    用于发送消息到指定群聊或所有群聊或指定bot或所有bot或指定平台或所有平台的bot
+    """
     def __init__(
         self,
         message: str | UniMessage,
@@ -130,7 +136,7 @@ class BroadcastEngine:
         for bot in self.bot_list:
             if self.platform and self.platform != PlatformUtils.get_platform(bot):
                 continue
-            group_list, _ = await PlatformUtils.get_group_list(bot)
+            group_list, _ = await GroupUtils.get_group_list(bot)
             if not group_list:
                 continue
             for group in group_list:
