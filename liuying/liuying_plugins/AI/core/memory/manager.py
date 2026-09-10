@@ -7,6 +7,8 @@
 """
 
 import asyncio
+from collections.abc import Coroutine
+from typing import Any
 
 from liuying.utils.log import logger
 
@@ -23,6 +25,15 @@ from .consolidation import MemoryConsolidationService
 from .embedding_service import EmbeddingService
 from .evolves import MemoryEvolveService
 from .recall import MemoryRecallService
+
+_BG_SEMAPHORE = asyncio.Semaphore(4)
+"""后台任务并发信号量
+
+限制记忆进化与后台智能任务的总并发数为 4：
+每次 add 都会派生两个后台 Task（evolve 与
+background_intelligence），高频写入时若无上限会
+造成任务无限堆积，拖垮事件循环并放大 LLM 调用压力。
+"""
 
 
 class MemoryManager:
@@ -172,29 +183,54 @@ class MemoryManager:
         # 持有Task强引用防止被GC回收导致任务静默取消
         if get_config("MEMORY_EVOLVE_ENABLED", True):
             evolve_task = asyncio.create_task(
-                self._safe_evolve(
-                    user_id=user_id,
-                    new_memory_id=memory.id,
-                    new_summary=use_summary,
-                    group_id=group_id,
-                    persona_name=persona_name,
+                self._run_bg_limited(
+                    self._safe_evolve(
+                        user_id=user_id,
+                        new_memory_id=memory.id,
+                        new_summary=use_summary,
+                        group_id=group_id,
+                        persona_name=persona_name,
+                    )
                 )
             )
             self._bg_tasks.add(evolve_task)
             evolve_task.add_done_callback(self._bg_tasks.discard)
             # 后台智能：防抖触发去重/晶体化
             bg_task = asyncio.create_task(
-                background_intelligence.notify_memory_added(
-                    user_id=user_id,
-                    memory_id=memory.id,
-                    summary=use_summary,
-                    group_id=group_id,
-                    persona_name=persona_name,
+                self._run_bg_limited(
+                    background_intelligence.notify_memory_added(
+                        user_id=user_id,
+                        memory_id=memory.id,
+                        summary=use_summary,
+                        group_id=group_id,
+                        persona_name=persona_name,
+                    )
                 )
             )
             self._bg_tasks.add(bg_task)
             bg_task.add_done_callback(self._bg_tasks.discard)
         return memory.id
+
+    @staticmethod
+    async def _run_bg_limited(
+        coro: Coroutine[Any, Any, None],
+    ) -> None:
+        """在信号量限流下执行后台协程
+
+        通过 _BG_SEMAPHORE 限制后台任务总并发数，
+        防止高频写入时任务堆积拖垮事件循环。
+        同时兜底吞掉协程异常，避免未检索的 Task 异常告警。
+
+        参数:
+            coro: 待执行的后台协程
+        """
+        async with _BG_SEMAPHORE:
+            try:
+                await coro
+            except Exception as e:
+                logger.debug(
+                    f"后台任务执行失败: {e}", command="AI", e=e
+                )
 
     async def _safe_evolve(
         self,
@@ -366,7 +402,9 @@ class MemoryManager:
     async def clear_all_memory(self) -> int:
         """清空所有用户所有人格的记忆数据（管理员操作）
 
-        同时清理数据库记忆项、搜索索引与全局搜索表。
+        同时清理数据库记忆项与全部搜索索引表。
+        仅清空检索索引表，保留 kb_entries 业务表
+        （clear_all 默认 clear_entries=False）。
 
         返回:
             int: 清除的记忆数量

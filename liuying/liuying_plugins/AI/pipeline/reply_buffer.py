@@ -42,12 +42,10 @@ class _BufferEntry:
     Attributes:
         texts: 已缓冲的文本列表
         flushed: 是否已flush（窗口期已结束）
-        first_message_id: 第一条消息的ID（用于引用回复等）
     """
 
     texts: list[str] = field(default_factory=list)
     flushed: bool = False
-    first_message_id: int | None = None
 
 
 class ReplyBuffer:
@@ -86,7 +84,6 @@ class ReplyBuffer:
         session_key: str,
         text: str,
         is_private: bool,
-        message_id: int | None = None,
     ) -> str | None:
         """提交消息到缓冲区
 
@@ -100,7 +97,6 @@ class ReplyBuffer:
             session_key: 会话标识（如 user_id 或 group_id:user_id）
             text: 消息文本
             is_private: 是否私聊
-            message_id: 消息ID（用于记录首条消息）
 
         返回:
             str | None: 合并后的文本（仅首条消息返回），
@@ -111,12 +107,19 @@ class ReplyBuffer:
             # 后续消息：追加到缓冲区（list.append是原子操作）
             if len(entry.texts) < _MAX_BUFFER_ITEMS:
                 entry.texts.append(text)
+            else:
+                # 缓冲已满：记录warning后丢弃，防止恶意刷屏撑爆合并文本
+                logger.warning(
+                    f"消息批量缓冲已满，丢弃消息: "
+                    f"session={session_key} max={_MAX_BUFFER_ITEMS}",
+                    command="AI",
+                )
             return None
 
         # 第一条消息：创建缓冲区并等待窗口期
         # 此时无await点，后续协程不会在此插入
         return await self._create_and_wait(
-            session_key, text, is_private, message_id
+            session_key, text, is_private
         )
 
     async def _create_and_wait(
@@ -124,7 +127,6 @@ class ReplyBuffer:
         session_key: str,
         text: str,
         is_private: bool,
-        message_id: int | None,
     ) -> str:
         """创建缓冲区条目并等待窗口期
 
@@ -132,15 +134,11 @@ class ReplyBuffer:
             session_key: 会话标识
             text: 首条消息文本
             is_private: 是否私聊
-            message_id: 首条消息ID
 
         返回:
             str: 窗口期结束后合并的文本
         """
-        entry = _BufferEntry(
-            texts=[text],
-            first_message_id=message_id,
-        )
+        entry = _BufferEntry(texts=[text])
         self._buffers[session_key] = entry
 
         window = self._get_window(is_private)
@@ -158,28 +156,15 @@ class ReplyBuffer:
         # 窗口期结束，收集合并文本
         entry.flushed = True
         combined_texts = list(entry.texts)
-        first_message_id = entry.first_message_id
 
         combined = "\n".join(t for t in combined_texts if t)
         if len(combined_texts) > 1:
             logger.debug(
                 f"消息批量缓冲合并: session={session_key} "
-                f"count={len(combined_texts)} "
-                f"first_msg_id={first_message_id}",
+                f"count={len(combined_texts)}",
                 command="AI",
             )
         return combined
-
-    def clear(self, session_key: str | None = None) -> None:
-        """清理缓冲区
-
-        参数:
-            session_key: 指定会话标识，None时清理全部
-        """
-        if session_key is None:
-            self._buffers.clear()
-        else:
-            self._buffers.pop(session_key, None)
 
 
 reply_buffer = ReplyBuffer()

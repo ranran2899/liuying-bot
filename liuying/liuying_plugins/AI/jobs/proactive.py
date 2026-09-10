@@ -7,7 +7,9 @@
 """
 
 from datetime import datetime, timedelta
+import random
 
+from nonebot import get_bot
 from nonebot_plugin_alconna import Target
 
 from liuying.models._user.user_info import UserInfo
@@ -70,6 +72,10 @@ class ProactiveHelper:
 
         if not groups:
             return
+
+        # 随机化遍历顺序，避免列表头部群长期占用每日配额，
+        # 导致尾部群始终先被 daily_limit break 饿死
+        random.shuffle(groups)
 
         for group_id, style, last_active in groups:
             if sent_count >= daily_limit:
@@ -196,11 +202,10 @@ class ProactiveHelper:
             message: 消息内容
         """
         try:
-            target = Target(
-                id=group_id, parent="", channel=False
-            )
+            bot = get_bot()
+            target = Target(id=str(group_id), private=False)
             await MessageUtils.build_message(message).send(
-                target=target
+                target=target, bot=bot
             )
             await context_manager.update_group_activity(group_id)
             logger.info(

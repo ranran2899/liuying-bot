@@ -186,7 +186,6 @@ def build_sticker_tools(runtime: Any) -> list[AgentTool]:
             intent_tags=[INTENT_TAG_IMAGE, INTENT_TAG_LOCAL],
             latency_class=LATENCY_CLASS_FAST,
             evidence_kind=EVIDENCE_KIND_TOOL,
-            per_session_quota=2,
         ),
         AgentTool(
             name="search_sticker",

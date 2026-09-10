@@ -43,6 +43,9 @@ _PROACTIVE_POKE_FAVOR_THRESHOLD = 5
 _PROACTIVE_POKE_DAILY_LIMIT = 3
 """主动拍一拍每日上限"""
 
+_TEXT_LENGTH_LIMIT = 100
+"""社交文案长度上限（字符）"""
+
 
 _FESTIVAL_MAP: dict[str, str] = {
     "01-01": "元旦",
@@ -67,11 +70,12 @@ class SocialIntelligenceHelper:
     def _parse_group_style(style_raw: str | None) -> str:
         """解析群风格为prompt文本
 
-        兼容两种存储格式：profile.py 写入的JSON对象，
-        与 group_style_autobuild 写入的纯文本摘要。
+        style 字段为 profile.py 与 autobuild 统一写入的 JSON 对象
+        （键名: tone/pace/catchphrases/taboos/typical_length），
+        解析失败或非 dict 时视为未设置。
 
         参数:
-            style_raw: 群风格原始字符串
+            style_raw: 群风格JSON字符串
 
         返回:
             str: prompt文本，空串表示未设置
@@ -84,7 +88,26 @@ class SocialIntelligenceHelper:
                 return ProfileToolkit.build_group_style_prompt_block(data)
         except (json.JSONDecodeError, TypeError):
             pass
-        return f"群风格: {style_raw.strip()}"
+        return ""
+
+    @staticmethod
+    def _truncate_text(text: str, limit: int = _TEXT_LENGTH_LIMIT) -> str:
+        """文案超长时截断并追加省略号
+
+        参数:
+            text: 原始文案
+            limit: 长度上限（字符）
+
+        返回:
+            str: 未超长返回原文，超长返回前limit字加省略号
+        """
+        if len(text) <= limit:
+            return text
+        logger.debug(
+            f"社交文案超长({len(text)}字)，截断到{limit}字后发送",
+            command="AI",
+        )
+        return text[:limit] + "…"
 
     @staticmethod
     async def _generate_and_send_to_groups(
@@ -137,8 +160,11 @@ class SocialIntelligenceHelper:
                     ROLE_WARMUP
                 ).apply_to_options(),
             )
-            if not shared_text or len(shared_text) >= 100:
+            if not shared_text:
                 return 0
+            shared_text = (
+                SocialIntelligenceHelper._truncate_text(shared_text)
+            )
 
         sent = 0
         for group in groups:
@@ -176,8 +202,11 @@ class SocialIntelligenceHelper:
                             ROLE_WARMUP
                         ).apply_to_options(),
                     )
-                    if not text or len(text) >= 100:
+                    if not text:
                         continue
+                    text = (
+                        SocialIntelligenceHelper._truncate_text(text)
+                    )
 
                 # 社交门控：LLM二次判断是否适合发送
                 if gate_enabled:
@@ -243,7 +272,6 @@ class SocialIntelligenceHelper:
             logger.debug(
                 f"发送群消息失败 {group_id}: {e}",
                 command="AI",
-                e=e,
             )
 
     @staticmethod

@@ -120,24 +120,34 @@ class KnowledgeBase(KnowledgeRetrieverMixin):
         await self._conn.db.commit()
 
     @KbConnectionManager.with_write_lock
-    async def clear_all(self) -> None:
-        """清空所有知识库表数据
+    async def clear_all(self, clear_entries: bool = False) -> None:
+        """清空知识库索引表数据
 
-        谨慎使用：仅用于重置场景。
+        默认仅清空检索索引表（FTS/向量/嵌入/实体/关系），
+        保留 kb_entries 业务表，供记忆系统等索引类调用方安全使用；
+        clear_entries=True 时连带清空业务表，用于完全重置场景。
+
+        参数:
+            clear_entries: 是否连带清空 kb_entries 业务表
         """
         db = self._conn.db
-        for table in (
-            "kb_entries",
+        tables = [
             "kb_fts_idx",
             "kb_fts_text",
             "kb_embeddings",
             "kb_vector_chunks",
             "kb_entities",
             "kb_relations",
-        ):
+        ]
+        if clear_entries:
+            tables.append("kb_entries")
+        for table in tables:
             await db.execute(f"DELETE FROM {table}")
         await db.commit()
-        logger.warning("已清空所有知识库表数据", command=_LOG_CMD)
+        logger.warning(
+            f"已清空知识库索引表数据 clear_entries={clear_entries}",
+            command=_LOG_CMD,
+        )
 
     # ---------- 内部辅助方法 ----------
 

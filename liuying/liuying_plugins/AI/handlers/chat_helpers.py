@@ -1,7 +1,6 @@
 """对话matcher辅助工具
 
-提供用户AI对话开关状态管理器与图片描述提取、
-回复发送、群禁言notice注册等辅助能力。
+提供图片描述提取、回复发送、群禁言notice注册等辅助能力。
 """
 
 import asyncio
@@ -22,50 +21,7 @@ from ..core.vision import summarize_image
 
 __all__ = [
     "ChatMatchersHelper",
-    "_ai_user_states",
 ]
-
-
-class _AIUserStateManager:
-    """用户AI对话开关状态管理器
-
-    线程安全地管理用户级AI对话开关状态。
-    """
-
-    def __init__(self) -> None:
-        """初始化状态管理器
-
-        仅记录被关闭的用户，默认启用，从而保证字典规模
-        仅随禁用用户数增长而非全体用户数，避免长期运行膨胀。
-        """
-        self._states: dict[str, bool] = {}
-
-    def is_enabled(self, user_id: str) -> bool:
-        """检查用户AI对话是否启用
-
-        参数:
-            user_id: 用户ID
-
-        返回:
-            bool: 是否启用
-        """
-        return not self._states.get(user_id, False)
-
-    def set_state(self, user_id: str, enabled: bool) -> None:
-        """设置用户AI对话开关状态
-
-        参数:
-            user_id: 用户ID
-            enabled: 是否启用
-        """
-        if enabled:
-            self._states.pop(user_id, None)
-        else:
-            self._states[user_id] = True
-
-
-_ai_user_states = _AIUserStateManager()
-"""用户AI对话开关状态单例"""
 
 
 class ChatMatchersHelper:

@@ -279,48 +279,43 @@ class StickerItem(Model):
         semantic_tags: list[str] | None = None,
         description: str | None = None,
     ) -> None:
-        """更新表情包标签
+        """更新表情包标签（原子UPDATE）
 
         参数:
             item_id: 表情包ID
-            mood_tags: 情绪标签
-            semantic_tags: 语义标签
-            description: 描述
+            mood_tags: 情绪标签（None时保持不变）
+            semantic_tags: 语义标签（None时保持不变）
+            description: 描述（None时保持不变）
         """
-        item = await cls.filter(id=item_id).first()
-        if not item:
-            return
-        update_fields: list[str] = ["update_time"]
+        values: dict[str, Any] = {
+            "update_time": datetime.now(),
+        }
         if mood_tags is not None:
-            item.mood_tags = json.dumps(mood_tags, ensure_ascii=False)
-            update_fields.append("mood_tags")
+            values["mood_tags"] = json.dumps(
+                mood_tags, ensure_ascii=False
+            )
         if semantic_tags is not None:
-            item.semantic_tags = json.dumps(
+            values["semantic_tags"] = json.dumps(
                 semantic_tags, ensure_ascii=False
             )
-            update_fields.append("semantic_tags")
         if description is not None:
-            item.description = description
-            update_fields.append("description")
-        item.update_time = datetime.now()
-        await item.save(update_fields=update_fields)
+            values["description"] = description
+        await cls.filter(id=item_id).update(**values)
 
     @classmethod
     async def set_disabled(
         cls, item_id: int, disabled: bool
     ) -> None:
-        """设置禁用状态
+        """设置禁用状态（原子UPDATE）
 
         参数:
             item_id: 表情包ID
             disabled: 是否禁用
         """
-        item = await cls.filter(id=item_id).first()
-        if not item:
-            return
-        item.is_disabled = disabled
-        item.update_time = datetime.now()
-        await item.save(update_fields=["is_disabled", "update_time"])
+        await cls.filter(id=item_id).update(
+            is_disabled=disabled,
+            update_time=datetime.now(),
+        )
 
     def get_mood_tags(self) -> list[str]:
         """解析情绪标签

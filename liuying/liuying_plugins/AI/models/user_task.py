@@ -105,10 +105,18 @@ class UserTask(Model):
 
         为旧表补齐 is_paused 列，兼容 SQLite/MySQL/PostgreSQL。
         若列已存在，ADD COLUMN 会失败并被捕获回滚，安全幂等。
+        随后按 (user_id, task_no) 去重旧数据（保留最小 id）并
+        补建唯一索引，从数据库层面拦截并发分配相同任务序号的竞态。
         """
         return [
             "ALTER TABLE ai_user_task "
             "ADD COLUMN is_paused BOOLEAN DEFAULT 0;",
+            "DELETE FROM ai_user_task WHERE id NOT IN ("
+            "SELECT MIN(id) FROM ai_user_task "
+            "GROUP BY user_id, task_no)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "idx_ai_user_task_user_no "
+            "ON ai_user_task (user_id, task_no)",
         ]
 
     @classmethod
@@ -120,6 +128,9 @@ class UserTask(Model):
 
         返回:
             int: 下一个任务序号（从1开始）
+
+        异常:
+            ValueError: 任务序号已达上限，需先取消旧任务
         """
         last = await (
             cls.filter(user_id=user_id)
@@ -128,7 +139,9 @@ class UserTask(Model):
         )
         if last is None:
             return 1
-        return min(last.task_no + 1, _MAX_TASK_NO)
+        if last.task_no >= _MAX_TASK_NO:
+            raise ValueError("任务序号已达上限，请先取消旧任务")
+        return last.task_no + 1
 
     @classmethod
     async def get_by_no(

@@ -2,6 +2,8 @@
 
 定时分析群聊历史记录，用LLM推断群组风格特征，
 自动更新 GroupContextSnapshot.style 字段。
+落库为 JSON 对象，键名与 core/group/profile.py 写入方
+保持一致，读取方无需兼容纯文本格式。
 
 分析维度：
 - 语言风格（正式/休闲/玩梗/技术向等）
@@ -13,6 +15,7 @@
 """
 
 from datetime import datetime, timedelta
+import json
 
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
@@ -39,13 +42,15 @@ async def _analyze_group_style(
     """分析群组风格
 
     从 ConversationRecord 采样群组最近的user消息，
-    用LLM推断群组风格特征，返回风格描述文本。
+    用LLM推断群组风格特征，返回风格JSON字符串。
 
     参数:
         group_id: 群组ID
 
     返回:
-        str: 风格描述文本，分析失败返回空串
+        str: 风格JSON字符串，键名与 profile.py 写入方一致
+            （tone/pace/catchphrases/taboos/typical_length），
+            分析失败返回空串
     """
     # 采样最近24小时的群聊user消息
     since = datetime.now() - timedelta(hours=24)
@@ -105,24 +110,37 @@ async def _analyze_group_style(
         data = extract_json_payload(response)
         if data is None:
             return ""
-        # 构建风格描述文本
-        parts: list[str] = []
+        # 解析LLM返回的五个字段（prompt与解析逻辑保持不变）
         language_style = str(data.get("language_style", "")).strip()
         topic = str(data.get("topic_preference", "")).strip()
         atmosphere = str(data.get("atmosphere", "")).strip()
         pace = str(data.get("pace", "")).strip()
         summary = str(data.get("summary", "")).strip()
+        # 映射为 profile.py 统一的群风格 JSON 键名：
+        # tone/pace/catchphrases/taboos/typical_length。
+        # autobuild 无口头禅/禁忌/句长维度，对应字段置空；
+        # 话题偏好与群氛围并入 tone，总结追加在 tone 末尾
+        tone_parts: list[str] = []
         if language_style:
-            parts.append(f"语言风格: {language_style}")
+            tone_parts.append(language_style)
         if topic:
-            parts.append(f"话题偏好: {topic}")
+            tone_parts.append(f"话题偏{topic}")
         if atmosphere:
-            parts.append(f"群氛围: {atmosphere}")
-        if pace:
-            parts.append(f"交流节奏: {pace}")
+            tone_parts.append(f"氛围{atmosphere}")
         if summary:
-            parts.append(f"总结: {summary}")
-        return " | ".join(parts) if parts else ""
+            tone_parts.append(summary)
+        if not tone_parts and not pace:
+            return ""
+        return json.dumps(
+            {
+                "tone": "，".join(tone_parts),
+                "pace": pace,
+                "catchphrases": [],
+                "taboos": [],
+                "typical_length": "",
+            },
+            ensure_ascii=False,
+        )
     except Exception as e:
         logger.warning(
             f"群 {group_id} 风格分析失败: {e}",

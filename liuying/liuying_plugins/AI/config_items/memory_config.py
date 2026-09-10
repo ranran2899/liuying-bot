@@ -46,8 +46,9 @@ MEMORY_CONFIGS: list[RegisterConfig] = [
     # ===== 知识检索查询改写 =====
     cfg(
         "KNOWLEDGE_QUERY_REWRITE_ENABLED",
-        True,
-        "是否启用检索查询改写（LLM识别梗/黑话/缩写补出正式名）",
+        False,
+        "是否启用检索查询改写（LLM识别梗/黑话/缩写补出正式名；"
+        "位于消息热路径会叠加一次LLM调用延迟，仅深度召回场景建议开启）",
         bool,
     ),
     # ===== LLM嵌入模型 =====

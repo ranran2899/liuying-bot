@@ -11,6 +11,7 @@ from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 
+from .agent.mcp_bridge import mcp_bridge
 from .agent.tools import (  # 公开API供第三方注册工具
     AgentTool,
     register_external_tool,
@@ -78,11 +79,7 @@ __plugin_meta__ = PluginMetadata(
             ),
             Command(
                 command="我的画像",
-                description="查看用户画像",
-            ),
-            Command(
-                command="bot记忆",
-                description="查看AI记忆摘要",
+                description="查看你的用户画像",
             ),
             Command(
                 command="清空对话历史",
@@ -123,7 +120,6 @@ __plugin_meta__ = PluginMetadata(
         """,
     ).to_dict(),
 )
-
 @PriorityLifecycle.on_startup(priority=20)
 async def _init_ai_plugin() -> None:
     """AI插件初始化
@@ -171,10 +167,19 @@ async def _init_ai_plugin() -> None:
         f"AI技能包已加载，注册工具{tool_count}个", command="AI"
     )
 
+    # 注册MCP远程工具（涉及子进程通信，需在异步上下文中执行）
+    mcp_count = await skill_loader.register_mcp_tools()
+    if mcp_count:
+        logger.debug(
+            f"MCP远程工具已注册{mcp_count}个", command="AI"
+        )
+
 
 @PriorityLifecycle.on_shutdown(priority=5)
 async def _shutdown_ai_plugin() -> None:
     """AI插件关闭清理
     """
+    # 关闭MCP连接池，释放全部子进程
+    await mcp_bridge.close()
     await token_ledger.prune_old(days=1)
     logger.info("AI插件已关闭", command="AI")

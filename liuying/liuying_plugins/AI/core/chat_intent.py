@@ -107,7 +107,14 @@ class SemanticFrameInferrer:
                 conversation_scenario="daily",
             )
 
-        if any(kw in text for kw in ["你好", "早", "晚上好", "嗨", "hi"]):
+        # 「早」类问候需精确匹配（等于「早」或以其扩展词开头），
+        # 避免「一大早」「早知道」等含「早」文本被误判为问候
+        early_greeting = text == "早" or text.startswith(
+            ("早安", "早呀", "早啊", "早上好", "早好", "早~")
+        )
+        if early_greeting or any(
+            kw in text for kw in ["你好", "晚上好", "嗨", "hi"]
+        ):
             return TurnSemanticFrame(
                 chat_intent="small_talk",
                 conversation_scenario="greeting",

@@ -273,6 +273,5 @@ def build_search_tools(runtime: Any) -> list[AgentTool]:
             requires_network=True,
             requires_image=True,
             evidence_kind=EVIDENCE_KIND_TOOL,
-            per_session_quota=2,
         )
     ]

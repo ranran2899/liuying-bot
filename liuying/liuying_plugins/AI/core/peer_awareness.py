@@ -13,17 +13,29 @@ from liuying.utils.log import logger
 
 from ..config import get_config
 
-_BOT_NAME_HINTS: tuple[str, ...] = (
-    "bot",
+_CJK_BOT_NAME_HINTS: tuple[str, ...] = (
     "机器人",
     "助手",
     "小助手",
     "管家",
-    "酱",
-    "chan",
-    "kun",
 )
-"""其他bot名称提示词"""
+"""CJK多字提示词（子串匹配）
+
+单字提示词（如「酱」）已移除：会把「番茄酱」等普通用户
+昵称误判为 bot，触发 30 秒群静默。
+"""
+
+_ASCII_HINT_RE: re.Pattern[str] = re.compile(
+    r"(?:^|[^a-z])(?:bot|chan|kun)(?:[^a-z]|$)",
+    re.IGNORECASE,
+)
+"""ASCII提示词（bot/chan/kun）词边界正则
+
+需作为独立词出现才命中（首尾或两侧为非字母），
+避免子串误伤普通昵称（如 Chandler 含 chan、
+kunlun 含 kun）。IGNORECASE 下 [^a-z] 同时排除
+大小写字母，即完整词边界语义。
+"""
 
 _BOT_MESSAGE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^\[AI\]"),
@@ -201,6 +213,12 @@ class PeerAwareness:
     ) -> bool:
         """启发式判断是否为bot消息
 
+        昵称匹配分两类：
+        - CJK多字提示词（机器人/助手/管家）按子串匹配；
+        - ASCII提示词（bot/chan/kun）按词边界匹配，
+          避免误伤 Chandler（chan 子串）、kunlun（kun 子串）
+          等普通昵称；单字「酱」已移除，避免误伤「番茄酱」。
+
         参数:
             text: 消息文本
             nickname: 用户昵称
@@ -214,10 +232,11 @@ class PeerAwareness:
             if pattern.search(text):
                 return True
         if nickname:
-            nickname_lower = nickname.lower()
-            for hint in _BOT_NAME_HINTS:
-                if hint.lower() in nickname_lower:
+            for hint in _CJK_BOT_NAME_HINTS:
+                if hint in nickname:
                     return True
+            if _ASCII_HINT_RE.search(nickname):
+                return True
         return False
 
     def _record_peer(
@@ -230,7 +249,7 @@ class PeerAwareness:
 
         参数:
             user_id: bot用户ID
-            group_id: 群组ID
+            group_id: 所在群组ID
             name: bot名称
         """
         key = f"{user_id}|{group_id}"

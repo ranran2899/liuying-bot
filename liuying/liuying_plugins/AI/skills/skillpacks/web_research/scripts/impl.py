@@ -291,5 +291,4 @@ def build_research_tool(runtime: Any) -> AgentTool:
         latency_class=LATENCY_CLASS_SLOW,
         requires_network=True,
         evidence_kind=EVIDENCE_KIND_TOOL,
-        per_session_quota=2,
     )

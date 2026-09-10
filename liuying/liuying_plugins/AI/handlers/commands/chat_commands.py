@@ -22,7 +22,7 @@ from ...core.target_inference import MessageTarget, target_inference
 from ...core.tools import MessageExtractor
 from ...pipeline.processor import ReplyResult, reply_processor
 from ...pipeline.reply_buffer import reply_buffer
-from ..chat_helpers import ChatMatchersHelper, _ai_user_states
+from ..chat_helpers import ChatMatchersHelper
 
 __all__ = ["setup_chat_commands"]
 
@@ -99,8 +99,6 @@ def setup_chat_commands() -> None:
             return
 
         user_id = session.user.id
-        if not _ai_user_states.is_enabled(user_id):
-            return
 
         group_id = (
             session.scene.id if session.scene.is_group else None
@@ -166,7 +164,7 @@ def setup_chat_commands() -> None:
         label = "AI私聊消息" if is_private else "AI@消息"
         logger.info(
             f"{label}: {text[:50]}",
-            command="流萤",
+            command="AI",
             session=session,
         )
 
@@ -181,7 +179,6 @@ def setup_chat_commands() -> None:
                 session_key=session_key,
                 text=text,
                 is_private=is_private,
-                message_id=getattr(event, "message_id", None),
             )
             if combined is None:
                 # 已被合并到前一条消息，跳过处理

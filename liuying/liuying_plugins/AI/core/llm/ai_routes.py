@@ -29,7 +29,7 @@
 工作流程：
 1. 从配置加载 CLI 路由列表，按 priority 排序
 2. 依次尝试每个路由，通过子进程调用 CLI 工具
-3. use_stdin=True 时通过 stdin 传递 prompt，否则追加到命令末尾
+3. 用户消息一律通过 stdin 传递（安全策略，防止命令行注入）
 4. 读取 stdout 作为响应文本
 5. 首个成功响应即返回，失败则尝试下一个路由
 """
@@ -37,6 +37,7 @@
 import asyncio
 from dataclasses import dataclass, field
 import json
+import time
 
 from liuying.utils.log import logger
 
@@ -51,6 +52,15 @@ __all__ = [
 _DEFAULT_TIMEOUT = 30
 """默认CLI调用超时（秒）"""
 
+_CLI_FALLBACK_BUDGET = 45.0
+"""CLI降级总预算（秒）
+
+所有HTTP provider失败后进入CLI降级分支，逐条路由串行
+尝试每路最长可达30秒，若无总预算约束，极端情况下单次
+调用会被CLI降级拖住数分钟。进入降级分支时记录起点，
+每尝试一路前检查已耗时，超出预算即放弃剩余路由。
+"""
+
 
 @dataclass(slots=True)
 class AiCliRoute:
@@ -60,7 +70,7 @@ class AiCliRoute:
         name: 路由名称（如 gemini_cli/claude_code）
         command: CLI命令列表（如 ["gemini"]）
         args: 命令参数列表（如 ["--prompt"]）
-        use_stdin: 是否通过stdin传递prompt
+        use_stdin: 是否通过stdin传递prompt（加载时强制为True）
         timeout: 调用超时（秒）
         priority: 优先级（数字越小越优先）
     """
@@ -132,12 +142,21 @@ class AiCliRouter:
             args = item.get("args", [])
             if isinstance(args, str):
                 args = [args]
+            # 安全策略：用户消息一律通过stdin传递，防止消息
+            # 内容拼入命令行参数造成注入或超长截断，配置中的
+            # use_stdin=False 会被强制覆盖为True
+            if not bool(item.get("use_stdin", True)):
+                logger.warning(
+                    f"CLI路由 {name} 配置 use_stdin=False，"
+                    "已强制改为 stdin 传递用户消息",
+                    command="AI",
+                )
             routes.append(
                 AiCliRoute(
                     name=name,
                     command=[str(c) for c in command],
                     args=[str(a) for a in args],
-                    use_stdin=bool(item.get("use_stdin", True)),
+                    use_stdin=True,
                     timeout=int(item.get("timeout", _DEFAULT_TIMEOUT)),
                     priority=int(item.get("priority", 100)),
                 )
@@ -168,8 +187,8 @@ class AiCliRouter:
         """通过CLI路由调用AI
 
         按优先级依次尝试每个路由，首个成功响应即返回。
-        use_stdin=True 时将完整prompt通过stdin传递，
-        否则将prompt追加到命令末尾。
+        整个降级过程受 _CLI_FALLBACK_BUDGET 总预算约束，
+        超出预算后放弃剩余路由，避免调用方被长时间阻塞。
 
         参数:
             prompt: 调用prompt（已格式化的完整文本）
@@ -194,7 +213,17 @@ class AiCliRouter:
                 parts.append(f"[{role}] {content}")
             full_prompt = "\n".join(parts)
 
-        for route in routes:
+        # 记录降级分支起点，用于总预算检查
+        budget_start = time.monotonic()
+        for idx, route in enumerate(routes):
+            # 每尝试一路前检查剩余预算，耗尽则放弃剩余路由
+            if time.monotonic() - budget_start >= _CLI_FALLBACK_BUDGET:
+                logger.warning(
+                    f"CLI降级总预算 {_CLI_FALLBACK_BUDGET}s 已耗尽，"
+                    f"放弃剩余 {len(routes) - idx} 条路由",
+                    command="AI",
+                )
+                break
             try:
                 result = await self._call_route(route, full_prompt)
                 if result:

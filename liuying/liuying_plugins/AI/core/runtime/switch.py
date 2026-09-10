@@ -25,7 +25,6 @@ __all__ = [
     "runtime_switch",
 ]
 
-
 _MODULE = "AI"
 """配置模块名"""
 
@@ -256,7 +255,12 @@ class RuntimeSwitchManager:
                 return False
             self._global_state[feature] = enabled
             if persist:
-                self._save_to_config(feature, enabled)
+                if not self._save_to_config(feature, enabled):
+                    logger.warning(
+                        f"功能 {feature} 无配置映射，开关仅写入内存，"
+                        f"重启后将失效",
+                        command="AI",
+                    )
             logger.info(
                 f"全局开关 {feature}={enabled}",
                 command="AI",

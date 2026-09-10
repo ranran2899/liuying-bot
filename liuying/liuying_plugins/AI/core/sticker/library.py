@@ -6,6 +6,7 @@
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 import random
 
@@ -219,34 +220,46 @@ class StickerLibrary:
         ).first()
 
     async def get_stats(self) -> LibraryStats:
-        """获取库统计
+        """获取库统计（SQL聚合，避免加载ORM对象）
+
+        total/active/total_usage/by_source 均走数据库聚合；
+        by_mood 因 mood_tags 为JSON数组文本列无法纯SQL分组，
+        仅拉取该轻量列后在Python侧解析计数。
 
         返回:
             LibraryStats: 统计结果
         """
-        all_items = await StickerItem.filter().limit(5000).all()
-        stats = LibraryStats(
-            total=len(all_items),
-            active=sum(
-                1 for it in all_items if not it.is_disabled
-            ),
-            disabled=sum(
-                1 for it in all_items if it.is_disabled
-            ),
-            total_usage=sum(
-                it.usage_count for it in all_items
-            ),
+        total = await StickerItem.filter().count()
+        active = await StickerItem.filter(
+            is_disabled=False
+        ).count()
+        total_usage = int(
+            await StickerItem.filter().sum("usage_count") or 0
         )
-        by_mood: dict[str, int] = defaultdict(int)
-        by_source: dict[str, int] = defaultdict(int)
-        for it in all_items:
-            for mood in it.get_mood_tags():
-                by_mood[mood] += 1
-            by_source[it.source] = (
-                by_source.get(it.source, 0) + 1
-            )
+        by_source = dict(
+            await StickerItem.filter().group_count("source")
+        )
+        stats = LibraryStats(
+            total=total,
+            active=active,
+            disabled=total - active,
+            total_usage=total_usage,
+            by_source=by_source,
+        )
+
+        by_mood: defaultdict[str, int] = defaultdict(int)
+        mood_columns = await StickerItem.filter().values_list(
+            "mood_tags", flat=True
+        )
+        for raw_tags in mood_columns:
+            try:
+                tags = json.loads(raw_tags or "[]")
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for tag in tags:
+                if tag:
+                    by_mood[str(tag)] += 1
         stats.by_mood = dict(by_mood)
-        stats.by_source = dict(by_source)
         return stats
 
     async def set_disabled(

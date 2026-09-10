@@ -265,7 +265,6 @@ def build_vision_tools(runtime: Any) -> list[AgentTool]:
             requires_network=True,
             requires_image=True,
             evidence_kind=EVIDENCE_KIND_TOOL,
-            per_session_quota=4,
         ),
         AgentTool(
             name="analyze_images",
@@ -297,6 +296,5 @@ def build_vision_tools(runtime: Any) -> list[AgentTool]:
             requires_network=True,
             requires_image=True,
             evidence_kind=EVIDENCE_KIND_TOOL,
-            per_session_quota=2,
         ),
     ]

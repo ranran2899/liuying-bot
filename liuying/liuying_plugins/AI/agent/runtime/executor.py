@@ -280,7 +280,7 @@ class ToolExecutor:
 
         参数:
             tool: 工具实例
-            args: 原始参数字典
+            args: 原始参数
 
         返回:
             dict[str, Any]: 仅包含合法键的参数字典
@@ -694,7 +694,7 @@ class ToolExecutor:
             budget: 时间预算（秒）
 
         返回:
-            list[ToolCallRecord]: 调用记录列表
+            list[ToolCallRecord]: 调用记录
         """
         base_args = dict(plan.tool_args or {})
         picked = self._pick_parallel_tools(plan, base_args)
@@ -733,6 +733,8 @@ class ToolExecutor:
 
         可重试工具（RETRYABLE_LOOKUP_TOOLS）返回空结果时，
         生成查询变体重试，最多 _MAX_QUERY_VARIANTS 次。
+        每个变体以 retries=0 执行，避免变体重试与 execute
+        内部默认重试叠加放大网络调用次数。
         非可重试工具直接执行一次。
 
         参数:
@@ -771,10 +773,13 @@ class ToolExecutor:
                     f"工具 '{tool_name}' 查询变体超时"
                 )
                 break
+            # 变体循环自身已是重试语义，内部重试置0，
+            # 避免最坏 3变体 × (默认2次重试+1) 叠加成9次网络调用
             record = await self.execute(
                 tool_name=tool_name,
                 args=variant_args,
                 timeout=min(self._default_timeout, remaining),
+                retries=0,
             )
             last_record = record
             # 成功且非空结果，直接返回

@@ -235,7 +235,9 @@ class LLMHelper:
             )
             return result
         except Exception as http_err:
-            # HTTP provider全部失败，尝试CLI路由降级
+            # HTTP provider全部失败，尝试CLI路由降级。
+            # 用户消息经 ai_cli_router 内部强制以 stdin 传递
+            # （AiCliRoute.use_stdin 恒为True），不会拼入命令行参数
             cli_result = await ai_cli_router.call(
                 prompt="",
                 messages=messages,

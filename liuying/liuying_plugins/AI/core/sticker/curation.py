@@ -2,6 +2,7 @@
 
 基于情绪检测、用户反馈、群级/用户级偏好与冷却管理，
 智能选择回复表情包。反馈学习逻辑由 FeedbackLearner 承担。
+情绪关键词定义统一在 constants 模块维护。
 """
 
 import random
@@ -13,23 +14,12 @@ from liuying.services.cache import CacheDict
 from ...config import get_config
 from ...models.sticker_item import StickerItem
 from ...models.sticker_usage import StickerUsage
+from .constants import MOOD_KEYWORDS
 from .feedback import FeedbackLearner
 from .library import StickerLibrary, sticker_library
 
 _DEFAULT_COOLDOWN_SECONDS = 180
 """默认冷却时间（秒）"""
-
-_MOOD_KEYWORDS: dict[str, list[str]] = {
-    "happy": ["开心", "高兴", "快乐", "哈哈", "嘻嘻", "^_^", "好耶"],
-    "sad": ["难过", "伤心", "哭", "呜呜", "失落"],
-    "excited": ["激动", "兴奋", "太棒了", "好棒"],
-    "angry": ["生气", "愤怒", "哼", "可恶"],
-    "shy": ["害羞", "脸红", "不好意思"],
-    "calm": ["嗯", "好的", "了解", "知道", "哦"],
-    "warm": ["谢谢", "感谢", "辛苦", "温暖"],
-    "playful": ["嘿嘿", "哈哈", "逗", "玩笑"],
-}
-"""情绪关键词映射"""
 
 
 class StickerCuration:
@@ -79,12 +69,12 @@ class StickerCuration:
         """
         if hint:
             hint_lower = hint.lower()
-            for mood in _MOOD_KEYWORDS:
+            for mood in MOOD_KEYWORDS:
                 if mood in hint_lower:
                     return mood
 
         text_lower = text.lower()
-        for mood, keywords in _MOOD_KEYWORDS.items():
+        for mood, keywords in MOOD_KEYWORDS.items():
             for kw in keywords:
                 if kw in text or kw.lower() in text_lower:
                     return mood

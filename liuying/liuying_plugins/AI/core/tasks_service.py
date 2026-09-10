@@ -12,6 +12,7 @@ import json
 
 from nonebot import get_bot
 from nonebot_plugin_alconna import Target
+from sqlalchemy.exc import IntegrityError
 
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
@@ -21,6 +22,9 @@ from ..models.user_task import UserTask
 
 _TASK_GROUP = "ai_user_task"
 """用户任务调度分组"""
+
+_CREATE_MAX_RETRY = 3
+"""并发唯一索引冲突时任务创建的最大重试次数"""
 
 __all__ = ["TaskService", "task_service"]
 
@@ -106,6 +110,9 @@ class TaskService:
     ) -> UserTask:
         """创建用户定时任务
 
+        并发创建时可能命中 (user_id, task_no) 唯一索引冲突，
+        此时重新分配序号并重试，最多重试 _CREATE_MAX_RETRY 次。
+
         参数:
             user_id: 用户ID
             cron_expr: cron 表达式
@@ -117,26 +124,40 @@ class TaskService:
             UserTask: 创建的任务记录
 
         异常:
-            ValueError: cron 表达式非法
+            ValueError: cron 表达式非法、任务序号达上限
+                        或重试后仍冲突
         """
         # 验证 cron 表达式（仅校验格式，实际解析在注册时进行）
         cls._parse_cron(cron_expr)
-
-        task_no = await UserTask.next_task_no(user_id)
         params_json = json.dumps(
             {"message": message}, ensure_ascii=False
         )
-        task = await UserTask.create(
-            user_id=user_id,
-            group_id=group_id,
-            task_no=task_no,
-            description=description or message[:200],
-            cron_expr=cron_expr,
-            action="remind",
-            params_json=params_json,
-            is_active=True,
-            is_paused=False,
-        )
+
+        task: UserTask | None = None
+        conflict: IntegrityError | None = None
+        for _ in range(_CREATE_MAX_RETRY):
+            task_no = await UserTask.next_task_no(user_id)
+            try:
+                task = await UserTask.create(
+                    user_id=user_id,
+                    group_id=group_id,
+                    task_no=task_no,
+                    description=description or message[:200],
+                    cron_expr=cron_expr,
+                    action="remind",
+                    params_json=params_json,
+                    is_active=True,
+                    is_paused=False,
+                )
+                break
+            except IntegrityError as e:
+                # 并发分配到相同 task_no 命中唯一索引，
+                # 会话已回滚，重新取号后重试
+                conflict = e
+        if task is None:
+            raise ValueError(
+                "任务创建冲突，请稍后重试"
+            ) from conflict
 
         try:
             await cls._register_cron(task)
@@ -148,7 +169,7 @@ class TaskService:
             ) from e
 
         logger.info(
-            f"用户 {user_id} 创建任务 #{task_no}: {cron_expr}",
+            f"用户 {user_id} 创建任务 #{task.task_no}: {cron_expr}",
             command="AI",
         )
         return task

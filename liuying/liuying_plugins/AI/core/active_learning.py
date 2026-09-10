@@ -26,6 +26,14 @@ _MIN_CONFIDENCE_TO_RESEARCH = 0.5
 _DEFAULT_PERSONA = "default"
 """默认人格名"""
 
+_QUOTA_LOCK = asyncio.Lock()
+"""配额临界区锁
+
+保护检查-查证-写入-递增整个临界区，防止并发查证
+绕过 _check_quota 超发每日配额。每日配额仅 10 次，
+锁内 LLM 查证串行化的代价可忽略。
+"""
+
 
 @dataclass(slots=True)
 class UncertaintyAnalysis:
@@ -132,6 +140,10 @@ class ActiveLearning:
     ) -> ResearchResult | None:
         """对问题做深度查证并写入记忆
 
+        配额检查、LLM 查证、记忆写入与配额递增在
+        _QUOTA_LOCK 临界区内串行执行；配额递增移到
+        memory_manager.add 成功之后，写入失败不扣减配额。
+
         参数:
             user_id: 用户ID
             question: 查证问题
@@ -143,59 +155,61 @@ class ActiveLearning:
         """
         if not get_config("ACTIVE_LEARNING_ENABLED", False):
             return None
-        if not self._check_quota():
-            return None
-        prompt = (
-            "请对以下问题进行深度查证，给出准确的事实和来源说明。\n\n"
-            f"查证问题：{question}\n"
-            f"背景信息：{context[:300]}\n\n"
-            "要求：\n"
-            "1. 给出准确的事实陈述\n"
-            "2. 说明信息来源（如已知）\n"
-            "3. 标注置信度（0-1）\n"
-            "4. 只返回查证结果，不要其他内容"
-        )
-        try:
-            finding = await llm_helper.chat_text(
-                [{"role": "user", "content": prompt}],
-                options={"temperature": 0.3},
+        async with _QUOTA_LOCK:
+            if not self._check_quota():
+                return None
+            prompt = (
+                "请对以下问题进行深度查证，给出准确的事实和来源说明。\n\n"
+                f"查证问题：{question}\n"
+                f"背景信息：{context[:300]}\n\n"
+                "要求：\n"
+                "1. 给出准确的事实陈述\n"
+                "2. 说明信息来源（如已知）\n"
+                "3. 标注置信度（0-1）\n"
+                "4. 只返回查证结果，不要其他内容"
             )
-            finding = finding.strip()
-            if not finding:
-                return ResearchResult(
-                    question=question,
-                    finding="",
-                    confidence=0.0,
-                    success=False,
+            try:
+                finding = await llm_helper.chat_text(
+                    [{"role": "user", "content": prompt}],
+                    options={"temperature": 0.3},
                 )
-            confidence = self._estimate_confidence(finding)
-            self._increment_quota()
-            await memory_manager.add(
-                user_id=user_id,
-                content=f"查证: {question}",
-                summary=finding[:200],
-                tier="semantic",
-                salience=0.8,
-                persona_name=persona_name,
-            )
-            logger.info(
-                f"主动学习查证完成: user={user_id} "
-                f"question={question[:50]}",
-                command="AI",
-            )
-            return ResearchResult(
-                question=question,
-                finding=finding,
-                confidence=confidence,
-                success=True,
-            )
-        except Exception as e:
-            logger.warning(
-                f"主动学习查证失败: {e}",
-                command="AI",
-                e=e,
-            )
-            return None
+                finding = finding.strip()
+                if not finding:
+                    return ResearchResult(
+                        question=question,
+                        finding="",
+                        confidence=0.0,
+                        success=False,
+                    )
+                confidence = self._estimate_confidence(finding)
+                await memory_manager.add(
+                    user_id=user_id,
+                    content=f"查证: {question}",
+                    summary=finding[:200],
+                    tier="semantic",
+                    salience=0.8,
+                    persona_name=persona_name,
+                )
+                # 写入成功后才递增配额，写入失败不扣减
+                self._increment_quota()
+            except Exception as e:
+                logger.warning(
+                    f"主动学习查证失败: {e}",
+                    command="AI",
+                    e=e,
+                )
+                return None
+        logger.info(
+            f"主动学习查证完成: user={user_id} "
+            f"question={question[:50]}",
+            command="AI",
+        )
+        return ResearchResult(
+            question=question,
+            finding=finding,
+            confidence=confidence,
+            success=True,
+        )
 
     def process_reply_async(
         self,

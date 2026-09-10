@@ -2,9 +2,10 @@
 
 为每个贴纸打上心情标签和场景标签，供精准贴纸选择使用。
 18 种心情标签 + 20 种场景标签，LLM 驱动语义分析，
-分析结果缓存避免重复调用。
+分析结果缓存避免重复调用，采用 LRU 淘汰策略。
 """
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -100,12 +101,16 @@ class StickerSemanticsAnalyzer:
 
     使用 LLM 为贴纸打上心情和场景标签，
     分析结果缓存在内存中避免重复调用。
+    仅成功结果入缓存，失败结果不占位，
+    待后续调用重试；缓存按 LRU 策略淘汰。
     """
 
     def __init__(self) -> None:
         """初始化贴纸语义分析器"""
-        self._cache: dict[int, StickerSemantics] = {}
-        """贴纸ID -> 语义分析结果"""
+        self._cache: OrderedDict[int, StickerSemantics] = (
+            OrderedDict()
+        )
+        """贴纸ID -> 语义分析结果（LRU缓存，仅含成功结果）"""
 
     async def analyze_sticker(
         self,
@@ -124,11 +129,14 @@ class StickerSemanticsAnalyzer:
             StickerSemantics: 语义分析结果
         """
         cached = self._cache.get(sticker_id)
-        if cached and cached.analyzed:
+        if cached is not None:
+            # LRU命中：移至末尾，淘汰时优先弹出最久未用条目
+            self._cache.move_to_end(sticker_id)
             return cached
+
         result = StickerSemantics(sticker_id=sticker_id)
         if not description and not filename:
-            self._update_cache(sticker_id, result)
+            # 无有效输入，分析无法成功，不入缓存便于后续重试
             return result
         try:
             prompt = (
@@ -157,11 +165,13 @@ class StickerSemanticsAnalyzer:
             )
             result.analyzed = True
         except Exception as e:
+            # 分析失败（analyzed=False）不入缓存，避免失败占位
             logger.debug(
                 f"贴纸语义分析失败 id={sticker_id}: {e}",
                 command="AI",
                 e=e,
             )
+            return result
         self._update_cache(sticker_id, result)
         return result
 
@@ -183,14 +193,17 @@ class StickerSemanticsAnalyzer:
     ) -> None:
         """更新缓存（LRU淘汰）
 
+        新条目写入后移至末尾，超限时从头部弹出
+        最久未使用的条目。
+
         参数:
             sticker_id: 贴纸ID
             result: 分析结果
         """
-        if len(self._cache) >= _MAX_CACHE_SIZE:
-            oldest_key = next(iter(self._cache))
-            self._cache.pop(oldest_key, None)
         self._cache[sticker_id] = result
+        self._cache.move_to_end(sticker_id)
+        while len(self._cache) > _MAX_CACHE_SIZE:
+            self._cache.popitem(last=False)
 
 
 sticker_semantics_analyzer = StickerSemanticsAnalyzer()

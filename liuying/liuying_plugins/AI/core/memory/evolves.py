@@ -7,6 +7,8 @@
 """
 
 from datetime import datetime
+import json
+import re
 
 from liuying.utils.log import logger
 
@@ -77,8 +79,9 @@ class MemoryEvolveService:
     ) -> str:
         """对新记忆执行进化判断
 
-        召回同用户同人格的相关旧记忆，使用 LLM 判断关系，
-        执行覆盖/合并/巩固/冲突标记。
+        召回同用户同人格的相关旧记忆，优先单次批量 LLM 判断
+        全部候选关系（解析失败降级回逐个判断），执行覆盖/合并/
+        巩固/冲突标记。
 
         参数:
             user_id: 用户ID
@@ -101,11 +104,22 @@ class MemoryEvolveService:
             if not candidates:
                 return _RELATION_UNRELATED
 
-            for old_mem in candidates:
-                relation = await self._judge_relation(
-                    old_summary=old_mem["summary"],
-                    new_summary=new_summary,
-                )
+            relations = await self._judge_relations_batch(
+                new_summary, candidates
+            )
+            if relations is None:
+                # 批量解析失败，降级回逐个判断
+                relations = [
+                    await self._judge_relation(
+                        old_summary=mem["summary"],
+                        new_summary=new_summary,
+                    )
+                    for mem in candidates
+                ]
+
+            for old_mem, relation in zip(
+                candidates, relations, strict=True
+            ):
                 if relation == _RELATION_UNRELATED:
                     continue
                 await self._apply_relation(
@@ -164,12 +178,112 @@ class MemoryEvolveService:
             candidates.append(r)
         return candidates
 
+    async def _judge_relations_batch(
+        self,
+        new_summary: str,
+        candidates: list[dict],
+    ) -> list[str] | None:
+        """单次 LLM 批量判断新旧记忆关系
+
+        将全部候选摘要（带索引）拼入一个 prompt，要求 LLM 输出
+        JSON 数组 [{"index": 0, "relation": "replaces",
+        "reason": "..."}]，把原先最多 5 次串行 LLM 调用压缩为 1 次。
+
+        参数:
+            new_summary: 新记忆摘要
+            candidates: 候选旧记忆列表
+
+        返回:
+            list[str] | None: 每个候选的关系类型列表；
+            LLM 失败或解析失败返回 None（调用方降级为逐个判断）
+        """
+        lines = [
+            f"{idx}. {mem['summary']}"
+            for idx, mem in enumerate(candidates)
+        ]
+        prompt = (
+            "你是一个记忆关系判断助手。\n"
+            "请判断新记忆与下列每条旧记忆之间的关系，"
+            "输出JSON数组（只输出JSON，不要其他内容）：\n"
+            '[{"index": 0, "relation": "replaces", "reason": "简要原因"}]\n\n'
+            "relation 只能是以下五个英文单词之一：\n"
+            "- replaces: 新记忆完全覆盖旧记忆（旧信息已过时或被纠正）\n"
+            "- enriches: 新记忆补充旧记忆（两者可合并为更完整记录）\n"
+            "- confirms: 新记忆确认旧记忆（内容基本一致，巩固旧记忆）\n"
+            "- challenges: 新记忆与旧记忆矛盾（保留两者，标记冲突）\n"
+            "- unrelated: 两者无直接关系\n\n"
+            "旧记忆列表：\n"
+            + "\n".join(lines)
+            + "\n\n新记忆：\n"
+            + new_summary
+            + "\n\n要求：数组必须覆盖全部旧记忆，"
+            "每项的 index 对应旧记忆列表的序号。"
+        )
+        try:
+            _, content = await llm_helper.chat(
+                [{"role": "user", "content": prompt}],
+                options={"temperature": 0.0},
+            )
+        except Exception as e:
+            logger.debug(
+                f"批量关系判断失败: {e}", command="AI", e=e
+            )
+            return None
+        return self._parse_relations(content, len(candidates))
+
+    @staticmethod
+    def _parse_relations(raw: str, count: int) -> list[str] | None:
+        """解析批量关系判断的 LLM JSON 输出
+
+        严格校验：数组必须恰好覆盖全部候选索引、relation
+        必须为有效值，任一不满足即返回 None 触发降级，
+        宁可降级也不应用不可信的批量结果。
+
+        参数:
+            raw: LLM 返回的原始文本
+            count: 候选数量
+
+        返回:
+            list[str] | None: 关系类型列表，解析失败返回 None
+        """
+        text = raw.strip()
+        if text.startswith("```"):
+            text = re.sub(
+                r"^```(?:json)?\s*", "", text
+            ).rstrip("`").strip()
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(data, list):
+            return None
+        relations = [_RELATION_UNRELATED] * count
+        seen: set[int] = set()
+        for item in data:
+            if not isinstance(item, dict):
+                return None
+            idx = item.get("index", -1)
+            if not isinstance(idx, int) or not 0 <= idx < count:
+                return None
+            if idx in seen:
+                return None
+            relation = str(item.get("relation", "")).strip().lower()
+            if relation not in _VALID_RELATIONS:
+                return None
+            relations[idx] = relation
+            seen.add(idx)
+        if len(seen) != count:
+            return None
+        return relations
+
     async def _judge_relation(
-    self,
+        self,
         old_summary: str,
         new_summary: str,
     ) -> str:
-        """使用 LLM 判断新旧记忆关系
+        """使用 LLM 判断新旧记忆关系（单个）
+
+        作为批量判断解析失败时的降级路径保留。
 
         参数:
             old_summary: 旧记忆摘要

@@ -21,6 +21,12 @@ _CRON_HELP = (
     "      0,*,*,*,* = 每小时"
 )
 
+_MAX_TASKS_PER_USER = 10
+"""每用户进行中任务数上限"""
+
+_MAX_MESSAGE_LENGTH = 500
+"""任务消息长度上限（字符）"""
+
 
 async def _run_task_action(
     session: Uninfo,
@@ -131,7 +137,11 @@ def setup_task_commands() -> None:
         cron: str = "",
         message: str = "",
     ) -> None:
-        """创建定时任务"""
+        """创建定时任务
+
+        创建前依次执行三道防线：cron 分钟位频率限制、
+        消息长度上限截断、每用户进行中任务数上限。
+        """
         if not cron or not message:
             await MessageUtils.build_message(
                 "格式: bot任务创建 <cron> <消息>\n"
@@ -140,13 +150,42 @@ def setup_task_commands() -> None:
             ).finish()
             return
 
+        # 防线一: 分钟位为 * 表示每分钟执行，拒绝以防刷屏
+        cron_expr = cron.replace(",", " ")
+        fields = cron_expr.split()
+        if fields and fields[0] == "*":
+            await MessageUtils.build_message(
+                "创建失败: 每分钟执行会刷屏，任务间隔至少5分钟\n"
+                "分钟位请使用具体数值或 */5 等间隔形式\n"
+                f"{_CRON_HELP}"
+            ).finish()
+            return
+
+        # 防线二: 消息超长时截断到上限
+        truncated = len(message) > _MAX_MESSAGE_LENGTH
+        if truncated:
+            message = message[:_MAX_MESSAGE_LENGTH]
+
         user_id = session.user.id
         group_id = (
             session.scene.id
             if session.scene.is_group
             else None
         )
-        cron_expr = cron.replace(",", " ")
+
+        # 防线三: 每用户进行中任务数上限
+        active_tasks = await task_service.list_tasks(
+            user_id, active_only=True
+        )
+        if len(active_tasks) >= _MAX_TASKS_PER_USER:
+            await MessageUtils.build_message(
+                "创建失败: 进行中的任务已达上限"
+                f"{_MAX_TASKS_PER_USER}个\n"
+                "可先用 bot任务取消 释放名额，"
+                "bot任务列表 查看现有任务"
+            ).finish()
+            return
+
         try:
             task = await task_service.create_task(
                 user_id=user_id,
@@ -161,12 +200,15 @@ def setup_task_commands() -> None:
             ).finish()
             return
 
-        await MessageUtils.build_message(
+        reply = (
             f"任务已创建 #{task.task_no}\n"
             f"cron: {task.cron_expr}\n"
             f"消息: {message}\n"
             f"发送到: {'群' if group_id else '私聊'}"
-        ).finish()
+        )
+        if truncated:
+            reply += f"\n提示: 消息超过{_MAX_MESSAGE_LENGTH}字，已截断"
+        await MessageUtils.build_message(reply).finish()
 
     @cancel_cmd.handle()
     async def _handle_cancel(

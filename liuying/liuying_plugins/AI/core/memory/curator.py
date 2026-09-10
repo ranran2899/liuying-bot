@@ -506,6 +506,8 @@ class MemoryCurator:
         """更新用户画像
 
         将提取的实体与偏好写入 structured_json 字段。
+        偏好按 (target, type) 键去重：已存在时累加计数并
+        刷新到列表末尾，避免同一偏好反复追加挤占 50 条配额。
 
         参数:
             user_id: 用户ID
@@ -551,14 +553,31 @@ class MemoryCurator:
         existing_prefs = structured.get("preferences", [])
         if not isinstance(existing_prefs, list):
             existing_prefs = []
+        # 现有偏好按 (target, type) 建索引，供本轮去重
+        pref_index: dict[tuple[str, str], dict[str, Any]] = {
+            (p.get("target", ""), p.get("type", "")): p
+            for p in existing_prefs
+            if isinstance(p, dict)
+        }
         for pref in preferences:
-            existing_prefs.append(
-                {
+            key = (pref["target"], pref["type"])
+            old = pref_index.get(key)
+            if old is not None:
+                # 已存在：累加计数并移到末尾模拟最近更新，
+                # 截断时优先保留近期活跃的偏好
+                old["count"] = old.get("count", 0) + pref.get(
+                    "count", 1
+                )
+                existing_prefs.remove(old)
+                existing_prefs.append(old)
+            else:
+                item = {
                     "target": pref["target"],
                     "type": pref["type"],
                     "count": pref["count"],
                 }
-            )
+                existing_prefs.append(item)
+                pref_index[key] = item
         structured["preferences"] = existing_prefs[-50:]
 
         profile.structured_json = json.dumps(

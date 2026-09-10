@@ -448,7 +448,10 @@ class KnowledgeStore:
         return stats
 
     async def prune_stale(self, days: int = 30) -> int:
-        """清理过期查询日志
+        """清理过期查询日志（批量DELETE）
+
+        单条SQL批量删除，替代逐条ORM删除，
+        也不再受原先5000条的加载上限约束。
 
         参数:
             days: 保留天数
@@ -457,13 +460,9 @@ class KnowledgeStore:
             int: 清理的记录数
         """
         since = datetime.now() - timedelta(days=days)
-        old_logs = await KnowledgeQueryLog.filter(
+        count = await KnowledgeQueryLog.filter(
             query_time__lt=since
-        ).limit(5000).all()
-        count = 0
-        for log in old_logs:
-            await log.delete()
-            count += 1
+        ).delete()
         if count > 0:
             logger.info(
                 f"清理过期知识库查询日志: {count} 条",

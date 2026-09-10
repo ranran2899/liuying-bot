@@ -6,7 +6,6 @@
 
 from ..config import get_config
 from ..core.tasks_service import task_service
-from ..skills import skill_loader
 from .diary import setup_diary_job
 from .group_style_autobuild import setup_group_style_autobuild_job
 from .knowledge_refresh import setup_knowledge_jobs
@@ -47,5 +46,3 @@ async def setup_jobs() -> None:
 
     if get_config("USER_TASKS_ENABLED", True):
         await task_service.restore_tasks_on_startup()
-
-    await skill_loader.register_mcp_tools()

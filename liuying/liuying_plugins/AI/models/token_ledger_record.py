@@ -150,8 +150,10 @@ class TokenLedgerRecord(Model):
     ) -> dict[str, Any]:
         """获取Token消耗摘要
 
-        使用SQL聚合查询避免全量加载记录到内存，
-        按 purpose/model 维度分组统计。
+        使用SQL聚合查询避免全量加载记录到内存。
+        单次多列 GROUP BY (purpose, model) 扫描后在Python侧
+        汇总出 total/by_purpose/by_model 三份结果，避免同条件
+        下三条SQL重复扫描。
 
         参数:
             group_id: 群组ID（空串表示全部）
@@ -176,85 +178,69 @@ class TokenLedgerRecord(Model):
             params["purpose"] = purpose
         where_clause = " AND ".join(conditions)
 
-        empty_result: dict[str, Any] = {
-            "total_tokens": 0,
+        summary_sql = (
+            "SELECT purpose, model, "
+            "COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, "
+            "COALESCE(SUM(completion_tokens), 0) AS completion_tokens, "
+            "COALESCE(SUM(total_tokens), 0) AS total_tokens, "
+            "COUNT(id) AS request_count "
+            f"FROM ai_token_ledger WHERE {where_clause} "
+            "GROUP BY purpose, model"
+        )
+        result = await cls.filter().raw(summary_sql, params)
+        rows = result.fetchall()
+
+        if not rows:
+            return {
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "request_count": 0,
+                "by_purpose": {},
+                "by_model": {},
+            }
+
+        def _bucket(
+            target: dict[str, dict[str, int]], key: str
+        ) -> dict[str, int]:
+            """取分组累计桶，不存在时初始化零值"""
+            if key not in target:
+                target[key] = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                    "request_count": 0,
+                }
+            return target[key]
+
+        total = {
             "prompt_tokens": 0,
             "completion_tokens": 0,
+            "total_tokens": 0,
             "request_count": 0,
-            "by_purpose": {},
-            "by_model": {},
         }
-
-        # 总计聚合
-        total_sql = (
-            "SELECT "
-            "COALESCE(SUM(total_tokens), 0) AS total_tokens, "
-            "COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, "
-            "COALESCE(SUM(completion_tokens), 0) AS completion_tokens, "
-            "COUNT(id) AS request_count "
-            f"FROM ai_token_ledger WHERE {where_clause}"
-        )
-        total_result = await cls.filter().raw(total_sql, params)
-        total_row = total_result.first()
-        if not total_row:
-            return empty_result
-
-        request_count = int(total_row.request_count or 0)
-        if request_count == 0:
-            return empty_result
-
-        # 按 purpose 分组聚合
-        purpose_sql = (
-            "SELECT purpose, "
-            "COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, "
-            "COALESCE(SUM(completion_tokens), 0) AS completion_tokens, "
-            "COALESCE(SUM(total_tokens), 0) AS total_tokens, "
-            "COUNT(id) AS request_count "
-            f"FROM ai_token_ledger WHERE {where_clause} "
-            "GROUP BY purpose"
-        )
-        purpose_result = await cls.filter().raw(purpose_sql, params)
         by_purpose: dict[str, dict[str, int]] = {}
-        for prow in purpose_result.fetchall():
-            by_purpose[prow.purpose] = {
-                "prompt_tokens": int(prow.prompt_tokens or 0),
-                "completion_tokens": int(
-                    prow.completion_tokens or 0
-                ),
-                "total_tokens": int(prow.total_tokens or 0),
-                "request_count": int(prow.request_count or 0),
-            }
-
-        # 按 model 分组聚合
-        model_sql = (
-            "SELECT model, "
-            "COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, "
-            "COALESCE(SUM(completion_tokens), 0) AS completion_tokens, "
-            "COALESCE(SUM(total_tokens), 0) AS total_tokens, "
-            "COUNT(id) AS request_count "
-            f"FROM ai_token_ledger WHERE {where_clause} "
-            "GROUP BY model"
-        )
-        model_result = await cls.filter().raw(model_sql, params)
         by_model: dict[str, dict[str, int]] = {}
-        for mrow in model_result.fetchall():
-            m = mrow.model or "unknown"
-            by_model[m] = {
-                "prompt_tokens": int(mrow.prompt_tokens or 0),
-                "completion_tokens": int(
-                    mrow.completion_tokens or 0
-                ),
-                "total_tokens": int(mrow.total_tokens or 0),
-                "request_count": int(mrow.request_count or 0),
+
+        for row in rows:
+            row_vals = {
+                "prompt_tokens": int(row.prompt_tokens or 0),
+                "completion_tokens": int(row.completion_tokens or 0),
+                "total_tokens": int(row.total_tokens or 0),
+                "request_count": int(row.request_count or 0),
             }
+            purpose_bucket = _bucket(by_purpose, row.purpose)
+            model_bucket = _bucket(by_model, row.model or "unknown")
+            for name, value in row_vals.items():
+                total[name] += value
+                purpose_bucket[name] += value
+                model_bucket[name] += value
 
         return {
-            "total_tokens": int(total_row.total_tokens or 0),
-            "prompt_tokens": int(total_row.prompt_tokens or 0),
-            "completion_tokens": int(
-                total_row.completion_tokens or 0
-            ),
-            "request_count": request_count,
+            "total_tokens": total["total_tokens"],
+            "prompt_tokens": total["prompt_tokens"],
+            "completion_tokens": total["completion_tokens"],
+            "request_count": total["request_count"],
             "by_purpose": by_purpose,
             "by_model": by_model,
         }

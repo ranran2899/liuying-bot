@@ -57,6 +57,12 @@ class MemoryRecallService:
         """记忆召回主入口
 
         5路召回 + RRF融合 + search_ranker综合重排序。
+        向量/嵌入双路将 user_id 与 persona_name 下推到检索层
+        过滤，避免候选被其他用户/人格的记忆挤占。
+
+        检索意图改写（KNOWLEDGE_QUERY_REWRITE_ENABLED）默认关闭：
+        每条消息热路径串行一次 LLM 改写开销过大，
+        仅建议在深度召回场景手动开启该配置。
 
         参数:
             user_id: 用户ID
@@ -72,7 +78,7 @@ class MemoryRecallService:
         if not query or not query.strip():
             return []
         # 检索意图改写：LLM识别梗/黑话/缩写补出正式名，提升召回准确率
-        if get_config("KNOWLEDGE_QUERY_REWRITE_ENABLED", True):
+        if get_config("KNOWLEDGE_QUERY_REWRITE_ENABLED", False):
             query = await rewrite_query(query)
         # 查询向量只计算一次，向量/嵌入双路共用，
         # 避免同一查询重复调用嵌入API
@@ -92,8 +98,12 @@ class MemoryRecallService:
         fts_res, vec_res, emb_res, ent_res, time_res = (
             await asyncio.gather(
                 self._search_fts(query, limit),
-                self._search_vector(query_vec, limit),
-                self._search_embedding(query_vec, limit),
+                self._search_vector(
+                    query_vec, limit, user_id, persona_name
+                ),
+                self._search_embedding(
+                    query_vec, limit, user_id, persona_name
+                ),
                 self._search_entity(query, limit),
                 self._search_time(
                     query,
@@ -235,13 +245,22 @@ class MemoryRecallService:
         return await self._db.search_fts(query, limit)
 
     async def _search_vector(
-        self, query_vec: list[float] | None, limit: int
+        self,
+        query_vec: list[float] | None,
+        limit: int,
+        user_id: str | None = None,
+        persona_name: str | None = None,
     ) -> list[tuple[int, float]]:
         """向量检索
+
+        将 user_id 与 persona_name 下推到检索层过滤，
+        避免候选被其他用户/人格的记忆挤占。
 
         参数:
             query_vec: 预计算的查询向量，None时跳过
             limit: 返回上限
+            user_id: 用户ID，用于归属过滤
+            persona_name: bot人格名，用于归属过滤
 
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
@@ -252,19 +271,28 @@ class MemoryRecallService:
             query_vec,
             limit,
             self._embedding_service.model_version,
+            user_id=user_id,
+            persona_name=persona_name,
         )
 
     async def _search_embedding(
-        self, query_vec: list[float] | None, limit: int
+        self,
+        query_vec: list[float] | None,
+        limit: int,
+        user_id: str | None = None,
+        persona_name: str | None = None,
     ) -> list[tuple[int, float]]:
         """主嵌入向量检索
 
         与 _search_vector 区别：在主嵌入表（search_embeddings）中检索，
         而非分块表（search_vector_chunks）。
+        同样将 user_id 与 persona_name 下推到检索层过滤。
 
         参数:
             query_vec: 预计算的查询向量，None时跳过
             limit: 返回上限
+            user_id: 用户ID，用于归属过滤
+            persona_name: bot人格名，用于归属过滤
 
         返回:
             list[tuple[int, float]]: (memory_id, score) 列表
@@ -275,6 +303,8 @@ class MemoryRecallService:
             query_vec,
             limit,
             self._embedding_service.model_version,
+            user_id=user_id,
+            persona_name=persona_name,
         )
 
     async def _search_time(

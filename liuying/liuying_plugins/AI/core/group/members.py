@@ -20,6 +20,9 @@ _CACHE_TTL_SECONDS = 300
 _MAX_CACHE_GROUPS = 50
 """最大缓存群组数"""
 
+_MAX_LIST_MEMBERS = 500
+"""单次加载成员列表上限"""
+
 
 @dataclass(slots=True)
 class GroupMemberInfo:
@@ -101,8 +104,8 @@ class GroupMemberSnapshot:
 
     Attributes:
         group_id: 群组ID
-        members: 成员列表
-        total: 成员总数
+        members: 成员列表（最多加载500条）
+        total: 成员总数（COUNT聚合的真实总数，可能大于列表长度）
         update_time: 快照时间
     """
 
@@ -183,6 +186,10 @@ class GroupMemberService:
     ) -> GroupMemberSnapshot:
         """从数据库获取群成员（带缓存）
 
+        members 列表最多加载 _MAX_LIST_MEMBERS 条，
+        total 使用 COUNT 聚合取真实总数，
+        大群不再恒报列表上限值。
+
         参数:
             group_id: 群组ID
             use_cache: 是否使用缓存
@@ -195,16 +202,18 @@ class GroupMemberService:
             if cached is not None:
                 return cached
 
-        members_data = await GroupInfoUser.filter(
-            group_id=group_id
-        ).limit(500).all()
+        base_query = GroupInfoUser.filter(group_id=group_id)
+        total = await base_query.count()
+        members_data = await base_query.limit(
+            _MAX_LIST_MEMBERS
+        ).all()
         members = [
             GroupMemberService._db_row_to_member(m) for m in members_data
         ]
         snapshot = GroupMemberSnapshot(
             group_id=group_id,
             members=members,
-            total=len(members),
+            total=total,
             update_time=datetime.now(),
         )
         if snapshot.total > 0:

@@ -1,7 +1,8 @@
 """表情包导入与扫描
 
 负责表情包文件的扫描入库、去重、自动标签、LLM视觉标注、
-本地图床上传、缺失文件清理与标签刷新。
+本地图床上传、缺失文件清理与标签刷新。情绪体系常量统一从
+constants 模块导入。
 """
 
 import hashlib
@@ -14,25 +15,14 @@ from ...models.sticker_item import StickerItem
 from ..llm import llm_helper
 from ..tools.json_utils import extract_json_payload
 from ..vision import summarize_image
-from .constants import SOURCE_AI_STICKER
+from .constants import MOOD_FILENAMES, SOURCE_AI_STICKER
 from .semantics import sticker_semantics_analyzer
 
 _DEFAULT_STICKER_ROOT = Path("data") / "ai_plugin" / "stickers"
 """默认表情包根目录"""
 
-MOOD_FILENAMES: dict[str, list[str]] = {
-    "happy": ["happy", "smile", "laugh", "joy", "开心", "笑"],
-    "sad": ["sad", "cry", "tear", "难过", "哭"],
-    "excited": ["excited", "wow", "amazing", "兴奋", "激动"],
-    "angry": ["angry", "mad", "huff", "生气", "怒"],
-    "shy": ["shy", "blush", "embarrassed", "害羞", "脸红"],
-    "calm": ["calm", "ok", "neutral", "平静", "嗯"],
-    "warm": ["warm", "love", "heart", "care", "温暖", "谢谢"],
-    "playful": ["playful", "fun", "joke", "调侃", "玩笑"],
-    "greet": ["hi", "hello", "wave", "打招呼", "嗨"],
-    "bye": ["bye", "goodbye", "告别", "再见"],
-}
-"""情绪对应的文件名关键词"""
+_DELETE_BATCH_SIZE = 500
+"""缺失清理批量删除的每批ID数量"""
 
 SEMANTIC_HINTS: dict[str, list[str]] = {
     "greet": ["hi", "hello", "wave", "嗨", "你好"],
@@ -441,21 +431,29 @@ class StickerImporter:
         """清理本地已删除的文件对应的记录
 
         已迁移到 bed_layout 的记录不再依赖本地文件，因此跳过。
+        仅拉取轻量字段元组（id/路径/图床名）判断缺失，
+        收集缺失ID后按批批量删除，避免全表加载ORM对象。
 
         返回:
             int: 清理的记录数
         """
-        all_items = await StickerItem.filter().limit(5000).all()
-        removed = 0
-        for it in all_items:
-            if it.bed_layout_filename:
+        rows = await StickerItem.filter().limit(5000).values_list(
+            "id", "file_path", "bed_layout_filename"
+        )
+        missing_ids: list[int] = []
+        for item_id, file_path, bed_filename in rows:
+            if bed_filename or not file_path:
                 continue
-            if not it.file_path:
-                continue
-            full_path = self.root_dir / it.file_path
+            full_path = self.root_dir / file_path
             if not full_path.exists():
-                await it.delete()
-                removed += 1
+                missing_ids.append(item_id)
+
+        removed = 0
+        for start in range(0, len(missing_ids), _DELETE_BATCH_SIZE):
+            batch = missing_ids[start : start + _DELETE_BATCH_SIZE]
+            removed += await StickerItem.filter().where_in(
+                "id", batch
+            ).delete()
         if removed > 0:
             logger.info(
                 f"清理缺失表情包记录{removed}条",

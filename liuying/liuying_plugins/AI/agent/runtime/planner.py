@@ -21,7 +21,7 @@ from .constants import (
     TURN_ACTION_REPLY,
     TURN_ACTION_SILENCE,
 )
-from .intent_rules import IntentRuleManager
+from .intent_rules import match_intent_rule
 from .plan_types import (
     TurnPlan,
     extract_json_payload,
@@ -31,6 +31,13 @@ from .plan_types import (
 from .tool_catalog import ToolCatalog, tool_catalog
 
 __all__ = ["TurnPlan", "TurnPlanner"]
+
+_TOOL_META_CACHE: tuple[int, str] | None = None
+"""工具元数据渲染缓存：(registry.revision, 渲染文本)
+
+注册表 revision 未变化时直接复用缓存文本，
+避免每轮LLM规划重复渲染全部工具元数据。
+"""
 
 
 class TurnPlanner:
@@ -50,7 +57,6 @@ class TurnPlanner:
         self._llm = llm
         self._catalog = catalog
         self._registry = None
-        self._rule_manager = IntentRuleManager()
 
     def _get_llm(self):
         """获取LLM助手，None时回退到模块单例"""
@@ -86,7 +92,7 @@ class TurnPlanner:
         """快速规则决策（无LLM调用）
 
         适用于低延迟场景的快速决策，覆盖常见意图。
-        使用 IntentRuleManager 按优先级匹配关键词规则，
+        使用 match_intent_rule 按优先级匹配关键词规则，
         未匹配时根据 has_image 走视觉路由或返回默认聊天。
 
         参数:
@@ -106,7 +112,7 @@ class TurnPlanner:
             )
 
         # 按优先级匹配意图规则
-        rule = self._rule_manager.match(text)
+        rule = match_intent_rule(text)
         if rule:
             return rule.to_plan(user_message)
 
@@ -322,6 +328,7 @@ class TurnPlanner:
         参考参考插件 tool_catalog.build_catalog_prompt：
         渲染工具名、描述、必填参数和意图标签，让LLM能正确
         生成 tool_args（含必填参数），而非仅知道工具候选方向。
+        渲染结果按 registry.revision 缓存，注册表未变化时复用。
 
         参数:
             registry: 工具注册表
@@ -329,6 +336,13 @@ class TurnPlanner:
         返回:
             str: 工具元数据文本，无工具时返回"无"
         """
+        global _TOOL_META_CACHE
+        if (
+            _TOOL_META_CACHE is not None
+            and _TOOL_META_CACHE[0] == registry.revision
+        ):
+            return _TOOL_META_CACHE[1]
+
         lines = []
         for tool in registry.active_tools()[:24]:
             tags = (
@@ -351,7 +365,9 @@ class TurnPlanner:
                     req_parts.append(f"{r}({rdesc})" if rdesc else r)
                 req_str = " required=[" + ",".join(req_parts) + "]"
             lines.append(f"- {tool.name}: {desc}{req_str} tags={tags}")
-        return "\n".join(lines) if lines else "无"
+        text = "\n".join(lines) if lines else "无"
+        _TOOL_META_CACHE = (registry.revision, text)
+        return text
 
     async def _augment_plan_with_semantic_frame(
         self,

@@ -89,11 +89,20 @@ class EmotionState(Model):
 
         为旧表补齐 persona_name 列，实现人设间情绪状态隔离。
         若列已存在，ADD COLUMN 会失败并被捕获回滚，安全幂等。
+        随后按 (user_id, group_id, persona_name) 去重旧数据
+        （保留最小 id）并补建唯一索引，为 get_state 的
+        get_or_create 并发安全提供约束兜底。
         """
         return [
             "ALTER TABLE ai_emotion_state "
             "ADD COLUMN persona_name VARCHAR(64) "
             "NOT NULL DEFAULT 'default';",
+            "DELETE FROM ai_emotion_state WHERE id NOT IN ("
+            "SELECT MIN(id) FROM ai_emotion_state "
+            "GROUP BY user_id, group_id, persona_name)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "idx_ai_emotion_state_user_group_persona "
+            "ON ai_emotion_state (user_id, group_id, persona_name)",
         ]
 
     @classmethod

@@ -173,7 +173,6 @@ def build_profile_tools(runtime: Any) -> list[AgentTool]:
             intent_tags=[INTENT_TAG_MEMORY],
             latency_class=LATENCY_CLASS_FAST,
             evidence_kind=EVIDENCE_KIND_CONTEXT,
-            per_session_quota=3,
         ),
         AgentTool(
             name="get_user_profile",

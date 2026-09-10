@@ -2,6 +2,7 @@
 
 通过 get_version_info 自动识别协议端（NapCat / Lagrange / LLOneBot / go-cqhttp），
 按 flavor 分派扩展API；首次失败时按 (self_id, api) 缓存 unsupported，后续直接跳过。
+已知 flavor 永久缓存，UNKNOWN 仅写入短TTL条目，协议端恢复后可重试探测。
 所有API均 never-raise，返回 bool。
 """
 
@@ -13,6 +14,9 @@ from liuying.services.cache import CacheDict
 from liuying.utils.log import logger
 
 __all__ = ["Flavor", "ProtocolHelper"]
+
+_UNKNOWN_FLAVOR_TTL = 60
+"""UNKNOWN探测结果的短TTL（秒），到期后可重试探测"""
 
 
 class Flavor(StrEnum):
@@ -42,7 +46,7 @@ _KNOWN_FLAVORS: frozenset[Flavor] = frozenset(
 
 
 _flavor_cache = CacheDict("AI_PROTOCOL_FLAVOR")
-"""self_id -> flavor 缓存（永不过期）"""
+"""self_id -> flavor 缓存（已知flavor永不过期，UNKNOWN走短TTL）"""
 
 
 _unsupported = CacheDict("AI_PROTOCOL_UNSUPPORTED", expire=3600)
@@ -149,6 +153,8 @@ class ProtocolHelper:
         """识别协议端flavor
 
         优先使用配置强制指定，否则通过 get_version_info 自动识别。
+        探测失败返回 UNKNOWN 且仅缓存 _UNKNOWN_FLAVOR_TTL 秒，
+        协议端恢复后到期自动重试，避免一次失败永久 UNKNOWN。
 
         参数:
             bot: Bot对象
@@ -188,7 +194,13 @@ class ProtocolHelper:
                 e=exc,
             )
 
-        _flavor_cache.set(sid, flavor)
+        if flavor is Flavor.UNKNOWN:
+            # UNKNOWN不永久缓存：写入短TTL条目，协议端恢复后可重试
+            _flavor_cache.set(
+                sid, flavor, expire=_UNKNOWN_FLAVOR_TTL
+            )
+        else:
+            _flavor_cache.set(sid, flavor)
         return flavor
 
     @staticmethod

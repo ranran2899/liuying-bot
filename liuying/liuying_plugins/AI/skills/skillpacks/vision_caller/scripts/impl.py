@@ -144,6 +144,5 @@ def build_caller_tools(runtime: Any) -> list[AgentTool]:
             latency_class=LATENCY_CLASS_NETWORK,
             requires_network=True,
             evidence_kind=EVIDENCE_KIND_CONTEXT,
-            per_session_quota=2,
         )
     ]

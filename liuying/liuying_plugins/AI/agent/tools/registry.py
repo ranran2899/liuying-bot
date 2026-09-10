@@ -19,7 +19,7 @@ from ..runtime.tool_catalog import tool_catalog
 class AgentTool:
     """工具定义
 
-    参考参考插件 AgentTool 设计，增加 per_session_quota 字段。
+    参考参考插件 AgentTool 设计。
 
     Attributes:
         name: 工具名（唯一键）
@@ -33,7 +33,6 @@ class AgentTool:
         requires_image: 是否需要图片输入
         evidence_kind: 证据类型（tool/context）
         metadata: 附加元信息
-        per_session_quota: 每会话调用配额上限，0表示无上限
     """
 
     name: str
@@ -47,7 +46,6 @@ class AgentTool:
     requires_image: bool = False
     evidence_kind: str = EVIDENCE_KIND_TOOL
     metadata: dict[str, Any] = field(default_factory=dict)
-    per_session_quota: int = 0
 
     def to_metadata(self) -> dict[str, Any]:
         """导出元数据字典
@@ -69,14 +67,16 @@ class AgentTool:
 class ToolRegistry:
     """工具注册中心
 
-    提供 register/get/active/schemas 等方法。
+    提供 register/get/active/list_names 方法。
     注册时自动归类到 tool_catalog。
     保持薄注册层设计，不处理限流/重试/配额。
+    revision 随注册变化递增，供下游（如 planner）做缓存失效判断。
     """
 
     def __init__(self) -> None:
         """初始化工具注册表"""
         self._tools: dict[str, AgentTool] = {}
+        self.revision: int = 0
 
     def register(self, tool: AgentTool) -> None:
         """注册工具（同名覆盖）
@@ -88,6 +88,7 @@ class ToolRegistry:
             tool: 工具实例
         """
         self._tools[tool.name] = tool
+        self.revision += 1
         tool_catalog.categorize_by_metadata(
             tool.name, tool.to_metadata()
         )
@@ -118,31 +119,6 @@ class ToolRegistry:
             list[str]: 工具名列表
         """
         return list(self._tools.keys())
-
-    def to_openai_schemas(self) -> list[dict[str, Any]]:
-        """转换为OpenAI function calling格式
-
-        返回:
-            list[dict]: OpenAI工具schema列表
-        """
-        schemas: list[dict[str, Any]] = []
-        for tool in self.active_tools():
-            params = tool.parameters or {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            }
-            schemas.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": params,
-                    },
-                }
-            )
-        return schemas
 
 
 tool_registry = ToolRegistry()

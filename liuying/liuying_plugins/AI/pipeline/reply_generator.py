@@ -207,23 +207,6 @@ class ReplyGenerator:
                 )
                 return random.choice(_FALLBACK_REPLIES), None
 
-        retry_messages = list(use_messages)
-        retry_persona = await persona_manager.get_persona_by_name(
-            ctx.persona_name
-        )
-        retry_name = retry_persona.get("name") or "AI"
-        retry_hint = (
-            f"\n[重要提示] 请直接以{retry_name}的身份回复，"
-            "不要使用模板化拒绝用语，不要提及自己是AI或助手。"
-            "如果确实无法回答，简短说一句即可。"
-        )
-        retry_messages.append(
-            {
-                "role": "system",
-                "content": retry_hint,
-            }
-        )
-
         try:
 
             async def _first_call() -> str:
@@ -242,9 +225,28 @@ class ReplyGenerator:
             async def _retry_call() -> str:
                 """重试LLM调用
 
+                触发重试时才预取人设并构建重试消息，
+                避免安全过滤开启时每轮回复都做无谓准备。
+
                 返回:
                     str: LLM回复文本
                 """
+                persona = await persona_manager.get_persona_by_name(
+                    ctx.persona_name
+                )
+                retry_name = persona.get("name") or "AI"
+                retry_hint = (
+                    f"\n[重要提示] 请直接以{retry_name}的身份回复，"
+                    "不要使用模板化拒绝用语，不要提及自己是AI或助手。"
+                    "如果确实无法回答，简短说一句即可。"
+                )
+                retry_messages = list(use_messages)
+                retry_messages.append(
+                    {
+                        "role": "system",
+                        "content": retry_hint,
+                    }
+                )
                 return await llm_helper.chat_text(
                     retry_messages,
                     model=use_model,

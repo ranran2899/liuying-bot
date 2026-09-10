@@ -46,7 +46,7 @@ class IntentRule:
     """意图规则配置
 
     将关键词匹配到对应的回合动作和工具配置，
-    由 IntentRuleManager 管理和匹配。
+    由模块级 match_intent_rule 匹配。
 
     Attributes:
         name: 规则名称
@@ -162,7 +162,12 @@ def _build_default_rules() -> list[IntentRule]:
             ),
             IntentRule(
                 name="draw",
-                keywords=["画", "生成图", "绘制", "绘图", "画一张"],
+                # 多字词匹配：避免"动画好看""画面太美"等
+                # 含单字"画"的普通聊天误触发图片生成
+                keywords=[
+                    "画一", "画个", "画张", "帮我画",
+                    "画上", "画只", "画下", "生成图", "绘制", "绘图",
+                ],
                 priority=40,
                 action=TURN_ACTION_REPLY,
                 output_mode=OUTPUT_MODE_CHAT_ANSWER,
@@ -208,16 +213,27 @@ _DEFAULT_RULES: list[IntentRule] = _build_default_rules()
 """默认规则表（静态，模块级构建一次）"""
 
 
-class IntentRuleManager:
-    """意图规则管理器
+def match_intent_rule(text: str) -> IntentRule | None:
+    """按优先级匹配文本到意图规则
 
-    管理意图规则列表，提供按优先级匹配的方法。
-    规则表为静态常量，匹配时无需重复排序。
+    参数:
+        text: 输入文本（已转小写）
+
+    返回:
+        IntentRule | None: 匹配的最高优先级规则
     """
+    for rule in _DEFAULT_RULES:
+        if any(kw in text for kw in rule.keywords):
+            return rule
+    return None
 
-    def __init__(self) -> None:
-        """初始化规则管理器"""
-        self._rules: list[IntentRule] = _DEFAULT_RULES
+
+class IntentRuleManager:
+    """意图规则管理器（兼容保留）
+
+    历史调用入口，内部委托模块级 match_intent_rule。
+    新代码请直接使用 match_intent_rule 函数。
+    """
 
     def match(self, text: str) -> IntentRule | None:
         """按优先级匹配文本到意图规则
@@ -228,9 +244,4 @@ class IntentRuleManager:
         返回:
             IntentRule | None: 匹配的最高优先级规则
         """
-        for rule in self._rules:
-            if any(kw in text for kw in rule.keywords):
-                return rule
-        return None
-
-
+        return match_intent_rule(text)

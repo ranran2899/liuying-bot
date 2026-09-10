@@ -20,9 +20,11 @@
 
 from dataclasses import dataclass, field
 import importlib.util
+import json
 from pathlib import Path
 import re
 import sys
+import threading
 from types import ModuleType
 from typing import Any
 
@@ -62,6 +64,10 @@ _FRONTMATTER_RE = re.compile(
     r"^---\n([\s\S]*?)\n---\n?([\s\S]*)$"
 )
 """SKILL.md frontmatter 匹配模式"""
+
+
+_SYS_PATH_LOCK = threading.Lock()
+"""sys.path 注入窗口串行化锁，防止并发加载时模块解析冲突"""
 
 
 @dataclass(slots=True)
@@ -398,7 +404,20 @@ class SkillpackLoader:
         mcp_conf = get_config("MCP", {}) or {}
         if not mcp_conf.get("enabled", False):
             return 0
-        config_json = str(mcp_conf.get("servers", ""))
+        servers = mcp_conf.get("servers", "")
+        if isinstance(servers, str):
+            config_json = servers
+        elif isinstance(servers, (dict, list)):
+            # dict/list 直接 str() 会产生 Python repr，
+            # 下游 json.loads 必然失败，须用标准 JSON 序列化。
+            config_json = json.dumps(servers, ensure_ascii=False)
+        else:
+            logger.warning(
+                f"MCP servers 配置类型无效: "
+                f"{type(servers).__name__}，跳过注册",
+                command="AI",
+            )
+            return 0
         if not config_json.strip():
             return 0
         if mcp_bridge.load_config(config_json) == 0:
@@ -480,6 +499,8 @@ class SkillpackLoader:
 
         构造合成包让相对导入（from . import impl）可用，
         并临时注入 sys.path 让绝对导入可用，执行完毕后还原。
+        注入窗口通过模块级锁串行化，防止并发加载时
+        其他模块误解析到临时路径。
 
         参数:
             spec: 技能规格
@@ -498,39 +519,46 @@ class SkillpackLoader:
         skill_dir = scripts_dir.parent
 
         package_name = f"_skillpack_{skill_dir.name}"
-        if package_name not in sys.modules:
-            pkg = ModuleType(package_name)
-            pkg.__path__ = [str(scripts_dir)]
-            sys.modules[package_name] = pkg
-
-        added_paths = [
-            p
-            for p in (
-                str(scripts_dir),
-                str(skill_dir),
-                str(self._base_dir),
-            )
-            if p not in sys.path
-        ]
-        for p in added_paths:
-            sys.path.insert(0, p)
-
         module_name = f"{package_name}.{script_path.stem}"
         module_spec = importlib.util.spec_from_file_location(
             module_name, script_path
         )
         if module_spec is None or module_spec.loader is None:
             raise ImportError(f"无法加载技能模块: {script_path}")
-        module = importlib.util.module_from_spec(module_spec)
-        module.__package__ = package_name
-        sys.modules[module_name] = module
-        try:
-            module_spec.loader.exec_module(module)
-        finally:
+
+        with _SYS_PATH_LOCK:
+            if package_name not in sys.modules:
+                pkg = ModuleType(package_name)
+                pkg.__path__ = [str(scripts_dir)]
+                sys.modules[package_name] = pkg
+
+            added_paths = [
+                p
+                for p in (
+                    str(scripts_dir),
+                    str(skill_dir),
+                    str(self._base_dir),
+                )
+                if p not in sys.path
+            ]
             for p in added_paths:
-                if p in sys.path:
-                    sys.path.remove(p)
-        return module
+                sys.path.insert(0, p)
+
+            module = importlib.util.module_from_spec(module_spec)
+            module.__package__ = package_name
+            sys.modules[module_name] = module
+            try:
+                module_spec.loader.exec_module(module)
+            except BaseException:
+                # 半初始化模块残留在 sys.modules 会污染
+                # 后续加载，务必清理后原样上抛。
+                sys.modules.pop(module_name, None)
+                raise
+            finally:
+                for p in added_paths:
+                    if p in sys.path:
+                        sys.path.remove(p)
+            return module
 
 
 skill_loader = SkillpackLoader()

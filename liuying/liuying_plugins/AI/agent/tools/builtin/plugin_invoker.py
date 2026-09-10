@@ -257,7 +257,7 @@ async def get_plugin_command_help(plugin_name: str) -> str:
 async def search_plugin_by_capability(
     query: str, top_k: int = 3
 ) -> str:
-    """按功能搜索可用插件
+    """按功能搜索插件
 
     参数:
         query: 功能描述或关键词
