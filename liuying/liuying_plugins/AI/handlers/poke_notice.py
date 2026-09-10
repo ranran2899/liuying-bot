@@ -1,4 +1,4 @@
-"""拍一拍响应
+"""拍一拍响应逻辑
 
 监听群内戳一戳事件，按概率戳回去。
 仅响应戳bot自己的事件，避免bot乱戳别人。
@@ -6,7 +6,6 @@
 
 import random
 
-from nonebot import on_notice
 from nonebot.adapters import Bot, Event
 
 from liuying.utils.log import logger
@@ -14,20 +13,22 @@ from liuying.utils.log import logger
 from ..config import get_config
 from ..core.runtime import ProtocolHelper
 
-__all__ = ["setup_poke_notice"]
+__all__ = [
+    "PokeNotice",
+]
 
 
-def setup_poke_notice() -> None:
-    """注册拍一拍响应notice监听
+class PokeNotice:
+    """拍一拍响应逻辑
 
-    监听群内戳一戳（poke）事件，当戳的对象是bot自己时，
-    按 POKE_BACK_ENABLED + POKE_BACK_PROBABILITY 决定是否戳回去。
+    matcher 在插件 __init__ 统一注册，此处仅承接业务逻辑。
     """
-    notice_matcher = on_notice(priority=60, block=False)
 
-    @notice_matcher.handle()
-    async def _handle_poke(bot: Bot, event: Event) -> None:
+    @staticmethod
+    async def handle_poke(bot: Bot, event: Event) -> None:
         """处理戳一戳事件
+
+        当戳的对象是bot自己时，按 POKE 配置决定是否戳回去。
 
         参数:
             bot: Bot对象

@@ -1,94 +1,93 @@
-"""聊天命令处理
+"""聊天命令逻辑
 
-注册私聊/@bot消息触发的AI对话matcher，统一处理回复生成与发送。
+私聊/@bot消息触发的AI对话处理：入口校验、回复生成、
+协议扩展（表情表态/输入状态模拟）与其他bot检测。
 """
 
 import asyncio
 
-from nonebot import get_bot, on_message
+from nonebot import get_bot
 from nonebot.adapters import Event
-from nonebot.rule import to_me
+from nonebot_plugin_alconna import UniMsg
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
-from ...config import get_config
-from ...core.group import group_social
-from ...core.peer_awareness import peer_awareness
-from ...core.runtime import ProtocolHelper, runtime_switch
-from ...core.safety import AclChecker
-from ...core.target_inference import MessageTarget, target_inference
-from ...core.tools import MessageExtractor
-from ...pipeline.processor import ReplyResult, reply_processor
-from ...pipeline.reply_buffer import reply_buffer
-from ..chat_helpers import ChatMatchersHelper
+from ..config import get_config
+from ..core.group import group_social
+from ..core.peer_awareness import peer_awareness
+from ..core.runtime import ProtocolHelper, runtime_switch
+from ..core.safety import AclChecker
+from ..core.target_inference import MessageTarget, target_inference
+from ..pipeline.processor import ReplyResult, reply_processor
+from ..pipeline.reply_buffer import reply_buffer
+from .chat_helpers import ChatMatchersHelper
 
-__all__ = ["setup_chat_commands"]
+__all__ = [
+    "ChatCommands",
+]
 
 
-async def _apply_emoji_react(
-    session: Uninfo, message_id: int, face_id: int
-) -> None:
-    """执行表情表态
+class ChatCommands:
+    """AI对话命令逻辑
 
-    协议扩展调用降级：失败仅记录debug日志，不影响主流程。
-
-    参数:
-        session: 会话信息
-        message_id: 消息ID
-        face_id: 表情ID
+    封装私聊/@bot消息处理、回复发送、协议扩展与其他bot检测，
+    matcher 在插件 __init__ 统一注册，此处仅承接业务逻辑。
     """
-    try:
-        bot = get_bot()
-        await ProtocolHelper.emoji_react(
-            bot,
-            message_id=message_id,
-            face_id=face_id,
-            group_id=(
-                session.scene.id if session.scene.is_group else ""
-            ),
-        )
-    except Exception as e:
-        logger.debug(
-            f"表情表态失败: {e}", command="AI", e=e
-        )
 
+    @staticmethod
+    async def apply_emoji_react(
+        session: Uninfo, message_id: int, face_id: int
+    ) -> None:
+        """执行表情表态
 
-async def _apply_set_typing(session: Uninfo) -> None:
-    """执行输入状态模拟
+        协议扩展调用降级：失败仅记录debug日志，不影响主流程。
 
-    协议扩展调用降级：失败仅记录debug日志，不影响主流程。
+        参数:
+            session: 会话信息
+            message_id: 消息ID
+            face_id: 表情ID
+        """
+        try:
+            bot = get_bot()
+            await ProtocolHelper.emoji_react(
+                bot,
+                message_id=message_id,
+                face_id=face_id,
+                group_id=(
+                    session.scene.id if session.scene.is_group else ""
+                ),
+            )
+        except Exception as e:
+            logger.debug(
+                f"表情表态失败: {e}", command="AI", e=e
+            )
 
-    参数:
-        session: 会话信息
-    """
-    try:
-        bot = get_bot()
-        await ProtocolHelper.set_typing(
-            bot, user_id=session.user.id
-        )
-    except Exception as e:
-        logger.debug(
-            f"输入状态模拟失败: {e}", command="AI", e=e
-        )
+    @staticmethod
+    async def apply_set_typing(session: Uninfo) -> None:
+        """执行输入状态模拟
 
+        协议扩展调用降级：失败仅记录debug日志，不影响主流程。
 
-def setup_chat_commands() -> None:
-    """注册聊天对话matcher
+        参数:
+            session: 会话信息
+        """
+        try:
+            bot = get_bot()
+            await ProtocolHelper.set_typing(
+                bot, user_id=session.user.id
+            )
+        except Exception as e:
+            logger.debug(
+                f"输入状态模拟失败: {e}", command="AI", e=e
+            )
 
-    使用 to_me() 规则：私聊自动命中，
-    群聊中@bot或回复bot时命中。
-    """
-    _register_peer_bot_listener()
-    private_msg_cmd = on_message(
-        rule=to_me(), priority=520, block=False
-    )
-
-    @private_msg_cmd.handle()
-    async def _handle_private_message(
+    @staticmethod
+    async def handle_chat_message(
         event: Event,
         session: Uninfo,
+        message: UniMsg,
     ) -> None:
         """处理私聊或@bot/回复bot的消息
 
@@ -121,7 +120,9 @@ def setup_chat_commands() -> None:
             return
 
         is_private = not session.scene.is_group
-        text = MessageExtractor.extract_message_text(event)
+
+        # alconna统一消息：文本/图片直接从注入的UniMsg解析
+        text = message.extract_plain_text().strip()
 
         # 群聊目标推断：当消息明确@他人或回复他人时跳过，避免误回复
         if (
@@ -142,8 +143,8 @@ def setup_chat_commands() -> None:
         image_descs: list[str] = []
         if get_config("VISION", {}).get("enabled", True):
             image_descs = (
-                await ChatMatchersHelper._extract_image_descriptions(
-                    event
+                await ChatMatchersHelper.extract_image_descriptions(
+                    message
                 )
             )
 
@@ -185,7 +186,7 @@ def setup_chat_commands() -> None:
                 return
             text = combined
 
-        await _handle_reply(
+        await ChatCommands.handle_reply(
             session,
             user_id,
             text,
@@ -194,7 +195,8 @@ def setup_chat_commands() -> None:
             message_id=getattr(event, "message_id", None),
         )
 
-    async def _handle_reply(
+    @staticmethod
+    async def handle_reply(
         session: Uninfo,
         user_id: str,
         text: str,
@@ -204,7 +206,7 @@ def setup_chat_commands() -> None:
     ) -> None:
         """统一处理回复生成与发送
 
-        黑名单检查已前移至消息入口（_handle_private_message），
+        黑名单检查已前移至消息入口（handle_chat_message），
         此处只负责回复生成与发送。
 
         参数:
@@ -235,6 +237,9 @@ def setup_chat_commands() -> None:
                 platform=session.platform,
                 bot_id=session.self_id,
                 is_private=is_private,
+                # to_me 规则命中的消息均直达bot（私聊/@bot/回复bot），
+                # 下游据此禁止静默，避免用户被无视
+                is_at_bot=True,
             )
         except Exception as e:
             logger.error(
@@ -257,7 +262,7 @@ def setup_chat_commands() -> None:
                 result.react_face_id is not None
                 and message_id is not None
             ):
-                await _apply_emoji_react(
+                await ChatCommands.apply_emoji_react(
                     session,
                     message_id,
                     result.react_face_id,
@@ -283,12 +288,12 @@ def setup_chat_commands() -> None:
         # 输入状态模拟与发送（异常兜底，避免 matcher 静默崩溃）
         try:
             if result.should_set_typing:
-                await _apply_set_typing(session)
+                await ChatCommands.apply_set_typing(session)
 
             if result.typing_delay > 0:
                 await asyncio.sleep(result.typing_delay)
 
-            await ChatMatchersHelper._send_reply(
+            await ChatMatchersHelper.send_reply(
                 session,
                 result.text,
                 result.sticker,
@@ -309,25 +314,15 @@ def setup_chat_commands() -> None:
                 "出了点小问题，待会再试试~"
             ).send()
 
-
-def _register_peer_bot_listener() -> None:
-    """注册群消息监听器用于检测其他bot发言
-
-    在群消息中识别其他bot发言并触发静默，避免bot互相对话。
-    监听器优先级较高（priority=100），不阻断后续matcher。
-    """
-    peer_cmd = on_message(priority=100, block=False)
-
-    @peer_cmd.handle()
-    async def _handle_peer_detection(
-        event: Event,
-        session: Uninfo,
+    @staticmethod
+    async def handle_peer_detection(
+        session: Uninfo, message: UniMsg
     ) -> None:
         """检测群内其他bot发言并触发静默
 
         参数:
-            event: 消息事件
             session: 会话信息
+            message: 统一消息
         """
         if not get_config("PEER_AWARENESS_ENABLED", True):
             return
@@ -337,7 +332,7 @@ def _register_peer_bot_listener() -> None:
         user_id = session.user.id
         if user_id == session.self_id:
             return
-        text = MessageExtractor.extract_message_text(event)
+        text = message.extract_plain_text().strip()
         if not text:
             return
         nickname = (

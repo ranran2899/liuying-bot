@@ -21,7 +21,6 @@ from .constants import (
     OUTPUT_MODE_CHAT_SHORT,
     OUTPUT_MODE_SILENCE,
     OUTPUT_MODE_SOURCE_SUMMARY,
-    OUTPUT_MODE_STRUCTURED_HELP,
     TURN_ACTION_REPLY,
 )
 from .evidence import EvidenceComposer
@@ -31,11 +30,6 @@ _CLARIFY_TEMPLATES = (
     "嗯……能再说得详细一点吗？",
     "我没有完全理解，可以再解释一下吗？",
     "你是想问……吗？还是别的呢？",
-)
-
-_HELP_TEMPLATES = (
-    "我可以陪你聊天、回答问题，也可以联网搜索信息、生成图片~",
-    "需要我做什么呢？可以问我问题，让我搜索或者画画~",
 )
 
 _REPLY_TEXT_FALLBACK_PATTERN = re.compile(
@@ -167,6 +161,7 @@ class PersonaResponder:
         messages: list[dict[str, str]] | None = None,
         user_id: str = "",
         group_id: str | None = None,
+        is_at_bot: bool = False,
     ) -> PersonaResponse:
         """生成角色化响应
 
@@ -177,17 +172,19 @@ class PersonaResponder:
             messages: 对话历史（可选）
             user_id: 用户ID
             group_id: 群组ID
+            is_at_bot: 消息是否直达bot（直达时禁止静默）
 
         返回:
             PersonaResponse: 角色化响应
         """
         start = time.time()
 
-        # 静默（私聊不静默：用户直接向bot发起对话时静默不合理，转普通回复）
+        # 静默（直达消息不静默：私聊或@bot时静默等同无视，
+        # 转普通回复）
         if plan.is_silence:
-            if not group_id:
+            if not group_id or is_at_bot:
                 logger.debug(
-                    "私聊静默计划已忽略，转为普通回复", command="AI"
+                    "直达消息静默计划已忽略，转为普通回复", command="AI"
                 )
                 plan.action = TURN_ACTION_REPLY
                 plan.output_mode = OUTPUT_MODE_CHAT_SHORT
@@ -209,30 +206,20 @@ class PersonaResponder:
                 elapsed=time.time() - start,
             )
 
-        # 结构化帮助：使用模板快速响应
-        if plan.output_mode == OUTPUT_MODE_STRUCTURED_HELP:
-            return PersonaResponse(
-                reply_text=self._pick_help_template(user_message),
-                bot_emotion="happy",
-                expression_style="casual",
-                sticker_mood_hint="开心",
-                elapsed=time.time() - start,
-            )
-
         # 基于LLM的响应生成
         try:
             response = await self._generate_via_llm(
                 plan, evidence, user_message, messages, user_id, group_id
             )
-            # 私聊忽略LLM的静默建议：用户在线对话时静默不合理；
+            # 直达消息忽略LLM的静默建议：用户在线对话时静默不合理；
             # 回复为空时回退LLM原始输出，避免整轮静默无响应
-            if not group_id:
+            if not group_id or is_at_bot:
                 if response.recommend_silence:
                     response.recommend_silence = False
                 if not response.reply_text.strip():
                     response.reply_text = response.raw_response.strip()
                     logger.debug(
-                        "私聊回复为空，回退到LLM原始输出", command="AI"
+                        "直达消息回复为空，回退到LLM原始输出", command="AI"
                     )
             response.elapsed = time.time() - start
             return response
@@ -295,10 +282,13 @@ class PersonaResponder:
             "5. 不编造具体数字、链接、日期",
             "6. 未调用工具且不确定时，reply_text设为简短模糊回应，"
             "info_added设为false，禁止编造",
+            "7. recommend_silence仅在群聊背景闲聊（消息明显不是对"
+            "bot说）时为true；用户提问、请求或@bot时必须为false"
+            "并给出reply_text",
         ]
         if not plan.need_tool:
             constraints.append(
-                "7. 涉及具体事实/数字/时间/人名/新闻/产品参数/专有名词/"
+                "8. 涉及具体事实/数字/时间/人名/新闻/产品参数/专有名词/"
                 "梗，未调用工具且不确定时必须简短含糊回应，禁止编造"
             )
 
@@ -380,10 +370,10 @@ class PersonaResponder:
         llm_messages.append({"role": "user", "content": user_content})
 
         # 接入模型按角色路由：使用 ROLE_CHAT 配置的模型/温度/provider
-        # 根据字数约束动态计算max_tokens，中文字符约1.5 tokens，
-        # 加上JSON结构开销约200 tokens，上限800避免过长输出
+        # max_tokens下限2048：思考模式下reasoning token计入max_tokens，
+        # 上限过低会被思考取尽导致正文为空
         role = model_router.resolve(ROLE_CHAT)
-        dynamic_max_tokens = min(800, int(max_chars * 2) + 200)
+        dynamic_max_tokens = max(4096, int(max_chars * 2) + 200)
         chat_options = role.apply_to_options(
             {"max_tokens": dynamic_max_tokens}
         )
@@ -665,20 +655,6 @@ class PersonaResponder:
         if any(kw in text for kw in ("怎么", "如何", "为什么")):
             return _CLARIFY_TEMPLATES[1]
         return _CLARIFY_TEMPLATES[2]
-
-    def _pick_help_template(self, user_message: str) -> str:
-        """选择帮助回复模板
-
-        参数:
-            user_message: 用户消息
-
-        返回:
-            str: 帮助回复
-        """
-        text = user_message.lower()
-        if any(kw in text for kw in ("搜索", "联网", "查")):
-            return _HELP_TEMPLATES[1]
-        return _HELP_TEMPLATES[0]
 
     def _fallback_response(
         self,

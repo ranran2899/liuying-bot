@@ -17,6 +17,10 @@ from liuying.utils.log import logger
 from ..config import get_config
 from ..core.llm import LLMHelper
 from .query_rewriter import contextual_query_rewriter
+from .runtime.constants import (
+    OUTPUT_MODE_CHAT_SHORT,
+    TURN_ACTION_REPLY,
+)
 from .runtime.executor import ToolExecutor
 from .runtime.plan_types import TurnPlan
 from .runtime.planner import TurnPlanner
@@ -187,6 +191,17 @@ class AgentRunner:
             command="AI",
         )
 
+        # 直达消息（私聊/@bot）禁止静默：规划器误判silence时
+        # 在执行前强转为短回复，保住工具调用与证据链，
+        # 避免用户明确提问却被无视
+        if plan.is_silence and (not group_id or is_at_bot):
+            plan.action = TURN_ACTION_REPLY
+            plan.output_mode = OUTPUT_MODE_CHAT_SHORT
+            plan.reason = f"{plan.reason or '规划静默'}（直达消息已转为回复）"
+            logger.debug(
+                "直达消息静默规划已转为回复", command="AI"
+            )
+
         # 静默场景直接返回（置于改写与注入之前，避免白耗调用）
         if plan.is_silence:
             elapsed = time.time() - start_time
@@ -212,6 +227,10 @@ class AgentRunner:
             await AgentRunner._apply_query_rewrite(
                 plan, user_message, context_summary, llm_helper, has_image
             )
+            # LLM规划可能遗漏必填query参数（如web_search），用用户
+            # 消息兜底，避免工具因参数校验失败而空转浪费回合
+            if not str(plan.tool_args.get("query") or "").strip():
+                plan.tool_args["query"] = user_message.strip()[:200]
 
         # ===== 第2层：执行 =====
         with bind_session_context(user_id, group_id, persona_name):
@@ -254,6 +273,7 @@ class AgentRunner:
                     messages=guided_messages,
                     user_id=user_id,
                     group_id=group_id,
+                    is_at_bot=is_at_bot,
                 )
             except Exception as e:
                 logger.error(

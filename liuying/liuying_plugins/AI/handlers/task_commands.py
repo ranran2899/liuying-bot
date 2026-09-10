@@ -1,19 +1,20 @@
-"""用户定时任务命令处理
+"""任务命令逻辑
 
-注册查看、创建、取消、暂停、恢复用户定时任务的命令。
+用户定时任务的查看、创建、取消、暂停与恢复业务处理。
 cron 表达式用逗号分隔 5 段（如 0,8,*,*,* 表示每天8点）。
 """
 
-from nonebot_plugin_alconna import Alconna, Args, on_alconna
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.message import MessageUtils
 
-from ...config import get_config
-from ...core.safety.acl import AclChecker
-from ...core.tasks_service import task_service
+from ..config import get_config
+from ..core.safety.acl import AclChecker
+from ..core.tasks_service import task_service
 
-__all__ = ["setup_task_commands"]
+__all__ = [
+    "TaskCommands",
+]
 
 _CRON_HELP = (
     "cron格式(逗号分隔5段): 分,时,日,月,周\n"
@@ -29,80 +30,80 @@ _MAX_MESSAGE_LENGTH = 500
 """任务消息长度上限（字符）"""
 
 
-async def _run_task_action(
-    session: Uninfo,
-    task_no: str,
-    action: str,
-    verb: str,
-) -> str:
-    """执行单个任务操作并生成结果文案
+class TaskCommands:
+    """任务命令逻辑
 
-    参数:
-        session: 会话信息
-        task_no: 用户输入的任务编号字符串
-        action: task_service 的操作名（cancel/pause/resume）
-        verb: 操作动词，用于提示与结果文案
-
-    返回:
-        str: 结果文案
+    matcher 在插件 __init__ 统一注册，此处仅承接业务逻辑。
     """
-    no = TaskCommandsHelper._parse_no(task_no)
-    if no is None:
-        return f"请输入任务编号，如: bot任务{verb} 1"
-    service_fn = getattr(task_service, f"{action}_task")
-    ok = await service_fn(session.user.id, no)
-    fail_hint = "或未暂停" if action == "resume" else f"或已{verb}"
-    if ok:
-        return f"任务 #{no} 已{verb}"
-    return f"未找到任务 #{no} {fail_hint}"
 
+    @staticmethod
+    def _parse_no(task_no: str) -> int | None:
+        """解析任务编号
 
-def setup_task_commands() -> None:
-    """注册用户定时任务相关matcher"""
-    if not get_config("USER_TASKS_ENABLED", True):
-        return
+        参数:
+            task_no: 用户输入的任务编号字符串
 
-    list_cmd = on_alconna(
-        Alconna("bot任务列表"),
-        aliases={"AI任务列表", "bot定时任务", "AI定时任务"},
-        priority=49,
-        block=True,
-    )
+        返回:
+            int | None: 编号，非法返回 None
+        """
+        if not isinstance(task_no, str):
+            return None
+        stripped = task_no.strip()
+        if not stripped.isdigit():
+            return None
+        no = int(stripped)
+        return no if no > 0 else None
 
-    create_cmd = on_alconna(
-        Alconna(
-            "bot任务创建",
-            Args["cron", str]["message", str],
-        ),
-        aliases={"AI任务创建"},
-        priority=49,
-        block=True,
-    )
+    @staticmethod
+    def _format_status(task) -> str:
+        """格式化任务状态标签
 
-    cancel_cmd = on_alconna(
-        Alconna("bot任务取消", Args["task_no", str]),
-        aliases={"AI任务取消"},
-        priority=49,
-        block=True,
-    )
+        参数:
+            task: UserTask 记录
 
-    pause_cmd = on_alconna(
-        Alconna("bot任务暂停", Args["task_no", str]),
-        aliases={"AI任务暂停"},
-        priority=49,
-        block=True,
-    )
+        返回:
+            str: 状态标签文本
+        """
+        if not task.is_active:
+            return "已取消"
+        if task.is_paused:
+            return "已暂停"
+        return "运行中"
 
-    resume_cmd = on_alconna(
-        Alconna("bot任务恢复", Args["task_no", str]),
-        aliases={"AI任务恢复"},
-        priority=49,
-        block=True,
-    )
+    @staticmethod
+    async def _run_task_action(
+        session: Uninfo,
+        task_no: str,
+        action: str,
+        verb: str,
+    ) -> str:
+        """执行单个任务操作并生成结果文案
 
-    @list_cmd.handle()
-    async def _handle_list(session: Uninfo) -> None:
+        参数:
+            session: 会话信息
+            task_no: 用户输入的任务编号字符串
+            action: task_service 的操作名（cancel/pause/resume）
+            verb: 操作动词，用于提示与结果文案
+
+        返回:
+            str: 结果文案
+        """
+        no = TaskCommands._parse_no(task_no)
+        if no is None:
+            return f"请输入任务编号，如: bot任务{verb} 1"
+        service_fn = getattr(task_service, f"{action}_task")
+        ok = await service_fn(session.user.id, no)
+        fail_hint = "或未暂停" if action == "resume" else f"或已{verb}"
+        if ok:
+            return f"任务 #{no} 已{verb}"
+        return f"未找到任务 #{no} {fail_hint}"
+
+    @staticmethod
+    async def handle_list(session: Uninfo) -> None:
         """列出用户的所有定时任务"""
+        if not await TaskCommands._check_task_enabled(session):
+            return
+
         user_id = session.user.id
         group_id = (
             session.scene.id
@@ -120,7 +121,7 @@ def setup_task_commands() -> None:
 
         lines = [f"定时任务列表（共{len(tasks)}个）:"]
         for task in tasks:
-            status = TaskCommandsHelper._format_status(task)
+            status = TaskCommands._format_status(task)
             cron_display = task.cron_expr.replace(" ", ",")
             desc = task.description[:30] if task.description else ""
             lines.append(
@@ -132,8 +133,8 @@ def setup_task_commands() -> None:
             "\n".join(lines)
         ).finish()
 
-    @create_cmd.handle()
-    async def _handle_create(
+    @staticmethod
+    async def handle_create(
         session: Uninfo,
         cron: str = "",
         message: str = "",
@@ -144,10 +145,7 @@ def setup_task_commands() -> None:
         消息长度上限截断、每用户进行中任务数上限。
         """
         # 黑名单用户不可创建定时任务（定时发消息刷屏风险）
-        if await AclChecker.check_blacklist(
-            session.user.id,
-            session.scene.id if session.scene.is_group else None,
-        ):
+        if not await TaskCommands._check_task_enabled(session):
             return
 
         if not cron or not message:
@@ -218,70 +216,59 @@ def setup_task_commands() -> None:
             reply += f"\n提示: 消息超过{_MAX_MESSAGE_LENGTH}字，已截断"
         await MessageUtils.build_message(reply).finish()
 
-    @cancel_cmd.handle()
-    async def _handle_cancel(
+    @staticmethod
+    async def handle_cancel(
         session: Uninfo, task_no: str = ""
     ) -> None:
         """取消定时任务"""
-        msg = await _run_task_action(
+        if not await TaskCommands._check_task_enabled(session):
+            return
+        msg = await TaskCommands._run_task_action(
             session, task_no, "cancel", "取消"
         )
         await MessageUtils.build_message(msg).finish()
 
-    @pause_cmd.handle()
-    async def _handle_pause(
+    @staticmethod
+    async def handle_pause(
         session: Uninfo, task_no: str = ""
     ) -> None:
         """暂停定时任务"""
-        msg = await _run_task_action(
+        if not await TaskCommands._check_task_enabled(session):
+            return
+        msg = await TaskCommands._run_task_action(
             session, task_no, "pause", "暂停"
         )
         await MessageUtils.build_message(msg).finish()
 
-    @resume_cmd.handle()
-    async def _handle_resume(
+    @staticmethod
+    async def handle_resume(
         session: Uninfo, task_no: str = ""
     ) -> None:
         """恢复定时任务"""
-        msg = await _run_task_action(
+        if not await TaskCommands._check_task_enabled(session):
+            return
+        msg = await TaskCommands._run_task_action(
             session, task_no, "resume", "恢复"
         )
         await MessageUtils.build_message(msg).finish()
 
-
-class TaskCommandsHelper:
-    """任务命令辅助工具类"""
-
     @staticmethod
-    def _parse_no(task_no: str) -> int | None:
-        """解析任务编号
+    async def _check_task_enabled(session: Uninfo) -> bool:
+        """任务功能前置校验：AI总开关 + 任务开关 + 黑名单
 
         参数:
-            task_no: 用户输入的任务编号字符串
+            session: 会话信息
 
         返回:
-            int | None: 编号，非法返回 None
+            bool: 是否允许继续处理
         """
-        if not isinstance(task_no, str):
-            return None
-        stripped = task_no.strip()
-        if not stripped.isdigit():
-            return None
-        no = int(stripped)
-        return no if no > 0 else None
-
-    @staticmethod
-    def _format_status(task) -> str:
-        """格式化任务状态标签
-
-        参数:
-            task: UserTask 记录
-
-        返回:
-            str: 状态标签文本
-        """
-        if not task.is_active:
-            return "已取消"
-        if task.is_paused:
-            return "已暂停"
-        return "运行中"
+        if not get_config("ENABLE_AI", False):
+            return False
+        if not get_config("USER_TASKS_ENABLED", True):
+            return False
+        if await AclChecker.check_blacklist(
+            session.user.id,
+            session.scene.id if session.scene.is_group else None,
+        ):
+            return False
+        return True

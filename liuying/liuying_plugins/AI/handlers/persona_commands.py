@@ -1,45 +1,29 @@
-"""人格命令处理
+"""人格命令逻辑
 
-注册bot人格切换与用户画像查看命令。
+bot人格切换与用户画像查看的业务处理。
 """
 
-from nonebot_plugin_alconna import (
-    Alconna,
-    Args,
-    on_alconna,
-)
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
-from ...core.persona import persona_manager
+from ..config import get_config
+from ..core.persona import persona_manager
 
-__all__ = ["setup_persona_commands"]
+__all__ = [
+    "PersonaCommands",
+]
 
 
-def setup_persona_commands() -> None:
-    """注册人格相关matcher
+class PersonaCommands:
+    """人格命令逻辑
 
-    - bot人格切换 [name]: 切换/查看可用人格
-    - 我的画像: 查看当前用户画像
+    matcher 在插件 __init__ 统一注册，此处仅承接业务逻辑。
     """
-    persona_cmd = on_alconna(
-        Alconna("bot人格切换", Args["name?", str]),
-        aliases={"AI人格切换", "bot人设切换"},
-        priority=49,
-        block=True,
-    )
 
-    profile_cmd = on_alconna(
-        Alconna("我的画像"),
-        aliases={"查看我的画像"},
-        priority=49,
-        block=True,
-    )
-
-    @persona_cmd.handle()
-    async def _handle_persona(
+    @staticmethod
+    async def handle_persona(
         session: Uninfo, name: str = ""
     ) -> None:
         """切换AI人格
@@ -47,6 +31,9 @@ def setup_persona_commands() -> None:
         无参数时展示所有可用bot人格列表及简要说明；
         带参数时切换当前用户的bot人格（用户级隔离）。
         """
+        if not get_config("ENABLE_AI", False):
+            return
+
         user_id = session.user.id
 
         # 无参：展示人格列表及描述
@@ -91,9 +78,12 @@ def setup_persona_commands() -> None:
             f"已切换人格: {name}\n（仅对你生效，对话与记忆已隔离）"
         ).finish()
 
-    @profile_cmd.handle()
-    async def _handle_profile(session: Uninfo) -> None:
+    @staticmethod
+    async def handle_profile(session: Uninfo) -> None:
         """查看用户画像"""
+        if not get_config("ENABLE_AI", False):
+            return
+
         user_id = session.user.id
         persona = await persona_manager.get_user_persona(user_id)
         if persona:

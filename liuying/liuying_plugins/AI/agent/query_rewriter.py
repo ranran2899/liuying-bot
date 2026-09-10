@@ -458,8 +458,10 @@ async def contextual_query_rewriter(
     try:
         use_llm = llm or llm_helper
         role = model_router.resolve(ROLE_INTENT)
+        # max_tokens下限2048：思考模式下reasoning计入max_tokens，
+        # 上限过低会被思考取尽导致改写JSON为空
         options = role.apply_to_options(
-            {"max_tokens": 600}
+            {"max_tokens": 4096}
         )
         _, response = await use_llm.chat(
             [

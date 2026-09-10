@@ -2,14 +2,23 @@
 
 AI对话核心 + 主动行为 + 工具调用 + 拟人化发送 + 完整记忆系统 + TTS + 贴纸。
 深度整合流萤本体系统：LLM/数据库/缓存/定时任务/好感度/权限。
+
+所有 matcher 在本模块统一注册，业务逻辑委托给 handlers 包中的
+逻辑类（ChatCommands/AdminCommands/TaskCommands 等）。
 """
 
+from nonebot import on_message, on_notice
+from nonebot.adapters import Bot, Event
 from nonebot.plugin import PluginMetadata
+from nonebot.rule import to_me
+from nonebot_plugin_alconna import Alconna, Args, UniMsg, on_alconna
+from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.utils import Command, PluginExtraData, PluginSetting
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
+from liuying.utils.rules import admin_check
 
 from .agent.mcp_bridge import mcp_bridge
 from .agent.tools import (  # 公开API供第三方注册工具
@@ -22,22 +31,19 @@ from .core.knowledge_db import knowledge_base
 from .core.llm import llm_helper, token_ledger
 from .core.memory import memory_manager
 from .core.runtime import runtime_switch
-from .handlers.admin_commands import setup_admin_matchers
-from .handlers.chat_matchers import setup_matchers
-from .jobs import setup_jobs
-from .models import (  # noqa: F401  导入触发模型注册
-    ConversationRecord,
-    EmotionState,
-    GroupContextSnapshot,
-    KnowledgeQueryLog,
-    MemoryItem,
-    StickerFeedback,
-    StickerItem,
-    StickerUsage,
-    TokenLedgerRecord,
-    UserPersonaProfile,
-    UserPersonaSelection,
+from .handlers import (
+    AdminCommands,
+    ChatCommands,
+    ChatMatchersHelper,
+    MemoryCommands,
+    PersonaCommands,
+    PokeNotice,
+    TaskCommands,
+    TtsCommands,
 )
+from .jobs import setup_jobs
+
+
 from .skills import SkillRuntime, skill_loader
 
 __all__ = [
@@ -120,12 +126,336 @@ __plugin_meta__ = PluginMetadata(
         """,
     ).to_dict(),
 )
+
+
+# ==================== 消息监听 ====================
+
+# 群内其他bot发言检测（高优先级，不阻断后续matcher）
+peer_cmd = on_message(priority=100, block=False)
+
+
+@peer_cmd.handle()
+async def handle_peer_detection(session: Uninfo, message: UniMsg) -> None:
+    """检测群内其他bot发言并触发静默"""
+    await ChatCommands.handle_peer_detection(session, message)
+
+
+# AI对话主入口：私聊自动命中，群聊@bot或回复bot时命中
+private_msg_cmd = on_message(
+    rule=to_me(), 
+    priority=520, 
+    block=False
+)
+
+
+@private_msg_cmd.handle()
+async def handle_private_message(
+    event: Event, session: Uninfo, message: UniMsg
+) -> None:
+    """处理私聊或@bot/回复bot的消息"""
+    await ChatCommands.handle_chat_message(event, session, message)
+
+
+# ==================== 群通知 ====================
+
+# group_ban notice 监听以感知群禁言状态
+group_ban_matcher = on_notice(priority=50, block=False)
+
+
+@group_ban_matcher.handle()
+async def handle_group_ban(bot: Bot, event: Event) -> None:
+    """处理群禁言notice事件"""
+    await ChatMatchersHelper.handle_group_ban(bot, event)
+
+
+# 拍一拍响应：戳bot自己时按概率戳回去
+poke_matcher = on_notice(priority=60, block=False)
+
+
+@poke_matcher.handle()
+async def handle_poke(bot: Bot, event: Event) -> None:
+    """处理戳一戳事件"""
+    await PokeNotice.handle_poke(bot, event)
+
+
+# ==================== 人格命令 ====================
+
+persona_cmd = on_alconna(
+    Alconna("bot人格切换", Args["name?", str]),
+    aliases={"AI人格切换", "bot人设切换"},
+    priority=49,
+    block=True,
+)
+
+profile_cmd = on_alconna(
+    Alconna("我的画像"),
+    aliases={"查看我的画像"},
+    priority=49,
+    block=True,
+)
+
+
+@persona_cmd.handle()
+async def handle_persona(session: Uninfo, name: str = "") -> None:
+    """切换/查看AI人格"""
+    await PersonaCommands.handle_persona(session, name)
+
+
+@profile_cmd.handle()
+async def handle_profile(session: Uninfo) -> None:
+    """查看用户画像"""
+    await PersonaCommands.handle_profile(session)
+
+
+# ==================== 记忆命令 ====================
+
+memory_cmd = on_alconna(
+    Alconna("bot记忆"),
+    aliases={"AI记忆"},
+    priority=49,
+    block=True,
+)
+
+clear_cmd = on_alconna(
+    Alconna("清空对话历史"),
+    aliases={"bot清空对话", "清除对话"},
+    priority=49,
+    block=True,
+)
+
+clear_memory_cmd = on_alconna(
+    Alconna("清空记忆"),
+    aliases={"bot清空记忆", "清除记忆"},
+    priority=49,
+    block=True,
+)
+
+
+@memory_cmd.handle()
+async def handle_memory(session: Uninfo) -> None:
+    """查看记忆摘要"""
+    await MemoryCommands.handle_memory(session)
+
+
+@clear_cmd.handle()
+async def handle_clear(session: Uninfo) -> None:
+    """清空对话历史"""
+    await MemoryCommands.handle_clear(session)
+
+
+@clear_memory_cmd.handle()
+async def handle_clear_memory(session: Uninfo) -> None:
+    """清空记忆"""
+    await MemoryCommands.handle_clear_memory(session)
+
+
+# ==================== TTS命令 ====================
+
+tts_cmd = on_alconna(
+    Alconna("bot说", Args["text", str]),
+    aliases={"AI说"},
+    priority=49,
+    block=True,
+)
+
+
+@tts_cmd.handle()
+async def handle_tts(session: Uninfo, text: str = "") -> None:
+    """TTS语音合成"""
+    await TtsCommands.handle_tts(session, text)
+
+
+# ==================== 用户定时任务命令 ====================
+
+task_list_cmd = on_alconna(
+    Alconna("bot任务列表"),
+    aliases={"AI任务列表", "bot定时任务", "AI定时任务"},
+    priority=49,
+    block=True,
+)
+
+task_create_cmd = on_alconna(
+    Alconna(
+        "bot任务创建",
+        Args["cron", str]["message", str],
+    ),
+    aliases={"AI任务创建"},
+    priority=49,
+    block=True,
+)
+
+task_cancel_cmd = on_alconna(
+    Alconna("bot任务取消", Args["task_no", str]),
+    aliases={"AI任务取消"},
+    priority=49,
+    block=True,
+)
+
+task_pause_cmd = on_alconna(
+    Alconna("bot任务暂停", Args["task_no", str]),
+    aliases={"AI任务暂停"},
+    priority=49,
+    block=True,
+)
+
+task_resume_cmd = on_alconna(
+    Alconna("bot任务恢复", Args["task_no", str]),
+    aliases={"AI任务恢复"},
+    priority=49,
+    block=True,
+)
+
+
+@task_list_cmd.handle()
+async def handle_task_list(session: Uninfo) -> None:
+    """查看定时任务列表"""
+    await TaskCommands.handle_list(session)
+
+
+@task_create_cmd.handle()
+async def handle_task_create(
+    session: Uninfo, cron: str = "", message: str = ""
+) -> None:
+    """创建定时任务"""
+    await TaskCommands.handle_create(session, cron, message)
+
+
+@task_cancel_cmd.handle()
+async def handle_task_cancel(session: Uninfo, task_no: str = "") -> None:
+    """取消定时任务"""
+    await TaskCommands.handle_cancel(session, task_no)
+
+
+@task_pause_cmd.handle()
+async def handle_task_pause(session: Uninfo, task_no: str = "") -> None:
+    """暂停定时任务"""
+    await TaskCommands.handle_pause(session, task_no)
+
+
+@task_resume_cmd.handle()
+async def handle_task_resume(session: Uninfo, task_no: str = "") -> None:
+    """恢复定时任务"""
+    await TaskCommands.handle_resume(session, task_no)
+
+
+# ==================== AI管理命令 ====================
+
+ai_status_cmd = on_alconna(
+    Alconna("流萤AI状态"),
+    aliases={"AI状态", "流萤AI体检"},
+    rule=admin_check(5),
+    priority=48,
+    block=True,
+)
+
+ai_switch_cmd = on_alconna(
+    Alconna(
+        "流萤AI开关",
+        Args["feature", str]["state", str],
+    ),
+    aliases={"AI开关"},
+    rule=admin_check(5),
+    priority=48,
+    block=True,
+)
+
+ai_group_switch_cmd = on_alconna(
+    Alconna(
+        "流萤AI群开关",
+        Args["group_id", str]["feature", str]["state", str],
+    ),
+    aliases={"AI群开关"},
+    rule=admin_check(5),
+    priority=48,
+    block=True,
+)
+
+ai_user_switch_cmd = on_alconna(
+    Alconna(
+        "流萤AI用户开关",
+        Args["user_id", str]["feature", str]["state", str],
+    ),
+    aliases={"AI用户开关"},
+    rule=admin_check(5),
+    priority=48,
+    block=True,
+)
+
+ai_reset_cmd = on_alconna(
+    Alconna("流萤AI重置"),
+    aliases={"AI重置"},
+    rule=admin_check(10),
+    priority=48,
+    block=True,
+)
+
+ai_clear_all_memory_cmd = on_alconna(
+    Alconna("全局清空记忆"),
+    aliases={"AI全局清空记忆", "流萤AI全局清空"},
+    rule=admin_check(10),
+    priority=48,
+    block=True,
+)
+
+
+@ai_status_cmd.handle()
+async def handle_ai_status(session: Uninfo) -> None:
+    """查看AI功能开关状态"""
+    await AdminCommands.handle_status(session)
+
+
+@ai_switch_cmd.handle()
+async def handle_ai_switch(
+    session: Uninfo, feature: str = "", state: str = ""
+) -> None:
+    """设置全局AI功能开关"""
+    await AdminCommands.handle_switch(session, feature, state)
+
+
+@ai_group_switch_cmd.handle()
+async def handle_ai_group_switch(
+    session: Uninfo,
+    group_id: str = "",
+    feature: str = "",
+    state: str = "",
+) -> None:
+    """设置群组级AI功能开关"""
+    await AdminCommands.handle_group_switch(
+        session, group_id, feature, state
+    )
+
+
+@ai_user_switch_cmd.handle()
+async def handle_ai_user_switch(
+    session: Uninfo,
+    user_id: str = "",
+    feature: str = "",
+    state: str = "",
+) -> None:
+    """设置用户级AI功能开关"""
+    await AdminCommands.handle_user_switch(
+        session, user_id, feature, state
+    )
+
+
+@ai_reset_cmd.handle()
+async def handle_ai_reset(session: Uninfo) -> None:
+    """重置所有AI运行时覆盖"""
+    await AdminCommands.handle_reset(session)
+
+
+@ai_clear_all_memory_cmd.handle()
+async def handle_ai_clear_all_memory(session: Uninfo) -> None:
+    """全局清空所有记忆数据"""
+    await AdminCommands.handle_clear_all_memory(session)
+
+
 @PriorityLifecycle.on_startup(priority=20)
 async def _init_ai_plugin() -> None:
     """AI插件初始化
 
     初始化内置知识库（独立 SQLite，与 liuying_db 解耦），
-    注册定时任务和matcher。
+    注册定时任务和技能包。
 
     通过 PriorityLifecycle 注册，优先级=20，作为业务插件在核心服务
     （数据库/LLM/缓存，优先级<=10）就绪后加载。
@@ -147,15 +477,8 @@ async def _init_ai_plugin() -> None:
     runtime_switch.initialize()
     logger.debug("运行时开关已初始化", command="AI")
 
-    # 注册对话matcher与AI管理员命令
-    setup_matchers()
-    setup_admin_matchers()
-    logger.debug("AI管理员命令已注册", command="AI")
-
     await setup_jobs()
 
-    # WebUI 管理能力已整合到流萤本体 web_ui 插件（liuying_plugins/web_ui），
-    # 通过 /liuying/api/ai/* 路由统一挂载，使用本体JWT认证。
 
     # 显式注入主插件服务给技能包（LLM助手 + 记忆管理器）
     runtime = SkillRuntime(

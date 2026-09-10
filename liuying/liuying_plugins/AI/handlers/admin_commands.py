@@ -1,37 +1,19 @@
-"""AI管理员命令
+"""AI管理员命令逻辑
 
-注册AI子功能运行时开关/功能体检等管理员命令。
-统一通过 on_alconna + nonebot_plugin_uninfo 实现多平台支持。
-权限通过 admin_check Rule 校验。
+AI子功能运行时开关/功能体检等管理员命令的业务处理。
 
 注意：本模块仅提供 AI 子功能管理，不重复实现流萤本体已有功能：
 - ban/unban/黑名单查询: 使用 liuying.liuying_plugins.admin.ban
 - 管理员等级设置: 使用 liuying.liuying_plugins.admin.bot_perm
 - 插件整体开关: 使用 liuying.liuying_plugins.admin.plugin_switch
-
-命令列表：
-- 流萤AI状态: 查看所有AI子功能开关状态
-- 流萤AI体检: 功能体检（健康检查）
-- 流萤AI开关 [功能名] [on/off]: 全局AI子功能开关
-- 流萤AI群开关 [群号] [功能名] [on/off]: 群组级AI子功能开关
-- 流萤AI用户开关 [用户ID] [功能名] [on/off]: 用户级AI子功能开关
-- 流萤AI重置: 重置所有运行时覆盖
-- 全局清空记忆: 清空所有用户的所有bot人格记忆与对话记录（10级权限）
-
-QZone相关命令已迁移到独立插件 nonebot_plugin_ai_qzone。
 """
 
-from nonebot_plugin_alconna import (
-    Alconna,
-    Args,
-    on_alconna,
-)
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
-from liuying.utils.rules import admin_check
 
+from ..config import get_config
 from ..core.memory import memory_manager
 from ..core.runtime import (
     FEATURE_LIST,
@@ -39,18 +21,19 @@ from ..core.runtime import (
 )
 from ..models.conversation_record import ConversationRecord
 
-__all__ = ["setup_admin_matchers"]
+__all__ = [
+    "AdminCommands",
+]
 
 
-_ADMIN_LEVEL = 5
-"""AI管理命令基础等级"""
+class AdminCommands:
+    """AI管理员命令逻辑
 
-
-class AdminCommandsHelper:
-    """AI管理员命令辅助工具类
-
-    封装状态行格式化、开关状态解析等辅助方法。
+    matcher 在插件 __init__ 统一注册，此处仅承接业务逻辑。
     """
+
+    _ADMIN_LEVEL = 5
+    """AI管理命令基础等级"""
 
     @staticmethod
     def _format_status_line(
@@ -87,100 +70,39 @@ class AdminCommandsHelper:
             return False
         return None
 
+    @staticmethod
+    def _validate_switch_args(
+        scope_id: str | None, feature: str, state: str
+    ) -> str | None:
+        """校验开关命令参数
 
-def _validate_switch_args(
-    scope_id: str | None, feature: str, state: str
-) -> str | None:
-    """校验开关命令参数
+        校验顺序：空作用域ID -> 状态合法性 -> 功能名合法性。
 
-    校验顺序：空作用域ID -> 状态合法性 -> 功能名合法性。
+        参数:
+            scope_id: 群号/用户ID，全局开关传None跳过空值校验
+            feature: 功能名
+            state: 状态文本
 
-    参数:
-        scope_id: 群号/用户ID，全局开关传None跳过空值校验
-        feature: 功能名
-        state: 状态文本
+        返回:
+            str | None: 错误提示文本，校验通过返回None
+        """
+        if scope_id is not None and not scope_id.strip():
+            return "请提供群号/用户ID"
+        if AdminCommands._parse_state(state) is None:
+            return "状态值无效，请用 on/off"
+        if (feature or "").strip().lower() not in FEATURE_LIST:
+            return (
+                f"未知功能: {feature}\n"
+                f"可用: {', '.join(FEATURE_LIST)}"
+            )
+        return None
 
-    返回:
-        str | None: 错误提示文本，校验通过返回None
-    """
-    if scope_id is not None and not scope_id.strip():
-        return "请提供群号/用户ID"
-    if AdminCommandsHelper._parse_state(state) is None:
-        return "状态值无效，请用 on/off"
-    if (feature or "").strip().lower() not in FEATURE_LIST:
-        return (
-            f"未知功能: {feature}\n"
-            f"可用: {', '.join(FEATURE_LIST)}"
-        )
-    return None
-
-
-def setup_admin_matchers() -> None:
-    """注册AI管理员命令matcher
-
-    在插件启动时调用。所有命令均使用 admin_check(5) Rule 校验权限。
-    """
-
-    status_cmd = on_alconna(
-        Alconna("流萤AI状态"),
-        aliases={"AI状态", "流萤AI体检"},
-        rule=admin_check(_ADMIN_LEVEL),
-        priority=48,
-        block=True,
-    )
-
-    switch_cmd = on_alconna(
-        Alconna(
-            "流萤AI开关",
-            Args["feature", str]["state", str],
-        ),
-        aliases={"AI开关"},
-        rule=admin_check(_ADMIN_LEVEL),
-        priority=48,
-        block=True,
-    )
-
-    group_switch_cmd = on_alconna(
-        Alconna(
-            "流萤AI群开关",
-            Args["group_id", str]["feature", str]["state", str],
-        ),
-        aliases={"AI群开关"},
-        rule=admin_check(_ADMIN_LEVEL),
-        priority=48,
-        block=True,
-    )
-
-    user_switch_cmd = on_alconna(
-        Alconna(
-            "流萤AI用户开关",
-            Args["user_id", str]["feature", str]["state", str],
-        ),
-        aliases={"AI用户开关"},
-        rule=admin_check(_ADMIN_LEVEL),
-        priority=48,
-        block=True,
-    )
-
-    reset_cmd = on_alconna(
-        Alconna("流萤AI重置"),
-        aliases={"AI重置"},
-        rule=admin_check(10),
-        priority=48,
-        block=True,
-    )
-
-    clear_all_memory_cmd = on_alconna(
-        Alconna("全局清空记忆"),
-        aliases={"AI全局清空记忆", "流萤AI全局清空"},
-        rule=admin_check(10),
-        priority=48,
-        block=True,
-    )
-
-    @status_cmd.handle()
-    async def _handle_status(session: Uninfo) -> None:
+    @staticmethod
+    async def handle_status(session: Uninfo) -> None:
         """查看功能开关状态"""
+        if not get_config("ENABLE_AI", False):
+            return
+
         group_id = (
             session.scene.id if session.scene.is_group else None
         )
@@ -192,7 +114,9 @@ def setup_admin_matchers() -> None:
         lines: list[str] = ["=== AI功能状态 ==="]
         for s in statuses:
             lines.append(
-                AdminCommandsHelper._format_status_line(s.name, s.enabled, s.source)
+                AdminCommands._format_status_line(
+                    s.name, s.enabled, s.source
+                )
             )
 
         report = runtime_switch.health_check()
@@ -215,16 +139,21 @@ def setup_admin_matchers() -> None:
             "\n".join(lines)
         ).finish()
 
-    @switch_cmd.handle()
-    async def _handle_switch(
+    @staticmethod
+    async def handle_switch(
         session: Uninfo, feature: str = "", state: str = ""
     ) -> None:
         """设置全局开关"""
+        if not get_config("ENABLE_AI", False):
+            return
+
         feature = (feature or "").strip().lower()
-        if err := _validate_switch_args(None, feature, state):
+        if err := AdminCommands._validate_switch_args(
+            None, feature, state
+        ):
             await MessageUtils.build_message(err).finish()
             return
-        enabled = AdminCommandsHelper._parse_state(state)
+        enabled = AdminCommands._parse_state(state)
         ok = runtime_switch.set_global(feature, enabled)
         msg = (
             f"已设置全局开关 {feature} = {enabled}"
@@ -233,20 +162,25 @@ def setup_admin_matchers() -> None:
         )
         await MessageUtils.build_message(msg).finish()
 
-    @group_switch_cmd.handle()
-    async def _handle_group_switch(
+    @staticmethod
+    async def handle_group_switch(
         session: Uninfo,
         group_id: str = "",
         feature: str = "",
         state: str = "",
     ) -> None:
         """设置群组级开关"""
+        if not get_config("ENABLE_AI", False):
+            return
+
         group_id = (group_id or "").strip()
         feature = (feature or "").strip().lower()
-        if err := _validate_switch_args(group_id, feature, state):
+        if err := AdminCommands._validate_switch_args(
+            group_id, feature, state
+        ):
             await MessageUtils.build_message(err).finish()
             return
-        enabled = AdminCommandsHelper._parse_state(state)
+        enabled = AdminCommands._parse_state(state)
         ok = runtime_switch.set_group(group_id, feature, enabled)
         msg = (
             f"已设置群 {group_id} 开关 {feature} = {enabled}"
@@ -255,20 +189,25 @@ def setup_admin_matchers() -> None:
         )
         await MessageUtils.build_message(msg).finish()
 
-    @user_switch_cmd.handle()
-    async def _handle_user_switch(
+    @staticmethod
+    async def handle_user_switch(
         session: Uninfo,
         user_id: str = "",
         feature: str = "",
         state: str = "",
     ) -> None:
         """设置用户级开关"""
+        if not get_config("ENABLE_AI", False):
+            return
+
         user_id = (user_id or "").strip()
         feature = (feature or "").strip().lower()
-        if err := _validate_switch_args(user_id, feature, state):
+        if err := AdminCommands._validate_switch_args(
+            user_id, feature, state
+        ):
             await MessageUtils.build_message(err).finish()
             return
-        enabled = AdminCommandsHelper._parse_state(state)
+        enabled = AdminCommands._parse_state(state)
         ok = runtime_switch.set_user(user_id, feature, enabled)
         msg = (
             f"已设置用户 {user_id} 开关 {feature} = {enabled}"
@@ -277,9 +216,12 @@ def setup_admin_matchers() -> None:
         )
         await MessageUtils.build_message(msg).finish()
 
-    @reset_cmd.handle()
-    async def _handle_reset(session: Uninfo) -> None:
+    @staticmethod
+    async def handle_reset(session: Uninfo) -> None:
         """重置所有运行时覆盖"""
+        if not get_config("ENABLE_AI", False):
+            return
+
         runtime_switch.reset_all()
         logger.info(
             f"管理员 {session.user.id} 重置所有AI运行时覆盖",
@@ -290,8 +232,8 @@ def setup_admin_matchers() -> None:
             "已重置所有群组/用户级开关覆盖"
         ).finish()
 
-    @clear_all_memory_cmd.handle()
-    async def _handle_clear_all_memory(
+    @staticmethod
+    async def handle_clear_all_memory(
         session: Uninfo,
     ) -> None:
         """全局清空所有用户的所有bot人格记忆与对话记录
@@ -300,6 +242,9 @@ def setup_admin_matchers() -> None:
         - 所有用户所有人格的对话记录（ConversationRecord）
         - 所有用户所有人格的记忆数据及搜索索引（MemoryItem）
         """
+        if not get_config("ENABLE_AI", False):
+            return
+
         # 纯ORM操作，让异常自然向上传播暴露数据库问题
         record_count = await ConversationRecord.clear_all_records()
         memory_count = await memory_manager.clear_all_memory()

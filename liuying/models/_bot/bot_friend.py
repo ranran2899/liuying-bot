@@ -172,5 +172,6 @@ class BotFriend(Model):
         return [
             # "ALTER TABLE bot_friends "
             # "ALTER COLUMN user_id TYPE VARCHAR(255);",
+            "ALTER TABLE bot_friends ADD COLUMN user_name VARCHAR(255);",
             "ALTER TABLE bot_friends ADD COLUMN user_avatar VARCHAR(255);",
         ]

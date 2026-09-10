@@ -165,9 +165,12 @@ class ReplyGenerator:
                     has_image=vision_provider is not None,
                     is_at_bot=ctx.is_at_bot,
                 )
+                # 仅当无正文时才尊重静默建议；
+                # LLM已生成回复文本时不应因silence标记丢弃正文
                 if (
                     result.response
                     and result.response.recommend_silence
+                    and not result.text.strip()
                 ):
                     return "", result
                 # Agent返回空文本（如LLM空响应）时兜底回复，

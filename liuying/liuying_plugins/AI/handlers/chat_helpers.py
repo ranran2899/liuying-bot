@@ -1,15 +1,14 @@
 """对话matcher辅助工具
 
-提供图片描述提取、回复发送、群禁言notice注册等辅助能力。
+提供图片描述提取、回复发送、群禁言notice处理等辅助能力。
 """
 
 import asyncio
 from pathlib import Path
 from typing import Any
 
-from nonebot import on_notice
 from nonebot.adapters import Bot, Event
-from nonebot_plugin_alconna import At, Image, Reply
+from nonebot_plugin_alconna import At, Image, Reply, UniMsg
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.log import logger
@@ -27,11 +26,31 @@ __all__ = [
 class ChatMatchersHelper:
     """对话matcher辅助工具类
 
-    封装图片描述提取、回复发送等辅助方法。
+    封装图片描述提取、回复发送、群禁言notice处理等辅助方法。
     """
 
     @staticmethod
-    async def _describe_single_image(
+    def extract_images(
+        message: UniMsg,
+    ) -> list[dict[str, Any]]:
+        """从统一消息提取图片URL
+
+        接收到的图片均为服务器直链（如QQ多媒体服务器）。
+
+        参数:
+            message: alconna注入的统一消息
+
+        返回:
+            list[dict[str, Any]]: 图片信息列表（url）
+        """
+        return [
+            {"url": str(seg.url or ""), "path": "", "raw": None}
+            for seg in message
+            if isinstance(seg, Image) and seg.url
+        ]
+
+    @staticmethod
+    async def describe_single_image(
         img: dict[str, Any]
     ) -> str:
         """描述单张图片（下载 + 视觉理解）
@@ -60,25 +79,25 @@ class ChatMatchersHelper:
         return ""
 
     @staticmethod
-    async def _extract_image_descriptions(
-        event: Event,
+    async def extract_image_descriptions(
+        message: UniMsg,
     ) -> list[str]:
-        """从消息事件提取图片并生成描述
+        """从统一消息提取图片并生成描述
 
         多张图片并行处理（asyncio.gather），避免串行耗时。
 
         参数:
-            event: 消息事件
+            message: alconna注入的统一消息
 
         返回:
             list[str]: 图片描述列表（与图片顺序对齐）
         """
-        images = MessageExtractor.extract_image_segments(event)
+        images = ChatMatchersHelper.extract_images(message)
         if not images:
             return []
 
         tasks = [
-            ChatMatchersHelper._describe_single_image(img)
+            ChatMatchersHelper.describe_single_image(img)
             for img in images
         ]
         results = await asyncio.gather(
@@ -91,7 +110,7 @@ class ChatMatchersHelper:
         ]
 
     @staticmethod
-    async def _send_reply(
+    async def send_reply(
         session: Uninfo,
         text: str,
         sticker: Image | bytes | Path | None = None,
@@ -105,20 +124,20 @@ class ChatMatchersHelper:
     ) -> None:
         """发送回复消息（支持碎片化分段与图片）
 
-            统一使用 MessageUtils.build_message 构建消息。
-            quote_msg_id/at_user_id 仅作用于第一条段，避免每段都引用/@。
+        统一使用 MessageUtils.build_message 构建消息。
+        quote_msg_id/at_user_id 仅作用于第一条段，避免每段都引用/@。
 
-            参数:
-                session: 会话信息
-                text: 回复文本（segments为空时使用）
-                sticker: 贴纸图片对象/路径/字节
-                tts_audio: TTS音频
-                image_url: 生成图片的URL
-                segments: 碎片化段列表（非空时优先使用）
-                gap_delays: 段间延迟列表（与segments对齐）
-                quote_msg_id: 引用回复的消息ID，None为不引用
-                at_user_id: @的用户ID，None为不@
-            """
+        参数:
+            session: 会话信息
+            text: 回复文本（segments为空时使用）
+            sticker: 贴纸图片对象/路径/字节
+            tts_audio: TTS音频
+            image_url: 生成图片的URL
+            segments: 碎片化段列表（非空时优先使用）
+            gap_delays: 段间延迟列表（与segments对齐）
+            quote_msg_id: 引用回复的消息ID，None为不引用
+            at_user_id: @的用户ID，None为不@
+        """
         # 归一化分段：过滤空串，全空则视为无分段
         segments = [s for s in (segments or []) if s] or None
 
@@ -184,48 +203,37 @@ class ChatMatchersHelper:
         await MessageUtils.build_message(msg_parts).send()
 
     @staticmethod
-    def _register_group_ban_notice() -> None:
-        """注册 group_ban notice 监听以感知群禁言状态"""
-        try:
-            notice_matcher = on_notice(
-                priority=50, block=False
+    async def handle_group_ban(bot: Bot, event: Event) -> None:
+        """处理 group_ban notice 事件
+
+        参数:
+            bot: Bot对象
+            event: 事件对象
+        """
+        notice_type = str(
+            getattr(event, "notice_type", "") or ""
+        ).strip()
+        if notice_type != "group_ban":
+            return
+
+        self_id = str(
+            getattr(bot, "self_id", "") or ""
+        )
+        updated = (
+            GroupMuteTracker.update_group_mute_from_notice(
+                event, bot_self_id=self_id
             )
-
-            @notice_matcher.handle()
-            async def _handle_group_ban(
-                bot: Bot, event: Event
-            ) -> None:
-                """处理 group_ban notice 事件"""
-                notice_type = str(
-                    getattr(event, "notice_type", "") or ""
-                ).strip()
-                if notice_type != "group_ban":
-                    return
-
-                self_id = str(
-                    getattr(bot, "self_id", "") or ""
-                )
-                updated = (
-                    GroupMuteTracker.update_group_mute_from_notice(
-                        event, bot_self_id=self_id
-                    )
-                )
-                if updated:
-                    group_id = str(
-                        getattr(event, "group_id", "") or ""
-                    )
-                    duration = int(
-                        getattr(event, "duration", 0) or 0
-                    )
-                    logger.info(
-                        f"收到群禁言通知: group={group_id} "
-                        f"duration={duration}s",
-                        command="AI",
-                        group_id=group_id,
-                    )
-        except Exception as e:
-            logger.warning(
-                f"注册 group_ban notice 监听失败: {e}",
+        )
+        if updated:
+            group_id = str(
+                getattr(event, "group_id", "") or ""
+            )
+            duration = int(
+                getattr(event, "duration", 0) or 0
+            )
+            logger.info(
+                f"收到群禁言通知: group={group_id} "
+                f"duration={duration}s",
                 command="AI",
-                e=e,
+                group_id=group_id,
             )

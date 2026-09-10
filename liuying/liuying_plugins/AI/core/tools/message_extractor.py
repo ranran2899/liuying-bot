@@ -1,13 +1,10 @@
 """消息内容提取器
 
-统一从 NoneBot 消息事件中提取文本、图片等多媒体内容，
-屏蔽不同适配器消息段差异，供 AI 插件各模块复用。
+图片二进制获取工具，多平台消息内容解析统一由
+nonebot_plugin_alconna 的 UniMessage 提供。
 """
-import base64
-from typing import Any
 
 import anyio
-from nonebot.adapters import Event
 
 from liuying.utils.http.http_utils import AsyncHttpx
 from liuying.utils.log import logger
@@ -18,72 +15,8 @@ __all__ = ["MessageExtractor"]
 class MessageExtractor:
     """消息内容提取器
 
-    封装从消息事件提取文本/图片段与获取图片字节的能力，
-    所有方法均为静态方法，屏蔽不同适配器消息段差异。
+    提供图片二进制获取能力，按 raw > path > url 的优先级读取。
     """
-
-    @staticmethod
-    def extract_message_text(event: Event) -> str:
-        """从事件消息中提取纯文本内容
-
-        遍历消息段，仅保留 text 类型段的文本并拼接。
-
-        参数:
-            event: 消息事件
-
-        返回:
-            str: 提取并清理后的文本
-        """
-        message = getattr(event, "message", None)
-        if not message:
-            return ""
-
-        texts: list[str] = []
-        for seg in message:
-            seg_type = str(getattr(seg, "type", "")).lower()
-            if seg_type != "text":
-                continue
-            data = getattr(seg, "data", None) or {}
-            if isinstance(data, dict):
-                seg_text = str(data.get("text") or "")
-            else:
-                seg_text = str(getattr(data, "text", "") or "")
-            texts.append(seg_text)
-
-        return "".join(texts).strip()
-
-    @staticmethod
-    def extract_image_segments(
-        event: Event,
-    ) -> list[dict[str, Any]]:
-        """从事件消息中提取图片段信息
-
-        兼容 image/attachment 类型消息段，适配不同协议适配器。
-
-        参数:
-            event: 消息事件
-
-        返回:
-            list[dict]: 图片信息列表（含 url/path/raw）
-        """
-        message = getattr(event, "message", None)
-        if not message:
-            return []
-
-        results: list[dict[str, Any]] = []
-        for seg in message:
-            seg_type = str(getattr(seg, "type", "")).lower()
-            if seg_type not in ("image", "attachment"):
-                continue
-            data = getattr(seg, "data", None) or {}
-            url = str(data.get("url") or data.get("image") or "")
-            path = str(data.get("file") or data.get("path") or "")
-            raw = data.get("data") or None
-            if isinstance(raw, str) and raw.startswith("base64://"):
-                raw = base64.b64decode(raw[9:])
-            results.append({"url": url, "path": path, "raw": raw})
-
-        return results
 
     @staticmethod
     async def fetch_image_bytes(

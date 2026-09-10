@@ -202,7 +202,7 @@ class TurnPlanner:
 
         # 语义帧增强（独立于LLM规划路径，覆盖规则与LLM两种模式）
         plan = await self._augment_plan_with_semantic_frame(
-            plan, user_message, context_summary
+            plan, user_message, context_summary, is_at_bot=is_at_bot
         )
         return plan
 
@@ -285,16 +285,24 @@ class TurnPlanner:
             f"metadata fallback：action={fallback.action}, "
             f"output_mode={fallback.output_mode}, "
             f"target={fallback.message_target}",
-            "请输出回合规划JSON。",
         ]
+        # 直达消息必须回复：本管线仅由私聊/@bot/回复bot触发，
+        # 不存在"不确定是否cue bot"的背景闲聊场景
+        if is_at_bot:
+            user_content_parts.append(
+                "消息直达：用户已@或私聊bot，除非消息明显是与他人对话，"
+                "否则必须reply，禁止silence"
+            )
+        user_content_parts.append("请输出回合规划JSON。")
         user_prompt = "\n".join(user_content_parts)
 
         try:
             llm = self._get_llm()
             role = model_router.resolve(ROLE_INTENT)
-            # 限制输出token：规划JSON约400-600 tokens
+            # max_tokens下限2048：思考模式下reasoning计入max_tokens，
+            # 上限过低会被思考取尽导致规划JSON为空
             plan_options = role.apply_to_options(
-                {"max_tokens": 800}
+                {"max_tokens": 4096}
             )
             _, response = await llm.chat(
                 [
@@ -374,6 +382,7 @@ class TurnPlanner:
         plan: TurnPlan,
         user_message: str,
         context_summary: str,
+        is_at_bot: bool = False,
     ) -> TurnPlan:
         """用语义帧增强规划
 
@@ -387,6 +396,7 @@ class TurnPlanner:
             plan: 原始规划
             user_message: 用户消息
             context_summary: 上下文摘要
+            is_at_bot: 消息是否直达bot（直达时禁止静默覆盖）
 
         返回:
             TurnPlan: 增强后的规划
@@ -408,8 +418,14 @@ class TurnPlanner:
 
         plan.semantic_frame = frame_dict
 
-        # 静默建议优先级最高：覆盖规划动作
-        if frame_dict.get("recommend_silence") and plan.action == TURN_ACTION_REPLY:
+        # 静默建议优先级最高：覆盖规划动作。
+        # 直达消息（私聊/@bot）不适用：用户明确在跟bot说话，
+        # 静默等同无视，禁止覆盖
+        if (
+            frame_dict.get("recommend_silence")
+            and plan.action == TURN_ACTION_REPLY
+            and not is_at_bot
+        ):
             plan.action = TURN_ACTION_SILENCE
             plan.output_mode = OUTPUT_MODE_SILENCE
             if plan.reason:
