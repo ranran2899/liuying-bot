@@ -226,22 +226,3 @@ def match_intent_rule(text: str) -> IntentRule | None:
         if any(kw in text for kw in rule.keywords):
             return rule
     return None
-
-
-class IntentRuleManager:
-    """意图规则管理器（兼容保留）
-
-    历史调用入口，内部委托模块级 match_intent_rule。
-    新代码请直接使用 match_intent_rule 函数。
-    """
-
-    def match(self, text: str) -> IntentRule | None:
-        """按优先级匹配文本到意图规则
-
-        参数:
-            text: 输入文本（已转小写）
-
-        返回:
-            IntentRule | None: 匹配的最高优先级规则
-        """
-        return match_intent_rule(text)

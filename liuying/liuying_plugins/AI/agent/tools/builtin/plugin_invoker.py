@@ -166,8 +166,21 @@ async def invoke_plugin_command(
                 f"无法将意图转写为 {display_name} "
                 "的命令，请用户手动使用该插件"
             )
+        # 安全校验：仅接受以插件注册命令开头的单行命令，
+        # 防止 LLM 输出越权内容被上层流水线代发
+        first_line = command_text.splitlines()[0].strip()
+        allowed = tuple(
+            str(c.get("command") or "")
+            for c in commands
+            if c.get("command")
+        )
+        if not allowed or not first_line.startswith(allowed):
+            return (
+                f"生成的命令与插件 {display_name} "
+                "的注册命令不匹配，已拒绝执行"
+            )
         return (
-            f"已构造命令: {command_text}\n"
+            f"已构造命令: {first_line}\n"
             f"来源插件: {display_name}"
         )
     except Exception as e:
@@ -176,7 +189,7 @@ async def invoke_plugin_command(
             command="AI",
             e=e,
         )
-        return f"命令转写失败: {e}"
+        return f"命令转写失败: {type(e).__name__}"
 
 
 @register_tool(
@@ -217,15 +230,8 @@ async def get_plugin_command_help(plugin_name: str) -> str:
         return f"未找到插件: {plugin_name}"
     if not commands:
         return f"插件 {brief.get('name') or plugin_name} 暂无命令说明"
-    lines: list[str] = [
-        f"插件 {brief.get('name') or plugin_name} 命令清单:"
-    ]
-    for cmd in commands:
-        name = str(cmd.get("command") or "")
-        params = " ".join(f"[{p}]" for p in cmd.get("params") or [])
-        desc = str(cmd.get("description") or "")
-        lines.append(f"- {name} {params}: {desc}")
-    return "\n".join(lines)
+    header = f"插件 {brief.get('name') or plugin_name} 命令清单:"
+    return f"{header}\n{_format_commands_for_prompt(commands)}"
 
 
 @register_tool(
@@ -293,7 +299,7 @@ async def search_plugin_by_capability(
             )
         return "\n".join(lines)
     except Exception as e:
-        return f"搜索失败: {e}"
+        return f"搜索失败: {type(e).__name__}"
 
 
 __all__ = [

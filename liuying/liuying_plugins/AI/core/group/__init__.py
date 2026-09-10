@@ -1,6 +1,6 @@
 """群组智能
 
-提供群组成员管理、社交分析、群风格画像、禁言状态与画像服务。
+提供群组成员管理、社交分析、群风格画像与禁言状态。
 """
 
 from .members import (
@@ -15,7 +15,6 @@ from .profile import (
     extract_group_style,
     group_profile,
 )
-from .profile_service import ProfileService, profile_service
 from .social import GroupSocialService, group_social
 
 __all__ = [
@@ -24,12 +23,10 @@ __all__ = [
     "GroupMemberSnapshot",
     "GroupMuteTracker",
     "GroupSocialService",
-    "ProfileService",
     "ProfileToolkit",
     "extract_group_style",
     "group_member_service",
     "group_mute_tracker",
     "group_profile",
     "group_social",
-    "profile_service",
 ]

@@ -16,6 +16,7 @@ from liuying.utils.message import MessageUtils
 from ...config import get_config
 from ...core.llm import llm_helper
 from ...core.persona import persona_manager
+from ...core.safety.acl import AclChecker
 from ..chat_helpers import ChatMatchersHelper
 
 __all__ = ["setup_tts_commands"]
@@ -46,6 +47,13 @@ def setup_tts_commands() -> None:
         使用当前用户激活的人格对应的语音配置，
         文本超长时拒绝合成。
         """
+        # 黑名单用户不可触发语音合成（消耗配额且直发音频）
+        if await AclChecker.check_blacklist(
+            session.user.id,
+            session.scene.id if session.scene.is_group else None,
+        ):
+            return
+
         # TTS 配置只读取一次，供开关与音色兜底共用
         tts_cfg = get_config("TTS", {})
         if not tts_cfg.get("enabled", False):

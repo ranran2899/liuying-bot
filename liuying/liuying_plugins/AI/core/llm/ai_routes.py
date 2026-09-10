@@ -82,19 +82,15 @@ class AiCliRoute:
     timeout: int = _DEFAULT_TIMEOUT
     priority: int = 100
 
-    def build_cmd(self, prompt: str) -> list[str]:
+    def build_cmd(self) -> list[str]:
         """构建完整命令
 
-        参数:
-            prompt: 用户prompt（use_stdin=False时追加到命令末尾）
+        用户消息一律经 stdin 传递，命令行仅含程序与参数。
 
         返回:
             list[str]: 完整命令列表
         """
-        cmd = list(self.command) + list(self.args)
-        if not self.use_stdin and prompt:
-            cmd.append(prompt)
-        return cmd
+        return [*self.command, *self.args]
 
 
 class AiCliRouter:
@@ -256,7 +252,7 @@ class AiCliRouter:
             asyncio.TimeoutError: 调用超时
             Exception: 子进程调用失败
         """
-        cmd = route.build_cmd(prompt)
+        cmd = route.build_cmd()
         logger.debug(
             f"CLI路由调用: {route.name} cmd={cmd}",
             command="AI",

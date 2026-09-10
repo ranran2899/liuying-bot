@@ -10,6 +10,7 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.utils.message import MessageUtils
 
 from ...config import get_config
+from ...core.safety.acl import AclChecker
 from ...core.tasks_service import task_service
 
 __all__ = ["setup_task_commands"]
@@ -142,6 +143,13 @@ def setup_task_commands() -> None:
         创建前依次执行三道防线：cron 分钟位频率限制、
         消息长度上限截断、每用户进行中任务数上限。
         """
+        # 黑名单用户不可创建定时任务（定时发消息刷屏风险）
+        if await AclChecker.check_blacklist(
+            session.user.id,
+            session.scene.id if session.scene.is_group else None,
+        ):
+            return
+
         if not cron or not message:
             await MessageUtils.build_message(
                 "格式: bot任务创建 <cron> <消息>\n"

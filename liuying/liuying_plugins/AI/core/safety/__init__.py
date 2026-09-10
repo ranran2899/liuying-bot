@@ -3,7 +3,7 @@
 提供权限校验、LLM 回复安全过滤、用户对话 token 额度管理。
 """
 
-from .acl import AclChecker, PermissionResult, acl_checker
+from .acl import AclChecker, PermissionResult
 from .filter import SafetyFilter, SafetyRefusalError
 from .token_quota import (
     QuotaCheckResult,
@@ -18,6 +18,5 @@ __all__ = [
     "SafetyFilter",
     "SafetyRefusalError",
     "TokenQuotaService",
-    "acl_checker",
     "token_quota_service",
 ]

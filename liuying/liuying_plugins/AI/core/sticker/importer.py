@@ -5,6 +5,7 @@
 constants 模块导入。
 """
 
+from asyncio import to_thread
 import hashlib
 from pathlib import Path
 
@@ -34,6 +35,26 @@ SEMANTIC_HINTS: dict[str, list[str]] = {
     "love": ["love", "heart", "喜欢", "爱"],
 }
 """语义场景关键词"""
+
+
+def resolve_sticker_path(
+    root_dir: Path, file_path: str
+) -> Path | None:
+    """安全解析表情包相对路径，防止路径穿越
+
+    参数:
+        root_dir: 表情包根目录
+        file_path: 数据库中记录的相对路径
+
+    返回:
+        Path | None: 校验通过的绝对路径，越界或非法返回 None
+    """
+    try:
+        full = (root_dir / file_path).resolve()
+        full.relative_to(root_dir.resolve())
+    except (ValueError, OSError):
+        return None
+    return full
 
 
 class StickerImporter:
@@ -142,8 +163,8 @@ class StickerImporter:
                 )
         if not item.file_path:
             return None
-        full_path = self.root_dir / item.file_path
-        if full_path.exists():
+        full_path = resolve_sticker_path(self.root_dir, item.file_path)
+        if full_path and full_path.exists():
             return full_path.read_bytes()
         return None
 
@@ -212,8 +233,9 @@ class StickerImporter:
                 rel_path = str(
                     file_path.relative_to(self.root_dir)
                 )
-                file_hash = self.compute_file_hash_safe(
-                    file_path
+                # 同步哈希计算在线程池执行，避免阻塞事件循环
+                file_hash = await to_thread(
+                    self.compute_file_hash_safe, file_path
                 )
                 file_size = file_path.stat().st_size
                 file_ext = file_path.suffix.lower()
@@ -289,7 +311,9 @@ class StickerImporter:
                     added += 1
                     if llm_describe:
                         try:
-                            image_bytes = file_path.read_bytes()
+                            image_bytes = await to_thread(
+                                file_path.read_bytes
+                            )
                             await self._llm_describe_item(
                                 item, image_bytes
                             )
@@ -444,8 +468,8 @@ class StickerImporter:
         for item_id, file_path, bed_filename in rows:
             if bed_filename or not file_path:
                 continue
-            full_path = self.root_dir / file_path
-            if not full_path.exists():
+            full_path = resolve_sticker_path(self.root_dir, file_path)
+            if not full_path or not full_path.exists():
                 missing_ids.append(item_id)
 
         removed = 0

@@ -8,7 +8,9 @@ SSRF 基础防护：DNS 解析在 URL 校验阶段完成，拒绝内网/环回/
 校验 IP，此处仅做基础防护。
 """
 
+from asyncio import to_thread
 from dataclasses import dataclass
+import ipaddress
 import re
 import socket
 from urllib.parse import urlparse
@@ -29,30 +31,33 @@ _PRIVATE_URL_HOSTS = ("localhost", "metadata.google.internal")
 
 
 def _is_private_ip(ip: str) -> bool:
-    """判断IP是否属于内网/环回/链路本地网段
+    """判断IP是否属于内网/环回/链路本地等非公网网段
+
+    基于 ipaddress 标准库判定，覆盖 IPv4-mapped IPv6、
+    共享地址段（100.64/10）、未指定地址等边界情况。
 
     参数:
         ip: IP地址字符串（IPv4或IPv6）
 
     返回:
-        bool: 是否为内网地址
+        bool: 是否为非公网地址
     """
-    if ip.startswith(("127.", "10.", "192.168.", "169.254.")):
+    try:
+        addr = ipaddress.ip_address(ip.strip("[]"))
+    except ValueError:
+        # 非法地址一律按内网处理，拒绝请求
         return True
-    if ip.startswith(("::1", "fe80:")):
-        return True
-    if ip.startswith("172."):
-        parts = ip.split(".")
-        if len(parts) > 1 and parts[1].isdigit():
-            return 16 <= int(parts[1]) <= 31
-    return False
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    return not addr.is_global
 
 
-def _is_private_address(host: str) -> bool:
+async def is_private_address(host: str) -> bool:
     """检查主机是否解析到内网/环回/链路本地地址
 
-    DNS 解析在 URL 校验阶段完成；防 DNS rebinding 的完整方案
-    需在连接层固定已校验 IP，此处仅做基础防护。
+    DNS 解析在线程池中执行以避免阻塞事件循环；
+    防 DNS rebinding 的完整方案需在连接层固定已校验 IP，
+    此处仅做基础防护。
 
     参数:
         host: URL主机名或IP
@@ -63,7 +68,7 @@ def _is_private_address(host: str) -> bool:
     if host.lower() in _PRIVATE_URL_HOSTS:
         return True
     try:
-        addr_info = socket.getaddrinfo(host, None)
+        addr_info = await to_thread(socket.getaddrinfo, host, None)
     except (OSError, UnicodeError):
         # 解析失败按内网处理，拒绝请求
         return True
@@ -221,7 +226,7 @@ class WebFetchService:
 
         # SSRF 防护：发起请求前解析主机，内网地址一律拒绝
         host = urlparse(url).hostname or ""
-        if _is_private_address(host):
+        if await is_private_address(host):
             return WebPageContent(url=url, error="禁止访问内网地址")
 
         status, html, error = await WebFetcher._http_get(url)

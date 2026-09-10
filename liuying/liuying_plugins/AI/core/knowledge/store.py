@@ -364,47 +364,6 @@ class KnowledgeStore:
 
         return "\n".join(parts)
 
-    async def build_prompt_block(
-        self,
-        text: str,
-        top_k: int = 3,
-        *,
-        user_id: str = "",
-        group_id: str = "",
-    ) -> str:
-        """构建供AI读取的知识块文本
-
-        基于用户文本召回相关插件，拼接成知识块。
-
-        参数:
-            text: 用户输入文本
-            top_k: 召回数量
-            user_id: 用户ID
-            group_id: 群组ID
-
-        返回:
-            str: 知识块文本（无召回时返回空串）
-        """
-        results = await self.recall(
-            text,
-            top_k=top_k,
-            user_id=user_id,
-            group_id=group_id,
-        )
-        if not results:
-            return ""
-
-        blocks: list[str] = [
-            "## 可用插件知识（用户提问可能相关）"
-        ]
-        for r in results:
-            blocks.append(self.build_detail_block(r.info))
-        blocks.append(
-            "提示：如需调用上述插件能力，请通过命令提示用户或"
-            "在回复中引用对应命令；不要伪造不存在的命令。"
-        )
-        return "\n\n".join(blocks)
-
     async def get_stats(self) -> KnowledgeStats:
         """获取知识库统计
 
@@ -433,7 +392,6 @@ class KnowledgeStore:
         hot = await KnowledgeQueryLog.get_hot_plugins(
             days=7, limit=10
         )
-
         stats = KnowledgeStats(
             total=len(all_items),
             enabled=enabled_count,
@@ -441,7 +399,6 @@ class KnowledgeStore:
             total_commands=total_commands,
             total_tools=total_tools,
             hot_plugins=hot,
-            last_scan=None,
         )
         self._last_stats = stats
         self._last_stats_time = now_ts

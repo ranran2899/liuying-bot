@@ -3,6 +3,8 @@
 插件知识检索 + 插件详情查询 + 插件列表。
 """
 
+from liuying.utils.log import logger
+
 from ....core.knowledge import knowledge_store
 from ...runtime.constants import (
     EVIDENCE_KIND_CONTEXT,
@@ -74,7 +76,8 @@ async def search_plugin_knowledge(
             )
         return "\n".join(lines)
     except Exception as e:
-        return f"知识库检索失败: {e}"
+        logger.warning(f"知识库检索失败: {e}", command="AI", e=e)
+        return f"知识库检索失败: {type(e).__name__}"
 
 
 @register_tool(
@@ -113,7 +116,8 @@ async def get_plugin_detail(plugin_name: str) -> str:
             return f"未找到插件: {plugin_name}"
         return knowledge_store.build_detail_block(item)
     except Exception as e:
-        return f"查询插件详情失败: {e}"
+        logger.warning(f"查询插件详情失败: {e}", command="AI", e=e)
+        return f"查询插件详情失败: {type(e).__name__}"
 
 
 @register_tool(
@@ -170,4 +174,5 @@ async def list_available_plugins(menu_type: str = "") -> str:
             )
         return "\n".join(lines)
     except Exception as e:
-        return f"列出插件失败: {e}"
+        logger.warning(f"列出插件失败: {e}", command="AI", e=e)
+        return f"列出插件失败: {type(e).__name__}"

@@ -4,7 +4,6 @@
 通过 provider_router 实现多 provider 自动容错切换。
 """
 
-from collections.abc import AsyncIterator
 import time
 from typing import Any
 
@@ -67,29 +66,6 @@ class LLMHelper:
         self._candidates_cache: dict[
             tuple[Capability, str], tuple[float, list[str]]
         ] = {}
-
-    def _get_provider(self, name: str | None = None):
-        """获取provider实例
-
-        参数:
-            name: provider名称，None时用配置或默认
-
-        返回:
-            BaseProvider: provider实例
-
-        异常:
-            ValueError: provider未配置或不存在
-        """
-        provider_name = name or get_config("CHAT_MODEL", {}).get("provider", None)
-        if provider_name:
-            provider = llm_manager.get_provider(provider_name)
-            if provider:
-                return provider
-            raise ValueError(f"LLM provider '{provider_name}' 未找到")
-        provider = llm_manager.get_default_provider()
-        if not provider:
-            raise ValueError("无可用LLM provider，请检查配置")
-        return provider
 
     @staticmethod
     def _resolve_capability(
@@ -277,57 +253,6 @@ class LLMHelper:
         if reasoning:
             return f"{reasoning}\n\n{content}"
         return content
-
-    async def chat_stream(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        options: dict[str, Any] | None = None,
-        provider_name: str | None = None,
-    ) -> AsyncIterator[str]:
-        """流式对话调用
-
-        参数:
-            messages: 消息列表
-            model: 模型名
-            options: 额外选项
-            provider_name: 指定provider
-
-        返回:
-            AsyncIterator[str]: 流式回复文本片段
-
-        说明:
-            流式调用暂不支持中途切换provider，仅做首选provider冷却检测。
-            若首选provider冷却，则回退到非流式chat_text并一次性yield结果。
-        """
-        stream_cfg = get_config("CHAT_MODEL", {})
-        preferred = provider_name or stream_cfg.get("provider", None)
-        if preferred and provider_router.is_cooling(preferred):
-            logger.warning(
-                f"provider {preferred} 处于冷却期，流式调用回退到非流式",
-                command="AI",
-            )
-            text = await self.chat_text(
-                messages, model, options, preferred
-            )
-            yield text
-            return
-
-        provider = self._get_provider(provider_name)
-        chat_cap = provider.get_capability(Capability.CHAT)
-        if not chat_cap:
-            raise ValueError(
-                f"provider '{provider.name}' 不支持流式对话"
-            )
-        use_model = model or stream_cfg.get("model", None) or ""
-        call_options = {
-            **(options or {}),
-            **_build_thinking_options(chat_cap),
-        }
-        async for chunk in chat_cap.chat_stream(
-            use_model, messages, call_options
-        ):
-            yield chunk
 
     async def embedding(
         self,

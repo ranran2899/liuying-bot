@@ -3,6 +3,8 @@
 用户记忆召回。
 """
 
+from liuying.utils.log import logger
+
 from ....core.memory import memory_manager
 from ...runtime.constants import (
     EVIDENCE_KIND_CONTEXT,
@@ -60,7 +62,8 @@ async def recall_memory(query: str, top_k: int = 5) -> str:
             persona_name=get_current_persona_name(),
         )
     except Exception as e:
-        return f"记忆召回失败: {e}"
+        logger.warning(f"记忆召回失败: {e}", command="AI", e=e)
+        return f"记忆召回失败: {type(e).__name__}"
     if not memories:
         return "未召回相关记忆"
     lines = []

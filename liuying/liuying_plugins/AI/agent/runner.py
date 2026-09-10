@@ -140,17 +140,9 @@ class AgentRunner:
         user_message = ""
         for msg in reversed(messages):
             if msg.get("role") == "user":
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    # 多模态消息：提取文本段拼接，避免对list调strip
-                    user_message = "".join(
-                        part.get("text", "")
-                        for part in content
-                        if isinstance(part, dict)
-                        and part.get("type") == "text"
-                    )
-                else:
-                    user_message = content
+                user_message = AgentRunner._extract_text(
+                    msg.get("content", "")
+                )
                 break
 
         context_summary = AgentRunner._build_context_summary(messages)
@@ -195,18 +187,7 @@ class AgentRunner:
             command="AI",
         )
 
-        # 注入多话题防串扰硬约束 + 语义工具指导到 system 消息，
-        # 供响应器消费（参考参考插件 runner.py 的 system 消息注入）
-        AgentRunner._inject_guidance_to_messages(messages)
-
-        # 需要工具时调用查询改写器，生成高质量检索计划，
-        # 避免 LLM 规划器直接拿用户口语当 query（参考参考插件核心创新）
-        if plan.need_tool:
-            await AgentRunner._apply_query_rewrite(
-                plan, user_message, context_summary, llm_helper, has_image
-            )
-
-        # 静默场景直接返回
+        # 静默场景直接返回（置于改写与注入之前，避免白耗调用）
         if plan.is_silence:
             elapsed = time.time() - start_time
             return AgentResult(
@@ -219,6 +200,17 @@ class AgentRunner:
                     elapsed=elapsed,
                 ),
                 metrics={"silence": True},
+            )
+
+        # 注入多话题防串扰硬约束 + 语义工具指导到 system 消息，
+        # 供响应器消费（返回副本，不污染调用方消息列表）
+        guided_messages = AgentRunner._inject_guidance_to_messages(messages)
+
+        # 需要工具时调用查询改写器，生成高质量检索计划，
+        # 避免 LLM 规划器直接拿用户口语当 query（参考参考插件核心创新）
+        if plan.need_tool:
+            await AgentRunner._apply_query_rewrite(
+                plan, user_message, context_summary, llm_helper, has_image
             )
 
         # ===== 第2层：执行 =====
@@ -259,7 +251,7 @@ class AgentRunner:
                     plan=plan,
                     evidence=executor.evidence,
                     user_message=user_message,
-                    messages=messages,
+                    messages=guided_messages,
                     user_id=user_id,
                     group_id=group_id,
                 )
@@ -293,28 +285,54 @@ class AgentRunner:
             )
 
     @staticmethod
-    def _inject_guidance_to_messages(
-        messages: list[dict[str, str]],
-    ) -> None:
-        """注入多话题防串扰和语义工具指导到 system 消息
+    def _extract_text(content: Any) -> str:
+        """提取消息文本内容（兼容多模态 list 结构）
 
-        将防串扰硬约束和语义工具指导追加到 messages 的首个 system
-        消息内容末尾，供响应器消费。无 system 消息时新建一条。
-        已注入过（包含防串扰尾部特征子串）时直接返回，保证幂等。
+        多模态消息 content 为 list 时，提取文本段拼接，
+        避免对 list 调用字符串方法报错。
 
         参数:
-            messages: 消息列表（原地修改）
+            content: 消息内容（str 或 list[dict]）
+
+        返回:
+            str: 文本内容
+        """
+        if isinstance(content, list):
+            return "".join(
+                part.get("text", "")
+                for part in content
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        return str(content or "")
+
+    @staticmethod
+    def _inject_guidance_to_messages(
+        messages: list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        """注入多话题防串扰和语义工具指导到 system 消息
+
+        将防串扰硬约束和语义工具指导追加到首个 system 消息内容
+        末尾。无 system 消息时新建一条。已注入过（包含防串扰尾部
+        特征子串）时直接返回，保证幂等。不修改调用方原列表。
+
+        参数:
+            messages: 消息列表
+
+        返回:
+            list[dict[str, str]]: 注入后的消息副本
         """
         guidance = semantic_tool_guidance()
         extra = f"\n\n{guidance}\n\n{_ANTI_CROSSTALK_PROMPT}"
-        for msg in messages:
+        copied = [dict(m) for m in messages]
+        for msg in copied:
             if msg.get("role") == "system" and msg.get("content"):
                 # 幂等检查：已注入过则跳过，防止重复注入累积
                 if _CROSSTALK_MARKER in msg["content"]:
-                    return
+                    return copied
                 msg["content"] = f"{msg['content']}{extra}"
-                return
-        messages.insert(0, {"role": "system", "content": extra.strip()})
+                return copied
+        copied.insert(0, {"role": "system", "content": extra.strip()})
+        return copied
 
     @staticmethod
     async def _apply_query_rewrite(
@@ -381,16 +399,8 @@ class AgentRunner:
         parts: list[str] = []
         for msg in recent:
             role = msg.get("role", "user")
-            content = msg.get("content", "")
-            if isinstance(content, list):
-                # 多模态消息：提取文本段拼接，避免list切片污染输出
-                content = "".join(
-                    part.get("text", "")
-                    for part in content
-                    if isinstance(part, dict)
-                    and part.get("type") == "text"
-                )
-            content = str(content)[:100]
+            content = AgentRunner._extract_text(msg.get("content", ""))
+            content = content[:100]
             if not content:
                 continue
             role_label = {"user": "用户", "assistant": "AI", "system": "系统"}

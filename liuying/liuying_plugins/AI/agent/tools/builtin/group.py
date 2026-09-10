@@ -6,6 +6,8 @@
 不作为 LLM 参数暴露。
 """
 
+from liuying.utils.log import logger
+
 from ....core.group import group_member_service
 from ...runtime.constants import (
     EVIDENCE_KIND_CONTEXT,
@@ -61,7 +63,8 @@ async def get_group_members(limit: int = 50) -> str:
             lines.append(f"- {m.display_name()}({m.user_id}){role_tag}")
         return "\n".join(lines)
     except Exception as e:
-        return f"查询群成员失败: {e}"
+        logger.warning(f"查询群成员失败: {e}", command="AI", e=e)
+        return f"查询群成员失败: {type(e).__name__}"
 
 
 @register_tool(
@@ -111,7 +114,8 @@ async def get_group_member_info(user_id: str) -> str:
         ]
         return "\n".join(lines)
     except Exception as e:
-        return f"查询群成员信息失败: {e}"
+        logger.warning(f"查询群成员信息失败: {e}", command="AI", e=e)
+        return f"查询群成员信息失败: {type(e).__name__}"
 
 
 @register_tool(
@@ -160,4 +164,5 @@ async def find_group_member(name: str) -> str:
             )
         return "\n".join(lines)
     except Exception as e:
-        return f"查找群成员失败: {e}"
+        logger.warning(f"查找群成员失败: {e}", command="AI", e=e)
+        return f"查找群成员失败: {type(e).__name__}"

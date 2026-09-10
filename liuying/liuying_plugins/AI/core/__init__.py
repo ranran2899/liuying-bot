@@ -17,7 +17,6 @@ from .chat_intent import (
 )
 from .context import ContextManager, context_manager
 from .emotion import EmotionManager, emotion_manager
-from .group import ProfileService, profile_service
 from .llm import LLMHelper, llm_helper
 from .memory import MemoryManager, memory_manager
 from .peer_awareness import PeerAwareness, peer_awareness
@@ -26,7 +25,6 @@ from .reply_turn_trace import (
     ReplyTurnTrace,
     reply_turn_trace,
 )
-from .runtime import Diagnostics, diagnostics
 from .social import (
     SocialContext,
     SocialGate,
@@ -46,14 +44,12 @@ from .target_inference import (
 __all__ = [
     "ActiveLearning",
     "ContextManager",
-    "Diagnostics",
     "EmotionManager",
     "LLMHelper",
     "MemoryManager",
     "MessageTarget",
     "PeerAwareness",
     "PersonaManager",
-    "ProfileService",
     "ReplyTurnTrace",
     "SemanticFrameInferrer",
     "SocialContext",
@@ -65,13 +61,11 @@ __all__ = [
     "TurnSemanticFrame",
     "active_learning",
     "context_manager",
-    "diagnostics",
     "emotion_manager",
     "llm_helper",
     "memory_manager",
     "peer_awareness",
     "persona_manager",
-    "profile_service",
     "reply_turn_trace",
     "semantic_frame_inferrer",
     "social_gate",

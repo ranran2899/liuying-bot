@@ -15,6 +15,7 @@ from liuying.utils.bed_layout import BedLayout
 from liuying.utils.log import logger
 
 from ..core.sticker import sticker_curation, sticker_importer
+from ..core.sticker.importer import resolve_sticker_path
 from ..models.sticker_item import StickerItem
 
 _DEFAULT_STICKER_DIR = Path("data") / "ai_plugin" / "stickers"
@@ -193,12 +194,14 @@ class StickerManager:
                 )
         if not item.file_path:
             return None
-        full_path = sticker_importer.root_dir / item.file_path
-        if full_path.exists():
+        full_path = resolve_sticker_path(
+            sticker_importer.root_dir, item.file_path
+        )
+        if full_path and full_path.exists():
             return Image(path=full_path)
         # 兼容：直接使用 sticker_dir 解析
-        alt_path = self.sticker_dir / item.file_path
-        if alt_path.exists():
+        alt_path = resolve_sticker_path(self.sticker_dir, item.file_path)
+        if alt_path and alt_path.exists():
             return Image(path=alt_path)
         return None
 

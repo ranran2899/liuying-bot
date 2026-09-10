@@ -63,11 +63,9 @@ async def _() -> Result[dict[str, Any]]:
     """
     stats = await knowledge_store.get_stats()
     stats_dict = asdict(stats)
-    stats_dict["last_scan"] = (
-        stats_dict["last_scan"].isoformat()
-        if stats_dict.get("last_scan")
-        else None
-    )
+    last_scan = stats_dict.get("last_scan")
+    if last_scan:
+        stats_dict["last_scan"] = last_scan.isoformat()
     return Result.ok(
         {"stats": stats_dict, "timestamp": datetime.now().isoformat()}
     )

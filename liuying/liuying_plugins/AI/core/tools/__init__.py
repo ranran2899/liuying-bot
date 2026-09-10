@@ -7,10 +7,7 @@
 """
 
 from .json_utils import extract_json_payload
-from .message_extractor import (
-    MessageExtractor,
-    message_extractor,
-)
+from .message_extractor import MessageExtractor
 from .web_fetch import (
     WebFetchService,
     WebPageContent,
@@ -22,6 +19,5 @@ __all__ = [
     "WebFetchService",
     "WebPageContent",
     "extract_json_payload",
-    "message_extractor",
     "web_fetch",
 ]

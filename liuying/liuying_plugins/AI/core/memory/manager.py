@@ -403,8 +403,6 @@ class MemoryManager:
         """清空所有用户所有人格的记忆数据（管理员操作）
 
         同时清理数据库记忆项与全部搜索索引表。
-        仅清空检索索引表，保留 kb_entries 业务表
-        （clear_all 默认 clear_entries=False）。
 
         返回:
             int: 清除的记忆数量

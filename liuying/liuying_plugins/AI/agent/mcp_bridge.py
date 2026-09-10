@@ -110,7 +110,9 @@ class McpStdioClient:
             *self._args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            # 丢弃 stderr 但不阻塞：MCP 服务器向 stderr 写满
+            # 缓冲区后会整体卡死，必须重定向而非留空管道
+            stderr=asyncio.subprocess.DEVNULL,
             env=self._env,
         )
         await self.initialize()

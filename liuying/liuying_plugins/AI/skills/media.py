@@ -5,10 +5,12 @@
 """
 
 import asyncio
-import socket
 from typing import Any
 from urllib.parse import urlparse
 
+from liuying.liuying_plugins.AI.core.tools.web_fetch import (
+    is_private_address,
+)
 from liuying.utils.http import AsyncHttpx
 
 __all__ = [
@@ -29,9 +31,6 @@ MAX_PARALLEL_FETCH = 4
 
 _FETCH_TIMEOUT = 20.0
 """单张图片下载超时（秒）"""
-
-_PRIVATE_URL_HOSTS = ("localhost", "metadata.google.internal")
-"""一律拒绝的主机名（环回与云元数据服务）"""
 
 _MAGIC_MIMES: tuple[tuple[bytes, str], ...] = (
     (b"\x89PNG\r\n\x1a\n", "image/png"),
@@ -77,51 +76,6 @@ def detect_mime(data: bytes) -> str:
     return "image/jpeg"
 
 
-def _is_private_ip(ip: str) -> bool:
-    """判断IP是否属于内网/环回/链路本地网段
-
-    参数:
-        ip: IP地址字符串（IPv4或IPv6）
-
-    返回:
-        bool: 是否为内网地址
-    """
-    if ip.startswith(("127.", "10.", "192.168.", "169.254.")):
-        return True
-    if ip.startswith(("::1", "fe80:")):
-        return True
-    if ip.startswith("172."):
-        parts = ip.split(".")
-        if len(parts) > 1 and parts[1].isdigit():
-            return 16 <= int(parts[1]) <= 31
-    return False
-
-
-def _is_private_address(host: str) -> bool:
-    """检查主机是否解析到内网/环回/链路本地地址
-
-    DNS 解析在 URL 校验阶段完成；防 DNS rebinding 的完整方案
-    需在连接层固定已校验 IP，此处仅做基础防护。
-
-    参数:
-        host: URL主机名或IP
-
-    返回:
-        bool: 是否为内网地址
-    """
-    if host.lower() in _PRIVATE_URL_HOSTS:
-        return True
-    try:
-        addr_info = socket.getaddrinfo(host, None)
-    except (OSError, UnicodeError):
-        # 解析失败按内网处理，拒绝请求
-        return True
-    for info in addr_info:
-        if _is_private_ip(info[4][0]):
-            return True
-    return False
-
-
 async def fetch_image(url: str) -> tuple[bytes, str, str]:
     """下载单张图片
 
@@ -142,7 +96,7 @@ async def fetch_image(url: str) -> tuple[bytes, str, str]:
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         return b"", "", "仅支持http/https图片链接"
     # SSRF 基础防护：私网/环回/链路本地地址拒绝拉取
-    if _is_private_address(parsed.hostname):
+    if await is_private_address(parsed.hostname):
         return b"", "", "禁止访问内网地址"
 
     # 外部图床属不可控依赖，超时/连接失败/状态码异常均降级为错误文本，

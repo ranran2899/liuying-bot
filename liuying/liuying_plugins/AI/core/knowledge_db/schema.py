@@ -1,23 +1,9 @@
 """知识库表结构定义
 
-定义知识条目、FTS5 全文索引、向量存储、实体关系等表结构 DDL。
+定义 FTS5 全文索引、向量存储、实体索引等表结构 DDL。
 表名统一加 ``kb_`` 前缀以避免与其他插件表冲突。
 
 注意：FTS5 虚拟表必须通过原生 SQL 执行 DDL，无法由 ORM 创建。
-"""
-
-# 知识条目主表（供知识库 CRUD 使用）
-KB_ENTRY_DDL = """
-CREATE TABLE IF NOT EXISTS kb_entries(
-    doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL DEFAULT '',
-    content TEXT NOT NULL DEFAULT '',
-    tags TEXT DEFAULT '',
-    source TEXT DEFAULT '',
-    metadata TEXT,
-    create_time TEXT DEFAULT (datetime('now')),
-    update_time TEXT DEFAULT (datetime('now'))
-)
 """
 
 # FTS5 原始文本表（保留可读原文，便于排查）
@@ -74,18 +60,6 @@ CREATE TABLE IF NOT EXISTS kb_entities(
 )
 """
 
-# 实体关系表（知识图谱三元组存储）
-KB_RELATIONS_DDL = """
-CREATE TABLE IF NOT EXISTS kb_relations(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    subject TEXT NOT NULL,
-    relation TEXT NOT NULL,
-    object TEXT NOT NULL,
-    weight REAL DEFAULT 1.0,
-    doc_id INTEGER
-)
-"""
-
 # 辅助索引 DDL
 KB_INDEX_DDL: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_kb_embeddings_filter "
@@ -98,21 +72,15 @@ KB_INDEX_DDL: list[str] = [
     "ON kb_entities(doc_id)",
     "CREATE INDEX IF NOT EXISTS idx_kb_entities_name "
     "ON kb_entities(entity_name)",
-    "CREATE INDEX IF NOT EXISTS idx_kb_relations_sub "
-    "ON kb_relations(subject)",
-    "CREATE INDEX IF NOT EXISTS idx_kb_relations_obj "
-    "ON kb_relations(object)",
 ]
 """辅助索引 DDL 列表"""
 
 ALL_DDL: list[str] = [
-    KB_ENTRY_DDL,
     KB_FTS_TEXT_DDL,
     KB_FTS_IDX_DDL,
     KB_EMBEDDINGS_DDL,
     KB_VECTOR_CHUNKS_DDL,
     KB_ENTITIES_DDL,
-    KB_RELATIONS_DDL,
     *KB_INDEX_DDL,
 ]
 """全部 DDL 列表，按依赖顺序排列"""

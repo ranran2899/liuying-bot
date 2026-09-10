@@ -5,7 +5,6 @@
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
 
 
@@ -54,7 +53,6 @@ class KnowledgeStats:
         total_commands: 总命令数
         total_tools: 总AI工具数
         hot_plugins: 热门插件列表
-        last_scan: 最后扫描时间（已废弃，恒为None）
     """
 
     total: int = 0
@@ -63,4 +61,3 @@ class KnowledgeStats:
     total_commands: int = 0
     total_tools: int = 0
     hot_plugins: list[dict[str, Any]] = field(default_factory=list)
-    last_scan: datetime | None = None

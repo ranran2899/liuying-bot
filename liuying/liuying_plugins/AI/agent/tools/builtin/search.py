@@ -7,6 +7,8 @@
 liuying/plugins/web_search 插件提供免配置降级兜底。
 """
 
+from liuying.utils.log import logger
+
 from ....core.llm import llm_helper
 from ....core.tools import web_fetch
 from ...runtime.constants import (
@@ -77,7 +79,8 @@ async def web_search(query: str, count: int = 5) -> str:
             )
         return "\n".join(lines)
     except Exception as e:
-        return f"搜索失败: {e}"
+        logger.warning(f"联网搜索失败: {e}", command="AI", e=e)
+        return f"搜索失败: {type(e).__name__}"
 
 
 @register_tool(
@@ -121,4 +124,5 @@ async def fetch_webpage(url: str, max_length: int = 4000) -> str:
             url, max_length=min(max(max_length, 500), 8000)
         )
     except Exception as e:
-        return f"网页抓取失败: {e}"
+        logger.warning(f"网页抓取失败: {e}", command="AI", e=e)
+        return f"网页抓取失败: {type(e).__name__}"

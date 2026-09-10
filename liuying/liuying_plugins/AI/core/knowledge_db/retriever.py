@@ -1,26 +1,20 @@
 """知识库检索能力
 
-提供 FTS5 全文检索、向量分块检索、主嵌入检索、实体检索
-与 RRF 融合检索能力。通过 ``KnowledgeRetrieverMixin`` 混入
-``KnowledgeBase``，复用其 ``_conn`` 连接管理。
+提供 FTS5 全文检索、向量分块检索、主嵌入检索与实体检索能力。
+通过 ``KnowledgeRetrieverMixin`` 混入 ``KnowledgeBase``，
+复用其 ``_conn`` 连接管理。
 
 公共 API 仍通过 ``knowledge_base`` 单例暴露，调用方无感知：
     ```python
     from ..knowledge_db import knowledge_base
 
     results = await knowledge_base.search_fts("查询", limit=5)
-    results = await knowledge_base.unified_search(
-        "查询", query_vec=[...], entity_names=["x"]
-    )
     ```
 """
 
 import json
 import math
 import re
-
-_RRF_K = 60
-"""RRF 融合参数"""
 
 _VECTOR_SCAN_CAP = 2000
 """向量检索单次扫描行数上限，避免全表拉取向量逐行计算"""
@@ -242,113 +236,7 @@ class KnowledgeRetrieverMixin:
             for row in rows
         ]
 
-    async def unified_search(
-        self,
-        query: str = "",
-        query_vec: list[float] | None = None,
-        entity_names: list[str] | None = None,
-        top_k: int = 10,
-        model_version: str = "hash_bow",
-    ) -> list[tuple[int, float]]:
-        """统一融合检索（RRF）
-
-        并行执行 FTS、向量、嵌入、实体四路召回，用 RRF 融合结果。
-
-        参数:
-            query: 查询文本，空串时跳过 FTS
-            query_vec: 查询向量，None 时跳过向量检索
-            entity_names: 实体名列表，None 时跳过实体检索
-            top_k: 返回条数上限
-            model_version: 嵌入模型版本
-
-        返回:
-            list[tuple[int, float]]: (doc_id, score) 列表，按分数降序
-        """
-        candidates: dict[int, float] = {}
-        if query.strip():
-            KnowledgeRetrieverMixin._rrf_add(
-                candidates,
-                await self.search_fts(query, top_k * 3),
-            )
-        if query_vec is not None:
-            KnowledgeRetrieverMixin._rrf_add(
-                candidates,
-                await self.search_vector(
-                    query_vec, top_k * 3, model_version
-                ),
-            )
-            KnowledgeRetrieverMixin._rrf_add(
-                candidates,
-                await self.search_embedding(
-                    query_vec, top_k * 3, model_version
-                ),
-            )
-        if entity_names:
-            KnowledgeRetrieverMixin._rrf_add(
-                candidates,
-                await self.search_entity(entity_names, top_k * 3),
-            )
-        return sorted(
-            candidates.items(), key=lambda x: x[1], reverse=True
-        )[:top_k]
-
-    # ---------- 获取器 ----------
-
-    async def get_text(self, doc_id: int) -> str | None:
-        """获取指定文档的原始索引文本
-
-        参数:
-            doc_id: 文档 ID
-
-        返回:
-            str | None: 原始文本，不存在返回 None
-        """
-        cursor = await self._conn.db.execute(
-            "SELECT text FROM kb_fts_text WHERE doc_id = ?", (doc_id,)
-        )
-        row = await cursor.fetchone()
-        return row["text"] if row else None
-
-    async def get_embedding(self, doc_id: int) -> list[float] | None:
-        """获取文档的主嵌入向量
-
-        参数:
-            doc_id: 文档 ID
-
-        返回:
-            list[float] | None: 嵌入向量，不存在返回 None
-        """
-        cursor = await self._conn.db.execute(
-            "SELECT embedding FROM kb_embeddings WHERE doc_id = ?",
-            (doc_id,),
-        )
-        row = await cursor.fetchone()
-        if not row:
-            return None
-        try:
-            return json.loads(row["embedding"])
-        except (json.JSONDecodeError, TypeError):
-            return None
-
     # ---------- 内部辅助方法 ----------
-
-    @staticmethod
-    def _rrf_add(
-        candidates: dict[int, float],
-        results: list[tuple[int, float]],
-    ) -> None:
-        """将单路检索结果按 RRF 算法累加到候选字典
-
-        供 unified_search 的 FTS/向量/嵌入/实体四路召回复用。
-
-        参数:
-            candidates: 候选字典（doc_id -> 累计分数），原地修改
-            results: 单路检索结果列表 (doc_id, score)
-        """
-        for rank, (doc_id, _) in enumerate(results):
-            candidates[doc_id] = candidates.get(doc_id, 0.0) + (
-                1.0 / (_RRF_K + rank + 1)
-            )
 
     async def _vector_search(
         self,

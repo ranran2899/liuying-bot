@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from liuying.models._user import UserPermLevel
 from liuying.models.ban_console import BanConsole
 
-__all__ = ["AclChecker", "PermissionResult", "acl_checker"]
+__all__ = ["AclChecker", "PermissionResult"]
 
 
 @dataclass(slots=True)
@@ -180,7 +180,3 @@ class AclChecker:
             is_superuser=False,
             is_blacklisted=False,
         )
-
-
-acl_checker = AclChecker()
-"""AI ACL 检查器单例"""

@@ -3,6 +3,8 @@
 图片生成。
 """
 
+from liuying.utils.log import logger
+
 from ....core.llm import llm_helper
 from ...runtime.constants import (
     INTENT_TAG_IMAGE,
@@ -53,4 +55,5 @@ async def image_generate(
             return urls[0]
         return "图片生成失败，未返回URL"
     except Exception as e:
-        return f"图片生成失败: {e}"
+        logger.warning(f"图片生成失败: {e}", command="AI", e=e)
+        return f"图片生成失败: {type(e).__name__}"

@@ -12,7 +12,7 @@ from nonebot.adapters import Event
 from liuying.utils.http.http_utils import AsyncHttpx
 from liuying.utils.log import logger
 
-__all__ = ["MessageExtractor", "message_extractor"]
+__all__ = ["MessageExtractor"]
 
 
 class MessageExtractor:
@@ -126,7 +126,3 @@ class MessageExtractor:
                 )
 
         return None
-
-
-message_extractor = MessageExtractor()
-"""消息内容提取器单例"""

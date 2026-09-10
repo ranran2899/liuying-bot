@@ -120,15 +120,11 @@ class KnowledgeBase(KnowledgeRetrieverMixin):
         await self._conn.db.commit()
 
     @KbConnectionManager.with_write_lock
-    async def clear_all(self, clear_entries: bool = False) -> None:
+    async def clear_all(self) -> None:
         """清空知识库索引表数据
 
-        默认仅清空检索索引表（FTS/向量/嵌入/实体/关系），
-        保留 kb_entries 业务表，供记忆系统等索引类调用方安全使用；
-        clear_entries=True 时连带清空业务表，用于完全重置场景。
-
-        参数:
-            clear_entries: 是否连带清空 kb_entries 业务表
+        清空全部检索索引表（FTS/向量/嵌入/实体），
+        供记忆系统等索引类调用方完全重置使用。
         """
         db = self._conn.db
         tables = [
@@ -137,15 +133,12 @@ class KnowledgeBase(KnowledgeRetrieverMixin):
             "kb_embeddings",
             "kb_vector_chunks",
             "kb_entities",
-            "kb_relations",
         ]
-        if clear_entries:
-            tables.append("kb_entries")
         for table in tables:
             await db.execute(f"DELETE FROM {table}")
         await db.commit()
         logger.warning(
-            f"已清空知识库索引表数据 clear_entries={clear_entries}",
+            "已清空知识库索引表数据",
             command=_LOG_CMD,
         )
 
@@ -204,7 +197,6 @@ class KnowledgeBase(KnowledgeRetrieverMixin):
             "kb_embeddings",
             "kb_vector_chunks",
             "kb_entities",
-            "kb_relations",
         ):
             await db.execute(
                 f"DELETE FROM {table} WHERE doc_id = ?", (doc_id,)

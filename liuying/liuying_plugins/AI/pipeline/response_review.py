@@ -17,7 +17,8 @@ from ..core.tools.json_utils import extract_json_payload
 
 _DEFAULT_SAFE_REPLY = "抱歉，我暂时无法回答这个问题。"
 
-_PERSONA_STYLE_FALLBACK = "友好、自然的对话风格"
+_PERSONA_STYLE = "友好、自然的对话风格"
+"""审查提示词用的人设风格描述"""
 
 
 @dataclass(slots=True)
@@ -48,14 +49,12 @@ class ResponseReviewer:
         self,
         user_message: str,
         reply_text: str,
-        persona_style: str = _PERSONA_STYLE_FALLBACK,
     ) -> ReviewResult:
         """审查回复文本
 
         参数:
             user_message: 用户原始消息
             reply_text: AI生成的回复文本
-            persona_style: 人设风格描述
 
         返回:
             ReviewResult: 审查结果
@@ -80,7 +79,7 @@ class ResponseReviewer:
                 "\n"
                 f"用户原始消息：{user_message[:200]}\n"
                 f"AI生成的回复：{reply_text[:500]}\n"
-                f"人设风格：{persona_style}\n"
+                f"人设风格：{_PERSONA_STYLE}\n"
                 "\n"
                 "审核维度：\n"
                 "1. 事实准确性：回复中陈述的事实是否可信\n"

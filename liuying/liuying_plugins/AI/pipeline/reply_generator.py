@@ -29,6 +29,11 @@ _FALLBACK_REPLIES: list[str] = [
 """兜底回复池"""
 
 
+def _fallback_reply() -> str:
+    """兜底回复文案（LLM空响应或调用失败时）"""
+    return random.choice(_FALLBACK_REPLIES)
+
+
 class ReplyGenerator:
     """回复生成器
 
@@ -123,43 +128,30 @@ class ReplyGenerator:
         vision_model: str | None = None
 
         if ctx.image_data:
-            vp, vm, use_mm = await self._resolve_vision_route(
-                ctx
-            )
+            # 拆解上游已构建的消息列表：首条为 system，末条为当前用户消息
+            system_prompt = messages[0].get("content", "") if messages else ""
+            history = list(messages[1:-1])
+            vp, vm, use_mm = await self._resolve_vision_route(ctx)
             if use_mm:
                 vision_provider = vp
                 vision_model = vm
                 use_messages = ReplyPipeline.build_vision_messages(
-                    messages[0].get("content", "") if messages else "",
-                    [
-                        m for m in messages
-                        if m.get("role") != "system"
-                    ],
-                    ctx,
+                    system_prompt, history, ctx
                 )
             else:
                 desc = await self._describe_image_for_text(ctx)
                 if desc:
-                    ctx_text = ctx.text or ""
-                    # 临时注入图片描述构建消息，构建后恢复原始文本
-                    # 避免污染后续主动学习与持久化的用户原始消息
-                    original_text = ctx.text
-                    ctx.text = (
-                        f"{ctx_text}\n[用户附带图片描述: {desc}]"
-                        if ctx_text
-                        else f"[用户发了一张图片: {desc}]"
+                    use_messages = ReplyPipeline.build_messages(
+                        system_prompt, history, ctx
                     )
-                    try:
-                        use_messages = ReplyPipeline.build_messages(
-                            messages[0].get("content", "") if messages else "",
-                            [
-                                m for m in messages
-                                if m.get("role") != "system"
-                            ],
-                            ctx,
-                        )
-                    finally:
-                        ctx.text = original_text
+                    # 图片描述注入最后一条用户消息（不污染 ctx.text，
+                    # 保证后续主动学习与持久化使用用户原始消息）
+                    last = use_messages[-1]
+                    base = str(last.get("content") or "")
+                    suffix = f"[用户附带图片描述: {desc}]"
+                    last["content"] = (
+                        f"{base}\n{suffix}" if base else suffix
+                    )
 
         if get_config("AGENT", {}).get("enabled", True):
             try:
@@ -186,7 +178,7 @@ class ReplyGenerator:
                         f"user={ctx.user_id} group={ctx.group_id or ''}",
                         command="AI",
                     )
-                    return random.choice(_FALLBACK_REPLIES), result
+                    return _fallback_reply(), result
                 return result.text, result
             except Exception as e:
                 logger.warning(
@@ -215,13 +207,13 @@ class ReplyGenerator:
                         "LLM对话返回空，使用兜底文案",
                         command="AI",
                     )
-                    return random.choice(_FALLBACK_REPLIES), None
+                    return _fallback_reply(), None
                 return reply_text, None
             except Exception as e:
                 logger.error(
                     f"LLM对话调用失败: {e}", command="AI", e=e
                 )
-                return random.choice(_FALLBACK_REPLIES), None
+                return _fallback_reply(), None
 
         try:
 
@@ -282,7 +274,7 @@ class ReplyGenerator:
                     "安全过滤后回复为空，使用兜底文案",
                     command="AI",
                 )
-                return random.choice(_FALLBACK_REPLIES), None
+                return _fallback_reply(), None
             return reply_text, None
         except SafetyRefusalError as e:
             logger.warning(
@@ -296,4 +288,4 @@ class ReplyGenerator:
             logger.error(
                 f"LLM对话调用失败: {e}", command="AI", e=e
             )
-            return random.choice(_FALLBACK_REPLIES), None
+            return _fallback_reply(), None
