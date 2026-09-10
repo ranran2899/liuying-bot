@@ -271,6 +271,13 @@ def setup_chat_commands() -> None:
             result.segments = None
 
         if not result.text and not result.segments:
+            # 空回复路径（静默/额度静默/拟人化后为空）：记录诊断
+            # 日志，避免"无回复且无报错"现象无法追踪
+            logger.debug(
+                f"AI回复为空: user={user_id} "
+                f"metadata={result.metadata}",
+                command="AI",
+            )
             return
 
         # 输入状态模拟与发送（异常兜底，避免 matcher 静默崩溃）

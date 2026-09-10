@@ -22,6 +22,7 @@ from .constants import (
     OUTPUT_MODE_SILENCE,
     OUTPUT_MODE_SOURCE_SUMMARY,
     OUTPUT_MODE_STRUCTURED_HELP,
+    TURN_ACTION_REPLY,
 )
 from .evidence import EvidenceComposer
 from .plan_types import OUTPUT_MODE_LENGTHS, TurnPlan
@@ -182,14 +183,21 @@ class PersonaResponder:
         """
         start = time.time()
 
-        # 静默
+        # 静默（私聊不静默：用户直接向bot发起对话时静默不合理，转普通回复）
         if plan.is_silence:
-            return PersonaResponse(
-                reply_text="",
-                recommend_silence=True,
-                elapsed=time.time() - start,
-                bot_emotion="neutral",
-            )
+            if not group_id:
+                logger.debug(
+                    "私聊静默计划已忽略，转为普通回复", command="AI"
+                )
+                plan.action = TURN_ACTION_REPLY
+                plan.output_mode = OUTPUT_MODE_CHAT_SHORT
+            else:
+                return PersonaResponse(
+                    reply_text="",
+                    recommend_silence=True,
+                    elapsed=time.time() - start,
+                    bot_emotion="neutral",
+                )
 
         # 请求澄清：使用模板快速响应
         if plan.is_clarify:
@@ -216,6 +224,16 @@ class PersonaResponder:
             response = await self._generate_via_llm(
                 plan, evidence, user_message, messages, user_id, group_id
             )
+            # 私聊忽略LLM的静默建议：用户在线对话时静默不合理；
+            # 回复为空时回退LLM原始输出，避免整轮静默无响应
+            if not group_id:
+                if response.recommend_silence:
+                    response.recommend_silence = False
+                if not response.reply_text.strip():
+                    response.reply_text = response.raw_response.strip()
+                    logger.debug(
+                        "私聊回复为空，回退到LLM原始输出", command="AI"
+                    )
             response.elapsed = time.time() - start
             return response
         except Exception as e:

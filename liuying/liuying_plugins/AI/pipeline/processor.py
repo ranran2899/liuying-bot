@@ -277,6 +277,21 @@ class ReplyProcessor:
             detail=f"长度={len(reply_text)}",
         )
 
+        # 回复文本为空（静默建议/LLM空输出）时记录诊断日志，
+        # 避免"无回复且无报错"现象无法追踪根因
+        if not reply_text.strip():
+            suggest_silence = bool(
+                agent_result
+                and agent_result.response
+                and agent_result.response.recommend_silence
+            )
+            logger.warning(
+                f"回复文本为空: user={ctx.user_id} "
+                f"group={ctx.group_id or ''} "
+                f"suggest_silence={suggest_silence}",
+                command="AI",
+            )
+
         # 按实际消耗扣费（内部已处理异常，失败不影响已生成回复的发送）
         await token_quota_service.consume_after_conversation(
             ctx.user_id, usage
