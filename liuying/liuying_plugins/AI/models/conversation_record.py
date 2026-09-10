@@ -107,7 +107,10 @@ class ConversationRecord(Model):
         limit: int = 20,
         persona_name: str = _DEFAULT_PERSONA,
     ) -> list["ConversationRecord"]:
-        """获取用户对话历史
+        """获取用户最近对话历史
+
+        取最近 limit 条记录，按时间倒序返回（最新在前）。
+        调用方如需正序可自行 reversed()。
 
         参数:
             user_id: 用户ID
@@ -116,14 +119,14 @@ class ConversationRecord(Model):
             persona_name: bot人格名，用于人设间数据隔离
 
         返回:
-            list[ConversationRecord]: 对话记录列表（按时间正序）
+            list[ConversationRecord]: 对话记录列表（按时间倒序）
         """
         query = cls.filter(
             user_id=user_id, persona_name=persona_name
         )
         if group_id:
             query = query.filter(group_id=group_id)
-        return await query.order_by("create_time").limit(limit).all()
+        return await query.order_by("-create_time").limit(limit).all()
 
     @classmethod
     async def clear_history(

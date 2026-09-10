@@ -19,6 +19,7 @@ from .agent.tools import (  # 公开API供第三方注册工具
 from .config import PluginConfig, get_config
 from .core.knowledge_db import knowledge_base
 from .core.llm import llm_helper, token_ledger
+from .core.memory import memory_manager
 from .core.runtime import runtime_switch
 from .handlers.admin_commands import setup_admin_matchers
 from .handlers.chat_matchers import setup_matchers
@@ -160,8 +161,11 @@ async def _init_ai_plugin() -> None:
     # WebUI 管理能力已整合到流萤本体 web_ui 插件（liuying_plugins/web_ui），
     # 通过 /liuying/api/ai/* 路由统一挂载，使用本体JWT认证。
 
-    # 显式注入主插件服务给技能包
-    runtime = SkillRuntime(llm_helper=llm_helper)
+    # 显式注入主插件服务给技能包（LLM助手 + 记忆管理器）
+    runtime = SkillRuntime(
+        llm_helper=llm_helper,
+        memory_manager=memory_manager,
+    )
     tool_count = skill_loader.register_all(runtime=runtime)
     logger.debug(
         f"AI技能包已加载，注册工具{tool_count}个", command="AI"

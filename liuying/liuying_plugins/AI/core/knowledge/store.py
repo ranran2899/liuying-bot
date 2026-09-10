@@ -1,7 +1,7 @@
 """插件知识库管理器
 
-基于 PluginInfo + NoneBot 实时元信息构建插件视图，
-提供知识库查询接口：按名称/关键词/菜单类型多维度检索，
+直接复用 help 插件 HelpManage 提供的插件查询接口获取插件信息，
+提供知识库查询接口：按名称查询/列表/关键词智能召回，
 基于用户输入文本智能召回相关插件，构建供AI读取的知识块。
 含查询日志记录与内存缓存优化。
 
@@ -9,16 +9,14 @@
 """
 
 from datetime import datetime, timedelta
+import re
+from typing import Any
 
-import nonebot
-
-from liuying.models.plugin_info import PluginInfo
+from liuying.liuying_plugins.help.data_source import HelpManage
 from liuying.services.cache import CacheDict
 from liuying.utils.log import logger
 
 from ...models.knowledge_query_log import KnowledgeQueryLog
-from .extractors import KnowledgeExtractor
-from .plugin_view import PluginView
 from .types import KnowledgeStats, RecallResult
 
 _MAX_QUERY_LOG_LENGTH = 500
@@ -30,11 +28,66 @@ _CACHE_TTL_SECONDS = 300
 _MAX_RECALL_RESULTS = 8
 """单次召回最大结果数"""
 
+_STOPWORDS: set[str] = {
+    "的", "了", "是", "在", "我", "你", "他", "她", "它",
+    "请", "帮", "能", "可以", "吗", "么", "啊", "呢", "吧",
+    "一下", "帮我", "请问", "怎么", "如何", "什么", "为什么",
+    "the", "a", "an", "is", "are", "to", "of",
+}
+"""召回分词停用词集合（高频无意义词）"""
+
+_NON_WORD_RE = re.compile(r"[^\w\u4e00-\u9fa5]+")
+"""非词元字符匹配模式（模块级预编译，避免每次分词重复解析）"""
+
+
+def tokenize(text: str) -> list[str]:
+    """分词（简化的中英文混合分词）
+
+    参数:
+        text: 输入文本
+
+    返回:
+        list[str]: 分词后的token列表（去停用词、去重）
+    """
+    if not text:
+        return []
+    cleaned = _NON_WORD_RE.sub(" ", text)
+    tokens: list[str] = []
+    seen: set[str] = set()
+
+    for raw in cleaned.split():
+        token = raw.strip().lower()
+        if not token or token in _STOPWORDS:
+            continue
+        if len(token) < 2 and not token.isascii():
+            continue
+        if token in seen:
+            continue
+        seen.add(token)
+        tokens.append(token)
+
+    for i in range(len(cleaned)):
+        if not ("\u4e00" <= cleaned[i] <= "\u9fa5"):
+            continue
+        for length in (2, 3, 4):
+            end = i + length
+            if end > len(cleaned):
+                break
+            piece = cleaned[i:end]
+            if any(not ("\u4e00" <= c <= "\u9fa5") for c in piece):
+                continue
+            token = piece.lower()
+            if token in _STOPWORDS or token in seen:
+                continue
+            seen.add(token)
+            tokens.append(token)
+    return tokens
+
 
 class KnowledgeStore:
-    """插件知识库管理器（基于流萤本体插件系统）
+    """插件知识库管理器（复用 help 插件查询接口）
 
-    通过 PluginInfo + NoneBot 实时元信息构建插件视图，
+    通过 HelpManage 获取插件列表与完整信息，
     提供多维度检索、智能召回、知识块构建、查询日志、缓存等。
     单例模式，由 knowledge_store 单例导出。
     """
@@ -50,69 +103,83 @@ class KnowledgeStore:
         self._last_stats_time: float = 0.0
         """统计缓存时间"""
 
-    async def _build_view(self, info: PluginInfo) -> PluginView:
-        """构建插件视图
-
-        参数:
-            info: PluginInfo 数据库记录
+    async def _get_list(self) -> list[dict[str, Any]]:
+        """获取插件摘要列表（带缓存）
 
         返回:
-            PluginView: 插件视图（含实时元信息）
+            list[dict[str, Any]]: HelpManage.get_plugin_list 结果
         """
-        nb_plugin = nonebot.get_plugin_by_module_name(info.module_path)
-        return PluginView(info, nb_plugin)
+        cached = self._cache.get("plugin_list")
+        if cached is not None:
+            return cached
+        plugins = await HelpManage.get_plugin_list()
+        self._cache.set("plugin_list", plugins)
+        return plugins
 
-    async def get_by_name(
-        self, plugin_name: str
-    ) -> PluginView | None:
-        """按插件模块名查询
+    async def get_by_name(self, plugin_name: str) -> dict[str, Any] | None:
+        """按插件名称/模块名/id查询完整信息
 
         参数:
-            plugin_name: 插件模块名
+            plugin_name: 插件名称、模块名或id
 
         返回:
-            PluginView | None: 插件视图或None
+            dict[str, Any] | None: 插件完整信息或None
         """
         if not plugin_name:
             return None
-        cache_key = f"name:{plugin_name}"
+        cache_key = f"full:{plugin_name}"
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
-        if info := await PluginInfo.get_by_module(plugin_name):
-            view = await self._build_view(info)
-            self._cache.set(cache_key, view)
-            return view
+        info = await HelpManage.get_plugin_full_info(plugin_name)
+        if info is None:
+            info = await self._resolve_by_list(plugin_name)
+        if info is not None:
+            self._cache.set(cache_key, info)
+        return info
+
+    async def _resolve_by_list(
+        self, plugin_name: str
+    ) -> dict[str, Any] | None:
+        """通过插件列表模糊解析插件（别名/忽略大小写）
+
+        参数:
+            plugin_name: 插件名称或别名
+
+        返回:
+            dict[str, Any] | None: 插件完整信息或None
+        """
+        lowered = plugin_name.lower()
+        for item in await self._get_list():
+            name = str(item.get("name") or "")
+            if name.lower() == lowered or lowered in [
+                str(a).lower() for a in item.get("aliases") or []
+            ]:
+                return await HelpManage.get_plugin_full_info(
+                    str(item.get("module") or name)
+                )
         return None
 
     async def list_enabled(
         self,
         menu_type: str | None = None,
         limit: int = 200,
-    ) -> list[PluginView]:
-        """列出启用的插件
+    ) -> list[dict[str, Any]]:
+        """列出可见插件
 
         参数:
             menu_type: 菜单类型过滤，None时不过滤
             limit: 返回上限
 
         返回:
-            list[PluginView]: 插件视图列表
+            list[dict[str, Any]]: 插件摘要列表
         """
-        cache_key = f"list:{menu_type or 'all'}:{limit}"
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return cached
-        query = PluginInfo.visible_query()
-        infos = await query.limit(limit).all()
-        views: list[PluginView] = []
-        for info in infos:
-            view = await self._build_view(info)
-            if menu_type and view.menu_type != menu_type:
-                continue
-            views.append(view)
-        self._cache.set(cache_key, views)
-        return views
+        plugins = await self._get_list()
+        if menu_type:
+            plugins = [
+                p for p in plugins if p.get("menu_type") == menu_type
+            ]
+        return plugins[:limit]
 
     async def recall(
         self,
@@ -141,22 +208,20 @@ class KnowledgeStore:
         if not text or not text.strip():
             return []
 
-        tokens = KnowledgeExtractor.tokenize(text)
+        tokens = tokenize(text)
         if not tokens:
             return []
 
-        all_items = await self.list_enabled(limit=500)
+        all_items = await self._get_list()
         if not all_items:
             return []
 
         results: list[RecallResult] = []
         for item in all_items:
-            score, matched = self._score_item(item, tokens, text)
+            score, matched = self._score_item(item, tokens)
             if score > 0:
                 results.append(
-                    RecallResult(
-                        plugin=item, score=score, matched_fields=matched
-                    )
+                    RecallResult(info=item, score=score, matched_fields=matched)
                 )
 
         results.sort(key=lambda r: r.score, reverse=True)
@@ -174,50 +239,37 @@ class KnowledgeStore:
 
     def _score_item(
         self,
-        item: PluginView,
+        item: dict[str, Any],
         tokens: list[str],
-        raw_text: str,
     ) -> tuple[float, list[str]]:
         """为单个插件条目计算匹配评分
 
         参数:
-            item: 插件视图
+            item: 插件摘要字典
             tokens: 分词后的token列表
-            raw_text: 原始文本
 
         返回:
             tuple[float, list[str]]: (评分, 命中字段列表)
         """
-        del raw_text
         score = 0.0
         matched: list[str] = []
-        keywords_str = (item.keywords or "").lower()
-        display = (item.display_name or "").lower()
-        desc = (item.description or "").lower()
-        aliases = [a.lower() for a in item.get_aliases()]
+        display = str(item.get("name") or "").lower()
+        module = str(item.get("module") or "").lower()
+        desc = str(item.get("description") or "").lower()
+        aliases = [str(a).lower() for a in item.get("aliases") or []]
 
-        commands = item.get_commands()
         command_strs: list[str] = []
-        for cmd in commands:
-            cmd_text = (cmd.get("command", "") or "").lower()
+        for cmd in item.get("commands") or []:
+            cmd_text = str(cmd.get("command") or "").lower()
             if cmd_text:
                 command_strs.append(cmd_text)
-            for ex in cmd.get("examples", []):
-                if isinstance(ex, dict):
-                    ex_text = str(ex.get("exec", "") or "").lower()
-                else:
-                    ex_text = str(
-                        getattr(ex, "exec", "") or ""
-                    ).lower()
+            for ex in cmd.get("examples") or []:
+                ex_text = str(ex.get("exec") or "").lower()
                 if ex_text:
                     command_strs.append(ex_text)
 
         for token in tokens:
-            if token in keywords_str:
-                score += 3.0
-                if "keywords" not in matched:
-                    matched.append("keywords")
-            if token in display:
+            if token in display or token in module:
                 score += 2.5
                 if "display_name" not in matched:
                     matched.append("display_name")
@@ -255,7 +307,7 @@ class KnowledgeStore:
             user_id: 用户ID
             group_id: 群组ID
         """
-        primary = results[0].plugin.plugin_name if results else ""
+        primary = str(results[0].info.get("module") or "") if results else ""
         await KnowledgeQueryLog.add_log(
             query_text=text[:_MAX_QUERY_LOG_LENGTH],
             matched_plugin=primary,
@@ -268,6 +320,49 @@ class KnowledgeStore:
                 ),
             },
         )
+
+    @staticmethod
+    def build_detail_block(info: dict[str, Any]) -> str:
+        """构建供AI读取的单个插件知识块文本
+
+        参数:
+            info: 插件完整信息字典（get_plugin_full_info 结果）
+
+        返回:
+            str: 格式化的知识块文本
+        """
+        parts: list[str] = [
+            f"## {info.get('name') or info.get('module')}",
+            f"模块: {info.get('module')}",
+        ]
+        if description := str(info.get("description") or ""):
+            parts.append(f"描述: {description}")
+        if menu_type := str(info.get("menu_type") or ""):
+            parts.append(f"分类: {menu_type}")
+        if usage := str(info.get("usage") or ""):
+            parts.append(f"用法: {usage}")
+
+        commands = info.get("commands") or []
+        if commands:
+            parts.append("命令:")
+            for cmd in commands:
+                line = f"- {cmd.get('command', '')}"
+                params = cmd.get("params") or []
+                if params:
+                    line += " " + " ".join(f"[{p}]" for p in params)
+                if desc := str(cmd.get("description") or ""):
+                    line += f": {desc}"
+                parts.append(line)
+
+        tools = info.get("smart_tools") or []
+        if tools:
+            parts.append("AI工具:")
+            for tool in tools:
+                parts.append(
+                    f"- {tool.get('name', '')}: {tool.get('description', '')}"
+                )
+
+        return "\n".join(parts)
 
     async def build_prompt_block(
         self,
@@ -303,7 +398,7 @@ class KnowledgeStore:
             "## 可用插件知识（用户提问可能相关）"
         ]
         for r in results:
-            blocks.append(r.plugin.build_prompt_block())
+            blocks.append(self.build_detail_block(r.info))
         blocks.append(
             "提示：如需调用上述插件能力，请通过命令提示用户或"
             "在回复中引用对应命令；不要伪造不存在的命令。"
@@ -323,21 +418,17 @@ class KnowledgeStore:
         ):
             return self._last_stats
 
-        all_items = await self.list_enabled(limit=500)
-        total_commands = 0
-        total_tools = 0
-        enabled_count = 0
-        with_tools_count = 0
-
-        for item in all_items:
-            cmds = item.get_commands()
-            tools = item.get_smart_tools()
-            total_commands += len(cmds)
-            total_tools += len(tools)
-            if item.is_enabled:
-                enabled_count += 1
-            if tools:
-                with_tools_count += 1
+        all_items = await self._get_list()
+        total_commands = sum(
+            len(item.get("commands") or []) for item in all_items
+        )
+        total_tools = sum(
+            int(item.get("tools_count") or 0) for item in all_items
+        )
+        enabled_count = sum(1 for item in all_items if item.get("status"))
+        with_tools_count = sum(
+            1 for item in all_items if int(item.get("tools_count") or 0) > 0
+        )
 
         hot = await KnowledgeQueryLog.get_hot_plugins(
             days=7, limit=10

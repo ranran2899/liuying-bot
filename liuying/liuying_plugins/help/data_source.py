@@ -126,7 +126,8 @@ class HelpManage:
 
         返回:
             list[dict[str, Any]]: 插件摘要列表，每项包含
-                id/name/description/menu_type/plugin_type/admin_level/status
+                id/name/module/aliases/commands/description/menu_type/
+                plugin_type/admin_level/status/tools_count
         """
         plugins = await PluginInfo.visible_query(
             plugin_type__in=[
@@ -140,14 +141,22 @@ class HelpManage:
         result: list[dict[str, Any]] = []
         for plugin in plugins:
             nb_plugin = nonebot.get_plugin_by_module_name(plugin.module_path)
-            description = (
-                nb_plugin.metadata.description
-                if nb_plugin and nb_plugin.metadata
-                else ""
-            )
+            description = ""
+            aliases: list[str] = []
+            commands: list[dict[str, Any]] = []
+            tools_count = 0
+            if nb_plugin and nb_plugin.metadata:
+                description = nb_plugin.metadata.description
+                extra_data = PluginExtraData(**nb_plugin.metadata.extra)
+                aliases = sorted(extra_data.aliases)
+                commands = [cmd.model_dump() for cmd in extra_data.commands]
+                tools_count = len(extra_data.smart_tools or [])
             result.append({
                 "id": str(plugin.id),
                 "name": plugin.name,
+                "module": plugin.module,
+                "aliases": aliases,
+                "commands": commands,
                 "description": description,
                 "menu_type": plugin.menu_type,
                 "plugin_type": (
@@ -155,6 +164,7 @@ class HelpManage:
                 ),
                 "admin_level": plugin.admin_level,
                 "status": plugin.status,
+                "tools_count": tools_count,
             })
         return result
 
@@ -163,17 +173,27 @@ class HelpManage:
         """
         获取单个插件的完整信息（插件信息/功能描述/使用方法/命令列表）
 
-        供其他插件调用的查询接口，支持插件名称或id。
+        供其他插件调用的查询接口，支持插件名称、模块名或id。
 
         参数:
-            name: 插件名称或id
+            name: 插件名称、模块名或id
 
         返回:
             dict[str, Any] | None: 插件完整信息，未找到时返回 None
         """
-        plugin = await PluginInfo.get_by_id_or_name(
-            name, is_show=True, is_delete=False
-        )
+        if name.isdigit():
+            plugin = await PluginInfo.filter(
+                id=int(name), is_show=True, is_delete=False
+            ).first()
+        else:
+            plugin = (
+                await PluginInfo.get_plugin(
+                    name=name, is_show=True, is_delete=False
+                )
+                or await PluginInfo.get_plugin(
+                    module=name, is_show=True, is_delete=False
+                )
+            )
         if not plugin:
             return None
 
@@ -191,6 +211,8 @@ class HelpManage:
             "usage": "",
             "superuser_help": "",
             "commands": [],
+            "aliases": [],
+            "smart_tools": [],
             "call_count": 0,
         }
 
@@ -204,6 +226,10 @@ class HelpManage:
                 "usage": nb_plugin.metadata.usage,
                 "superuser_help": extra_data.superuser_help or "",
                 "commands": [cmd.model_dump() for cmd in extra_data.commands],
+                "aliases": sorted(extra_data.aliases),
+                "smart_tools": [
+                    tool.to_dict() for tool in extra_data.smart_tools or []
+                ],
             })
 
         info["call_count"] = await Statistics.filter(plugin_name=plugin.module).count()

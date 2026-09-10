@@ -5,6 +5,7 @@
 人格间对话历史与记忆完全隔离。
 """
 
+from collections import OrderedDict
 import json
 from pathlib import Path
 import time
@@ -87,8 +88,12 @@ class PersonaManager:
         """人格配置缓存（永不过期）"""
         # 用户激活人格名短TTL缓存：单次消息链路内
         # get_user_persona_name 会被反复调用（processor/prompt_builder/
-        # decisions 各取一次），缓存避免每条消息多次查库
-        self._name_cache: dict[str, tuple[float, str]] = {}
+        # decisions 各取一次），缓存避免每条消息多次查库。
+        # OrderedDict 维护访问顺序，命中 move_to_end、淘汰
+        # popitem(last=False)，实现 O(1) LRU
+        self._name_cache: OrderedDict[str, tuple[float, str]] = (
+            OrderedDict()
+        )
         self._name_cache_ttl = 60.0
         self._name_cache_max = 512
         """缓存条目上限，超出时先清过期项再淘汰最旧项"""
@@ -140,6 +145,8 @@ class PersonaManager:
         now = time.monotonic()
         cached = self._name_cache.get(user_id)
         if cached is not None and now - cached[0] < self._name_cache_ttl:
+            # 命中后移到末尾，维持 LRU 访问顺序
+            self._name_cache.move_to_end(user_id)
             return cached[1]
         name = await UserPersonaSelection.get_persona_name(user_id)
         resolved = (
@@ -155,7 +162,8 @@ class PersonaManager:
         """控制人格名缓存容量
 
         条目达到上限时先清除已过期项，仍超限则按
-        写入时间淘汰最旧条目，防止长期运行无限增长。
+        访问顺序淘汰最旧条目（OrderedDict 首项即最久
+        未访问项，popitem O(1)），防止长期运行无限增长。
 
         参数:
             now: 当前单调时钟时间戳
@@ -170,10 +178,7 @@ class PersonaManager:
         for uid in expired:
             del self._name_cache[uid]
         while len(self._name_cache) >= self._name_cache_max:
-            oldest = min(
-                self._name_cache, key=lambda u: self._name_cache[u][0]
-            )
-            del self._name_cache[oldest]
+            self._name_cache.popitem(last=False)
 
     async def set_user_persona(
         self, user_id: str, name: str

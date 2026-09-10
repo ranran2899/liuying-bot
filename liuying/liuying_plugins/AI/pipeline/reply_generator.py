@@ -96,7 +96,6 @@ class ReplyGenerator:
             logger.debug(
                 f"视觉路由解析失败，降级到文本描述: {e}",
                 command="AI",
-                e=e,
             )
             return None, None, False
 
@@ -172,6 +171,7 @@ class ReplyGenerator:
                     use_llm_planning=True,
                     persona_name=ctx.persona_name,
                     has_image=vision_provider is not None,
+                    is_at_bot=ctx.is_at_bot,
                 )
                 if (
                     result.response

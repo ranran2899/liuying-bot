@@ -98,7 +98,7 @@ async def translate(
             options={"temperature": _TRANSLATE_TEMPERATURE},
         )
     except Exception as e:
-        return f"翻译失败: {e}"
+        return f"翻译失败: {type(e).__name__}"
 
     result = (result or "").strip()
     return result or "翻译结果为空，请重试"

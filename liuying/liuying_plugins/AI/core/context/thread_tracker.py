@@ -268,7 +268,14 @@ class ThreadTracker:
         return thread
 
     def _cleanup_expired(self, group_id: str) -> int:
-        """清理超时的活跃线程
+        """清理超时与已关闭的话题线程
+
+        超时线程与历史已关闭线程直接从字典删除：
+        消费方（get_active_threads/_find_matching_thread）
+        仅按 is_active 过滤且无复活逻辑，删除条目与
+        置 is_active=False 等价，可避免条目永久滞留
+        导致内存泄漏；群组线程字典清空后同步移除该
+        群组键，防止空字典累积。
 
         参数:
             group_id: 群组ID
@@ -276,16 +283,23 @@ class ThreadTracker:
         返回:
             int: 清理的线程数量
         """
-        threads = self._threads.get(group_id, {})
+        threads = self._threads.get(group_id)
+        if not threads:
+            return 0
         cutoff = datetime.now() - timedelta(
             minutes=_THREAD_TIMEOUT_MINUTES
         )
-        count = 0
-        for thread in threads.values():
-            if thread.is_active and thread.last_active < cutoff:
-                thread.is_active = False
-                count += 1
-        return count
+        expired = [
+            tid
+            for tid, thread in threads.items()
+            if (not thread.is_active)
+            or thread.last_active < cutoff
+        ]
+        for tid in expired:
+            del threads[tid]
+        if not threads:
+            del self._threads[group_id]
+        return len(expired)
 
     @staticmethod
     def _thread_similarity(

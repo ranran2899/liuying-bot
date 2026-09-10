@@ -76,6 +76,7 @@ class TaskService:
         """从任务中提取消息内容
 
         优先使用 params_json.message，为空时回退到 description。
+        params_json 损坏时容错降级到 description，避免炸穿调度回调。
 
         参数:
             task: 任务记录
@@ -83,8 +84,13 @@ class TaskService:
         返回:
             str: 消息内容
         """
-        params = json.loads(task.params_json or "{}")
-        message = str(params.get("message", "") or "").strip()
+        try:
+            params = json.loads(task.params_json or "{}")
+            message = str(
+                params.get("message", "") or ""
+            ).strip()
+        except (json.JSONDecodeError, TypeError, ValueError):
+            message = ""
         if not message:
             message = task.description.strip()
         return message

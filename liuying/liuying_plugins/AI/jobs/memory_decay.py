@@ -112,6 +112,8 @@ class MemoryDecayHelper:
         按用户+群组+人格三元组去重，确保不同人格的记忆独立巩固。
         保留 persona_name 原值用于后续过滤，避免 None 被
         归一化为 "default" 后 filter 无法命中真实 None 记录。
+        优化：仅取三元组所需三列，避免整行拉取（含content长文本列）
+        的传输与ORM实例化开销。
 
         参数:
             hours: 时间窗口（小时）
@@ -121,16 +123,12 @@ class MemoryDecayHelper:
                 (user_id, group_id, persona_name) 列表
         """
         cutoff = datetime.now() - timedelta(hours=hours)
-        records = await ConversationRecord.filter(
+        rows = await ConversationRecord.filter(
             create_time__gt=cutoff,
             role="user",
-        ).all()
-        seen: set[tuple[str, str | None, str | None]] = set()
-        for r in records:
-            key = (r.user_id, r.group_id, r.persona_name)
-            if key not in seen:
-                seen.add(key)
-        return list(seen)
+        ).values_list("user_id", "group_id", "persona_name")
+        # dict.fromkeys 保序去重三元组
+        return list(dict.fromkeys(rows))
 
     @staticmethod
     async def _user_persona_update_task() -> None:

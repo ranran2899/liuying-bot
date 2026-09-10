@@ -224,7 +224,9 @@ class StickerItem(Model):
         """列出活动表情包
 
         参数:
-            mood: 过滤情绪标签，None时不过滤
+            mood: 过滤情绪标签，None时不过滤。mood_tags以JSON数组
+                格式存储于Text列（如 '["happy","calm"]'），查询按
+                带双引号的JSON元素精确匹配，避免happy误命中unhappy
             limit: 返回上限
 
         返回:
@@ -232,8 +234,8 @@ class StickerItem(Model):
         """
         query = cls.filter(is_disabled=False)
         if mood:
-            # 简化的LIKE匹配（mood_tags为JSON数组字符串）
-            query = query.filter(mood_tags__contains=mood)
+            # 带双引号匹配JSON数组元素，保证情绪标签精确命中
+            query = query.filter(mood_tags__contains=f'"{mood}"')
         return await query.order_by("-usage_count").limit(limit).all()
 
     @classmethod

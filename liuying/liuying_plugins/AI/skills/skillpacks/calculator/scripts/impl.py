@@ -22,6 +22,9 @@ _MAX_EXPR_LENGTH = 200
 _MAX_POWER_EXPONENT = 64
 """幂运算指数上限，防御 9**9**9 类算力炸弹"""
 
+_MAX_FACTORIAL_ARG = 10000
+"""阶乘参数上限，防御超大规模阶乘耗尽算力"""
+
 _BIN_OPS: dict[type[ast.operator], Any] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -108,6 +111,16 @@ def _eval_node(node: ast.AST) -> Any:
             if node.keywords:
                 raise CalcError("不支持关键字参数")
             args = [_eval_node(arg) for arg in node.args]
+            # 函数调用形式绕过 ast.Pow 分支的指数上限，
+            # pow / factorial 需在此重复施加算力校验。
+            if fname == "pow" and len(args) >= 2 and (
+                abs(args[1]) > _MAX_POWER_EXPONENT
+            ):
+                raise CalcError("幂运算指数过大")
+            if fname == "factorial" and args and (
+                abs(args[0]) > _MAX_FACTORIAL_ARG
+            ):
+                raise CalcError("阶乘参数过大")
             return _FUNCS[fname](*args)
         case ast.Tuple(elts=elts) | ast.List(elts=elts):
             return [_eval_node(e) for e in elts]

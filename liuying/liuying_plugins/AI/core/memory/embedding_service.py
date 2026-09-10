@@ -184,6 +184,12 @@ class EmbeddingService:
     ) -> list[list[float]]:
         """从 API 返回值提取批量向量
 
+        类型混淆时记录 warning 并降级处理,避免静默
+        返回空列表导致下游去重/聚合失效且无迹可查:
+        - 扁平结构且仅期望单条时包装为嵌套列表返回;
+        - 完全无法解析时返回空列表,下游将因缺少
+          向量跳过该批数据的去重/聚合。
+
         参数:
             result: API 返回值
             expected: 期望的向量数量
@@ -192,7 +198,25 @@ class EmbeddingService:
             list[list[float]]: 嵌入向量列表
         """
         if not isinstance(result, list):
+            logger.warning(
+                "LLM批量嵌入返回类型异常(非列表),"
+                "本批向量解析失败,下游去重/聚合将跳过该批数据",
+                command="AI",
+            )
             return []
         if result and isinstance(result[0], list):
             return result  # type: ignore[return-value]
-        return [result] if expected == 1 else []
+        if expected == 1:
+            logger.warning(
+                "LLM批量嵌入返回扁平结构(期望嵌套向量列表),"
+                "已降级包装为单条结果",
+                command="AI",
+            )
+            return [result]  # type: ignore[list-item]
+        logger.warning(
+            f"LLM批量嵌入返回结构异常且与期望数量不符"
+            f"(期望{expected}条),本批向量解析失败,"
+            "下游去重/聚合将跳过该批数据",
+            command="AI",
+        )
+        return []

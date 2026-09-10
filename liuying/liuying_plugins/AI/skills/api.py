@@ -20,6 +20,8 @@ class SkillRuntime:
 
     Attributes:
         llm_helper: LLM助手实例（对话/嵌入/TTS/图片/搜索）
+        memory_manager: 记忆管理器实例（用户画像/事实存取）
     """
 
     llm_helper: Any | None = None
+    memory_manager: Any | None = None

@@ -1,15 +1,12 @@
 """知识库数据类型
 
-定义召回结果与知识库统计的数据结构。
-RecallResult 通过 TYPE_CHECKING 引用 PluginView 以规避循环依赖。
+定义召回结果与知识库统计的数据结构，
+召回结果直接承载 help 插件查询接口返回的插件信息字典。
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from .plugin_view import PluginView
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -17,12 +14,12 @@ class RecallResult:
     """召回结果
 
     属性:
-        plugin: 插件视图
+        info: 插件摘要信息字典（HelpManage.get_plugin_list 单项）
         score: 匹配评分
         matched_fields: 命中字段列表
     """
 
-    plugin: "PluginView"
+    info: dict[str, Any]
     score: float = 0.0
     matched_fields: list[str] = field(default_factory=list)
 
@@ -32,7 +29,15 @@ class RecallResult:
         返回:
             dict: 简要信息字典（含评分）
         """
-        brief = self.plugin.to_brief()
+        brief = {
+            "plugin_name": str(self.info.get("module") or ""),
+            "display_name": str(self.info.get("name") or ""),
+            "description": str(self.info.get("description") or ""),
+            "menu_type": str(self.info.get("menu_type") or ""),
+            "commands": list(self.info.get("commands") or []),
+            "aliases": list(self.info.get("aliases") or []),
+            "is_enabled": bool(self.info.get("status")),
+        }
         brief["score"] = round(self.score, 3)
         brief["matched_fields"] = list(self.matched_fields)
         return brief

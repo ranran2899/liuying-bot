@@ -167,6 +167,8 @@ class TurnPlanner:
         context_summary: str = "",
         has_image: bool = False,
         use_llm: bool = True,
+        is_group: bool = False,
+        is_at_bot: bool = False,
     ) -> TurnPlan:
         """生成本回合规划
 
@@ -175,6 +177,8 @@ class TurnPlanner:
             context_summary: 上下文摘要
             has_image: 是否包含图片
             use_llm: 是否使用LLM精细决策，False时用快速规则
+            is_group: 是否群聊（用于LLM失败时的元数据兜底）
+            is_at_bot: 是否@bot或直呼bot（用于元数据兜底防误插话）
 
         返回:
             TurnPlan: 规划结果
@@ -183,7 +187,11 @@ class TurnPlanner:
             plan = self.plan_fast(user_message, has_image)
         else:
             plan = await self._plan_with_llm(
-                user_message, context_summary, has_image
+                user_message,
+                context_summary,
+                has_image,
+                is_group=is_group,
+                is_at_bot=is_at_bot,
             )
 
         # 语义帧增强（独立于LLM规划路径，覆盖规则与LLM两种模式）
@@ -197,6 +205,8 @@ class TurnPlanner:
         user_message: str,
         context_summary: str,
         has_image: bool,
+        is_group: bool = False,
+        is_at_bot: bool = False,
     ) -> TurnPlan:
         """LLM精细规划
 
@@ -209,11 +219,19 @@ class TurnPlanner:
             user_message: 用户消息
             context_summary: 上下文摘要
             has_image: 是否包含图片
+            is_group: 是否群聊（元数据兜底防误插话）
+            is_at_bot: 是否@bot或直呼bot（元数据兜底防误插话）
 
         返回:
             TurnPlan: 规划结果
         """
-        fallback = metadata_fallback_turn_plan(has_images=has_image)
+        # 元数据兜底：传入完整会话元数据，群聊未@bot时倾向静默
+        fallback = metadata_fallback_turn_plan(
+            is_group=is_group,
+            is_random_chat=is_group and not is_at_bot,
+            is_direct_mention=is_at_bot,
+            has_images=has_image,
+        )
         fallback.user_message = user_message
 
         registry = self._get_registry()

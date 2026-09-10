@@ -5,6 +5,8 @@
 安全过滤、回复风格策略、环境感知等所有提示词片段。
 """
 
+import asyncio
+
 from liuying.utils.log import logger
 
 from ..config import get_config
@@ -44,25 +46,12 @@ class PromptBuilder:
         返回:
             str: 完整系统提示词
         """
-        persona = await persona_manager.get_user_persona_config(
-            ctx.user_id
-        )
-        base_prompt = await persona_manager.build_system_prompt(
-            persona, ctx.user_id, ctx.group_id
-        )
-
-        context_prompt = await context_manager.build_full_context_prompt(
-            ctx.group_id
-        )
-
-        emotion_prompt = await emotion_manager.build_emotion_prompt_for_user(
-            ctx.user_id, ctx.group_id, persona_name=ctx.persona_name
-        )
-
-        memory_prompt = ""
-        if get_config("MEMORY_ENABLED", True):
+        async def _load_memory_prompt() -> str:
+            # 记忆召回属外部不确定性IO，失败时降级为空串
+            if not get_config("MEMORY_ENABLED", True):
+                return ""
             try:
-                memory_prompt = await memory_manager.build_memory_prompt(
+                return await memory_manager.build_memory_prompt(
                     ctx.user_id,
                     ctx.text,
                     ctx.group_id,
@@ -75,6 +64,25 @@ class PromptBuilder:
                     command="AI",
                     e=e,
                 )
+                return ""
+
+        # 人格/上下文/情绪/记忆四路独立IO并行加载，缩短总耗时；
+        # 记忆路失败已在内部降级，其余三路异常语义与原串行一致
+        persona, context_prompt, emotion_prompt, memory_prompt = (
+            await asyncio.gather(
+                persona_manager.get_user_persona_config(ctx.user_id),
+                context_manager.build_full_context_prompt(ctx.group_id),
+                emotion_manager.build_emotion_prompt_for_user(
+                    ctx.user_id,
+                    ctx.group_id,
+                    persona_name=ctx.persona_name,
+                ),
+                _load_memory_prompt(),
+            )
+        )
+        base_prompt = await persona_manager.build_system_prompt(
+            persona, ctx.user_id, ctx.group_id
+        )
 
         parts = [base_prompt, context_prompt, emotion_prompt, memory_prompt]
 

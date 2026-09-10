@@ -106,6 +106,16 @@ def setup_chat_commands() -> None:
             session.scene.id if session.scene.is_group else None
         )
 
+        # ACL黑名单检查（拉黑用户/群组不响应）。前移至视觉理解与
+        # 消息缓冲之前，黑名单用户的消息不再消耗算力。
+        if await AclChecker.check_blacklist(user_id, group_id):
+            logger.debug(
+                f"用户/群组在黑名单，跳过回复: "
+                f"user={user_id} group={group_id}",
+                command="AI",
+            )
+            return
+
         # 运行时开关检查
         if not runtime_switch.is_enabled(
             "ai", user_id=user_id, group_id=group_id
@@ -197,6 +207,9 @@ def setup_chat_commands() -> None:
     ) -> None:
         """统一处理回复生成与发送
 
+        黑名单检查已前移至消息入口（_handle_private_message），
+        此处只负责回复生成与发送。
+
         参数:
             session: 会话信息
             user_id: 用户ID
@@ -208,15 +221,6 @@ def setup_chat_commands() -> None:
         err_text = ""
         result: ReplyResult | None = None
         try:
-            # ACL黑名单检查（拉黑用户/群组不响应）
-            if await AclChecker.check_blacklist(user_id, group_id):
-                logger.debug(
-                    f"用户/群组在黑名单，跳过回复: "
-                    f"user={user_id} group={group_id}",
-                    command="AI",
-                )
-                return
-
             # 记录用户消息到群社交智能（仅群聊）
             if group_id and get_config(
                 "SOCIAL_INTELLIGENCE_ENABLED", True

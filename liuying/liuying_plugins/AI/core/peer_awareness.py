@@ -75,6 +75,11 @@ class PeerAwareness:
         """已知其他bot（key=user_id|group_id）"""
         self._silence_until: dict[str, datetime] = {}
         """群组静默截止时间（key=group_id）"""
+        self._parsed_ids: tuple[str, frozenset[str]] = (
+            "",
+            frozenset(),
+        )
+        """配置的peer ID缓存（原始串与解析集合）"""
 
     def is_peer_bot(
         self,

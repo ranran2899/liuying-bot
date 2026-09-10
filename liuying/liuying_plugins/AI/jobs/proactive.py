@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from nonebot_plugin_alconna import Target
 
 from liuying.models._user.user_info import UserInfo
+from liuying.services.liuying_db import Q
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
@@ -44,6 +45,8 @@ class ProactiveHelper:
         """检查群空闲状态并主动发话
 
         遍历所有群上下文，对长时间无活动的群决策是否主动发话。
+        空闲过滤（最近活跃早于阈值或从未活跃）已下推到数据库查询，
+        并仅取所需三列，避免Python侧全量遍历与整行拉取。
         深夜静默时段（默认0-7点跨午夜）跳过。
         """
         if not get_config("PROACTIVE", {}).get("enabled", True):
@@ -52,55 +55,54 @@ class ProactiveHelper:
         if context_manager.is_rest_time():
             return
 
-        groups = await GroupContextSnapshot.filter(
-            is_active=True
-        ).all()
-
-        if not groups:
-            return
-
         idle_threshold = datetime.now() - timedelta(
             minutes=get_config("PROACTIVE", {}).get("group_idle_minutes", 90)
         )
         daily_limit = get_config("PROACTIVE", {}).get("daily_limit", 3)
         sent_count = 0
 
-        for group in groups:
+        # 空闲过滤下推数据库：最近活跃早于阈值，或从未活跃（NULL）
+        groups = await GroupContextSnapshot.filter(
+            Q(last_activity_time__lte=idle_threshold)
+            | Q(last_activity_time__isnull=True),
+            is_active=True,
+        ).values_list("group_id", "style", "last_activity_time")
+
+        if not groups:
+            return
+
+        for group_id, style, last_active in groups:
             if sent_count >= daily_limit:
                 break
 
-            last_active = group.last_activity_time
-            if last_active and last_active > idle_threshold:
-                continue
-
             if not context_manager.is_group_active_hour(
-                group.group_id,
+                group_id,
                 quiet_start=get_config("GROUP_QUIET", {}).get("start", 0),
                 quiet_end=get_config("GROUP_QUIET", {}).get("end", 7),
             ):
                 logger.debug(
-                    f"群 {group.group_id} 处于深夜静默时段，跳过",
+                    f"群 {group_id} 处于深夜静默时段，跳过",
                     command="AI",
-                    group_id=group.group_id,
+                    group_id=group_id,
                 )
                 continue
 
             try:
                 should_send, message = (
                     await ProactiveHelper._decide_proactive_message(
-                        group.group_id,
-                        group.style or "",
+                        group_id,
+                        style or "",
                         last_active,
                     )
                 )
                 if should_send and message:
                     await ProactiveHelper._send_proactive_message(
-                        group.group_id, message
+                        group_id, message
                     )
                     sent_count += 1
             except Exception as e:
                 logger.debug(
-                    f"群主动发话失败 {group.group_id}: {e}",
+                    f"群主动发话失败 {group_id}: {e}",
                     command="AI",
                     e=e,
                 )
@@ -227,33 +229,34 @@ class ProactiveHelper:
         daily_limit = get_config("PROACTIVE", {}).get("daily_limit", 3)
         sent_count = 0
 
-        users = await UserInfo.filter(
+        # 仅需user_id单列，避免整行ORM拉取
+        user_ids = await UserInfo.filter(
             favor_value__gte=_PROACTIVE_FAVOR_THRESHOLD
-        ).all()
+        ).values_list("user_id", flat=True)
 
-        if not users:
+        if not user_ids:
             return
 
-        for user in users:
+        for user_id in user_ids:
             if sent_count >= daily_limit:
                 break
-            if not user.user_id:
+            if not user_id:
                 continue
             try:
                 message = (
                     await ProactiveHelper._generate_greeting(
-                        greeting_type, user.user_id
+                        greeting_type, user_id
                     )
                 )
                 if not message:
                     continue
                 await ProactiveHelper._send_private_greeting(
-                    user.user_id, message
+                    user_id, message
                 )
                 sent_count += 1
             except Exception as e:
                 logger.debug(
-                    f"私聊问候失败 {user.user_id}: {e}",
+                    f"私聊问候失败 {user_id}: {e}",
                     command="AI",
                     e=e,
                 )
@@ -316,7 +319,7 @@ class ProactiveHelper:
 
         参数:
             user_id: 用户ID
-            message: 问候消息
+            message: 消息内容
         """
         try:
             target = Target(user_id, private=True)

@@ -84,13 +84,13 @@ async def _analyze_group_style(
         f"{messages_text}\n"
         "\n"
         "请输出JSON格式（只输出JSON，不要其他内容）：\n"
-        "{{\n"
+        "{\n"
         '  "language_style": "语言风格描述（如休闲/正式/玩梗/技术向）",\n'
         '  "topic_preference": "话题偏好描述（如游戏/学习/日常/工作）",\n'
         '  "atmosphere": "群氛围描述（如活跃/安静/友好/竞争）",\n'
         '  "pace": "交流节奏描述（如快节奏/慢节奏/碎片化）",\n'
         '  "summary": "一句话总结群风格"\n'
-        "}}"
+        "}"
     )
     try:
         role = model_router.resolve(ROLE_WARMUP)

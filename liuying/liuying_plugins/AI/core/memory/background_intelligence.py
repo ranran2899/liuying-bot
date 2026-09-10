@@ -13,7 +13,7 @@ from typing import Any
 from liuying.utils.log import logger
 
 from ...models.memory_item import MemoryItem
-from ._common import _DEFAULT_PERSONA
+from ._common import _DEFAULT_PERSONA, tokenize
 
 _DEBOUNCE_SECONDS = 30.0
 """防抖等待秒数（收集窗口）"""
@@ -232,6 +232,10 @@ class BackgroundIntelligence:
     def _text_similarity(text_a: str, text_b: str) -> float:
         """计算两段文本的 Jaccard 相似度
 
+        基于 _common.tokenize 分词（中文按 2-gram 展开），
+        解决中文无空格时整句成为单一词元、
+        相似度非 0 即 1 的问题。
+
         参数:
             text_a: 文本A
             text_b: 文本B
@@ -241,8 +245,8 @@ class BackgroundIntelligence:
         """
         if not text_a or not text_b:
             return 0.0
-        set_a = set(text_a.split())
-        set_b = set(text_b.split())
+        set_a = set(tokenize(text_a))
+        set_b = set(tokenize(text_b))
         if not set_a or not set_b:
             return 0.0
         intersection = set_a & set_b

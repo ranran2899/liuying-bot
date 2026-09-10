@@ -122,6 +122,9 @@ class SocialIntelligenceHelper:
         daily_quota = get_config("SOCIAL_QUOTA", {}).get("per_user", 5)
         cooldown = get_config("SOCIAL_QUOTA", {}).get("cooldown", 3600)
         gate_enabled = get_config("SOCIAL_GATE_ENABLED", False)
+        # 深夜静默配置与群无关，提取到循环外只读一次
+        quiet_start = get_config("GROUP_QUIET", {}).get("start", 0)
+        quiet_end = get_config("GROUP_QUIET", {}).get("end", 7)
 
         shared_text: str | None = None
         if generate_once:
@@ -141,8 +144,8 @@ class SocialIntelligenceHelper:
         for group in groups:
             if not context_manager.is_group_active_hour(
                 group.group_id,
-                quiet_start=get_config("GROUP_QUIET", {}).get("start", 0),
-                quiet_end=get_config("GROUP_QUIET", {}).get("end", 7),
+                quiet_start=quiet_start,
+                quiet_end=quiet_end,
             ):
                 continue
 
@@ -266,10 +269,11 @@ class SocialIntelligenceHelper:
         if context_manager.is_rest_time():
             return
 
-        users = await UserInfo.filter(
+        # 仅需user_id单列，避免整行ORM拉取
+        user_ids = await UserInfo.filter(
             favor_value__gte=_PROACTIVE_POKE_FAVOR_THRESHOLD
-        ).all()
-        if not users:
+        ).values_list("user_id", flat=True)
+        if not user_ids:
             return
 
         daily_limit = get_config(
@@ -278,16 +282,16 @@ class SocialIntelligenceHelper:
         )
         # 直接抽样所需数量，避免对全量列表 shuffle 的浪费
         candidates = random.sample(
-            users, min(daily_limit, len(users))
+            user_ids, min(daily_limit, len(user_ids))
         )
         poked = 0
-        for user in candidates:
+        for user_id in candidates:
             if poked >= daily_limit:
                 break
-            if not user.user_id:
+            if not user_id:
                 continue
             if social_quota.is_quota_exceeded(
-                user.user_id,
+                user_id,
                 scenario="主动拍一拍",
                 daily_quota_per_user=daily_limit,
                 cooldown_seconds=3600,
@@ -296,20 +300,20 @@ class SocialIntelligenceHelper:
             try:
                 bot = get_bot()
                 ok = await ProtocolHelper.poke(
-                    bot, user_id=user.user_id
+                    bot, user_id=user_id
                 )
                 if ok:
                     social_quota.mark_sent(
-                        user.user_id, scenario="主动拍一拍"
+                        user_id, scenario="主动拍一拍"
                     )
                     poked += 1
                     logger.info(
-                        f"主动拍一拍: {user.user_id}",
+                        f"主动拍一拍: {user_id}",
                         command="AI",
                     )
             except Exception as e:
                 logger.debug(
-                    f"主动拍一拍失败 {user.user_id}: {e}",
+                    f"主动拍一拍失败 {user_id}: {e}",
                     command="AI",
                     e=e,
                 )

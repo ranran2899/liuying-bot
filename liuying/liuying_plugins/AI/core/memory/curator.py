@@ -5,10 +5,12 @@
 作为记忆系统的上层策展层，定期对已有记忆进行演化。
 """
 
+import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import json
+import math
 from typing import Any
 
 from liuying.utils.log import logger
@@ -205,23 +207,11 @@ class MemoryCurator:
         for mem, vec in zip(memories, embeddings):
             vectors.append((mem.id, vec))
 
-        dedup_count = 0
-        # 映射: 被删除记忆ID -> 保留者ID，避免引用过期循环变量
-        to_delete: dict[int, int] = {}
-        for i in range(len(vectors)):
-            if vectors[i][0] in to_delete:
-                continue
-            for j in range(i + 1, len(vectors)):
-                if vectors[j][0] in to_delete:
-                    continue
-                sim = CurationExtractor.cosine_similarity(
-                    vectors[i][1], vectors[j][1]
-                )
-                if sim >= _DEDUP_SIMILARITY:
-                    older_id = vectors[j][0]
-                    keeper_id = vectors[i][0]
-                    to_delete[older_id] = keeper_id
-                    dedup_count += 1
+        # 余弦两两比对为 O(n^2) 纯计算，放到工作线程执行
+        # 避免长时间同步阻塞事件循环
+        dedup_count, to_delete = await asyncio.to_thread(
+            self._pairwise_dedupe, vectors
+        )
 
         # 批量删除被去重的记忆，避免逐条查询+删除的N+1问题
         if to_delete:
@@ -234,6 +224,53 @@ class MemoryCurator:
             await self._batch_reinforce(keeper_ids)
 
         return dedup_count
+
+    @staticmethod
+    def _pairwise_dedupe(
+        vectors: list[tuple[int, list[float]]],
+    ) -> tuple[int, dict[int, int]]:
+        """两两余弦比对找出重复记忆（纯同步计算，供线程执行）
+
+        预计算每条向量模长，逐对相似度用点积除以模长乘积，
+        避免每对比较重复计算 norm；零模长向量视为不相似，
+        结果与 CurationExtractor.cosine_similarity 语义一致。
+
+        参数:
+            vectors: (记忆ID, 嵌入向量) 列表
+
+        返回:
+            tuple[int, dict[int, int]]:
+                (去重数量, 被删记忆ID -> 保留者ID映射)
+        """
+        norms = [
+            math.sqrt(sum(x * x for x in vec))
+            for _, vec in vectors
+        ]
+        dedup_count = 0
+        # 映射: 被删除记忆ID -> 保留者ID，避免引用过期循环变量
+        to_delete: dict[int, int] = {}
+        for i in range(len(vectors)):
+            if vectors[i][0] in to_delete:
+                continue
+            for j in range(i + 1, len(vectors)):
+                if vectors[j][0] in to_delete:
+                    continue
+                denom = norms[i] * norms[j]
+                if denom == 0.0:
+                    continue
+                dot = sum(
+                    a * b
+                    for a, b in zip(
+                        vectors[i][1], vectors[j][1], strict=False
+                    )
+                )
+                sim = max(0.0, min(1.0, dot / denom))
+                if sim >= _DEDUP_SIMILARITY:
+                    older_id = vectors[j][0]
+                    keeper_id = vectors[i][0]
+                    to_delete[older_id] = keeper_id
+                    dedup_count += 1
+        return dedup_count, to_delete
 
     @staticmethod
     async def _batch_reinforce(memory_ids: list[int]) -> None:

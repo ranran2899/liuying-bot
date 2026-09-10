@@ -39,10 +39,10 @@ def _format_commands_for_prompt(
         return "（无命令信息）"
     lines: list[str] = []
     for cmd in commands[:_MAX_COMMANDS_IN_PROMPT]:
-        name = cmd.get("name", "")
-        usage = cmd.get("usage", "")
-        desc = cmd.get("description", "")
-        lines.append(f"- {name}: {usage} | {desc}")
+        name = str(cmd.get("command") or "")
+        params = " ".join(f"[{p}]" for p in cmd.get("params") or [])
+        desc = str(cmd.get("description") or "")
+        lines.append(f"- {name} {params}: {desc}")
     return "\n".join(lines)
 
 
@@ -51,7 +51,7 @@ async def _resolve_plugin_commands(
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     """解析插件命令格式
 
-    先按模块名精确匹配；失败则用语义召回兜底，
+    先按名称/模块名精确匹配；失败则用语义召回兜底，
     取最相关插件再查，避免 LLM 传入显示名或中文
     关键词（如「商店」）时查不到命令清单。
 
@@ -59,20 +59,20 @@ async def _resolve_plugin_commands(
         plugin_name: 插件模块名或用户描述
 
     返回:
-        tuple: (插件简要信息, 命令列表)
+        tuple: (插件完整信息, 命令列表)
     """
     if not plugin_name:
         return None, []
     try:
-        view = await knowledge_store.get_by_name(plugin_name)
+        info = await knowledge_store.get_by_name(plugin_name)
     except Exception as e:
         logger.debug(
             f"查询插件失败: {plugin_name} -> {e}",
             command="AI",
             e=e,
         )
-        view = None
-    if view is None:
+        info = None
+    if info is None:
         try:
             results = await knowledge_store.recall(
                 plugin_name, top_k=1, log_query=False
@@ -84,13 +84,11 @@ async def _resolve_plugin_commands(
                 e=e,
             )
             results = []
-        if results:
-            view = results[0].plugin
-    if view is None:
+        info = results[0].info if results else None
+    if info is None:
         return None, []
-    brief = view.to_brief()
-    commands = view.get_commands()
-    return brief, commands
+    commands = list(info.get("commands") or [])
+    return info, commands
 
 
 @register_tool(
@@ -137,11 +135,9 @@ async def invoke_plugin_command(
     brief, commands = await _resolve_plugin_commands(plugin_name)
     if brief is None:
         return f"未找到插件: {plugin_name}"
+    display_name = str(brief.get("name") or plugin_name)
     if not commands:
-        return (
-            f"插件 {brief.get('display_name', plugin_name)} "
-            "未暴露任何命令格式"
-        )
+        return f"插件 {display_name} 未暴露任何命令格式"
     try:
         prompt = (
             "你是一个命令转写助手。\n"
@@ -167,12 +163,12 @@ async def invoke_plugin_command(
         command_text = command_text.strip()
         if not command_text:
             return (
-                f"无法将意图转写为 {brief.get('display_name', '')} "
+                f"无法将意图转写为 {display_name} "
                 "的命令，请用户手动使用该插件"
             )
         return (
             f"已构造命令: {command_text}\n"
-            f"来源插件: {brief.get('display_name', plugin_name)}"
+            f"来源插件: {display_name}"
         )
     except Exception as e:
         logger.warning(
@@ -220,18 +216,15 @@ async def get_plugin_command_help(plugin_name: str) -> str:
     if brief is None:
         return f"未找到插件: {plugin_name}"
     if not commands:
-        return (
-            f"插件 {brief.get('display_name', plugin_name)} "
-            "暂无命令说明"
-        )
+        return f"插件 {brief.get('name') or plugin_name} 暂无命令说明"
     lines: list[str] = [
-        f"插件 {brief.get('display_name', plugin_name)} 命令清单:"
+        f"插件 {brief.get('name') or plugin_name} 命令清单:"
     ]
     for cmd in commands:
-        name = cmd.get("name", "")
-        usage = cmd.get("usage", "")
-        desc = cmd.get("description", "")
-        lines.append(f"- {name}: {usage} | {desc}")
+        name = str(cmd.get("command") or "")
+        params = " ".join(f"[{p}]" for p in cmd.get("params") or [])
+        desc = str(cmd.get("description") or "")
+        lines.append(f"- {name} {params}: {desc}")
     return "\n".join(lines)
 
 
@@ -292,7 +285,7 @@ async def search_plugin_by_capability(
             desc = brief.get("description", "")
             commands = brief.get("commands", [])
             cmd_names = ",".join(
-                c.get("name", "") for c in commands[:3]
+                c.get("command", "") for c in commands[:3]
             )
             lines.append(
                 f"- {name}（{brief.get('plugin_name')}）"

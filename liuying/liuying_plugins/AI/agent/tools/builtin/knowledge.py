@@ -111,7 +111,7 @@ async def get_plugin_detail(plugin_name: str) -> str:
         item = await knowledge_store.get_by_name(plugin_name)
         if not item:
             return f"未找到插件: {plugin_name}"
-        return item.build_prompt_block()
+        return knowledge_store.build_detail_block(item)
     except Exception as e:
         return f"查询插件详情失败: {e}"
 
@@ -159,12 +159,15 @@ async def list_available_plugins(menu_type: str = "") -> str:
         lines: list[str] = []
         current_menu = ""
         for item in items:
-            if item.menu_type != current_menu:
-                current_menu = item.menu_type or "其他"
+            menu = str(item.get("menu_type") or "其他")
+            if menu != current_menu:
+                current_menu = menu
                 lines.append(f"\n[{current_menu}]")
-            name = item.display_name or item.plugin_name
-            desc = item.description[:60] if item.description else ""
-            lines.append(f"- {name}（{item.plugin_name}）: {desc}")
+            name = item.get("name") or item.get("module") or ""
+            desc = str(item.get("description") or "")[:60]
+            lines.append(
+                f"- {name}（{item.get('module')}）: {desc}"
+            )
         return "\n".join(lines)
     except Exception as e:
         return f"列出插件失败: {e}"

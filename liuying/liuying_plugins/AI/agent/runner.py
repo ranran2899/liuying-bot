@@ -37,6 +37,9 @@ _ANTI_CROSSTALK_PROMPT = (
 )
 """多话题防串扰硬约束提示"""
 
+# 防串扰提示尾部特征子串，用于幂等检查防止重复注入
+_CROSSTALK_MARKER = "也不要把无关上下文糊上去。"
+
 
 @dataclass(slots=True)
 class AgentResult:
@@ -105,6 +108,7 @@ class AgentRunner:
         has_image: bool = False,
         use_llm_planning: bool = True,
         persona_name: str = "default",
+        is_at_bot: bool = False,
     ) -> AgentResult:
         """执行Agent循环（三层架构）
 
@@ -119,6 +123,7 @@ class AgentRunner:
             has_image: 是否包含图片
             use_llm_planning: 是否启用LLM精细规划，False时用规则快速决策
             persona_name: 当前bot人格名（用于记忆/情绪隔离）
+            is_at_bot: 是否@bot或直呼bot（用于群聊防误插话规划）
 
         返回:
             AgentResult: 执行结果
@@ -166,6 +171,8 @@ class AgentRunner:
                 context_summary=context_summary,
                 has_image=has_image,
                 use_llm=use_llm_for_plan,
+                is_group=bool(group_id),
+                is_at_bot=is_at_bot,
             )
         except Exception as e:
             logger.warning(
@@ -293,6 +300,7 @@ class AgentRunner:
 
         将防串扰硬约束和语义工具指导追加到 messages 的首个 system
         消息内容末尾，供响应器消费。无 system 消息时新建一条。
+        已注入过（包含防串扰尾部特征子串）时直接返回，保证幂等。
 
         参数:
             messages: 消息列表（原地修改）
@@ -301,6 +309,9 @@ class AgentRunner:
         extra = f"\n\n{guidance}\n\n{_ANTI_CROSSTALK_PROMPT}"
         for msg in messages:
             if msg.get("role") == "system" and msg.get("content"):
+                # 幂等检查：已注入过则跳过，防止重复注入累积
+                if _CROSSTALK_MARKER in msg["content"]:
+                    return
                 msg["content"] = f"{msg['content']}{extra}"
                 return
         messages.insert(0, {"role": "system", "content": extra.strip()})
@@ -356,6 +367,7 @@ class AgentRunner:
         """构建上下文摘要
 
         从对话历史中提取最近几条消息作为上下文摘要。
+        多模态消息（content为list）提取文本段拼接。
 
         参数:
             messages: 对话消息列表
@@ -369,7 +381,16 @@ class AgentRunner:
         parts: list[str] = []
         for msg in recent:
             role = msg.get("role", "user")
-            content = msg.get("content", "")[:100]
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                # 多模态消息：提取文本段拼接，避免list切片污染输出
+                content = "".join(
+                    part.get("text", "")
+                    for part in content
+                    if isinstance(part, dict)
+                    and part.get("type") == "text"
+                )
+            content = str(content)[:100]
             if not content:
                 continue
             role_label = {"user": "用户", "assistant": "AI", "system": "系统"}

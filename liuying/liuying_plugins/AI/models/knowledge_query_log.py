@@ -4,7 +4,6 @@
 用于热点统计与召回优化。
 """
 
-from collections import Counter
 from datetime import datetime, timedelta
 import json
 from typing import Any, ClassVar
@@ -106,7 +105,9 @@ class KnowledgeQueryLog(Model):
     ) -> list[dict[str, Any]]:
         """获取热门插件（按命中次数排序）
 
-        使用values_list仅拉取matched_plugin字段，避免完整对象序列化开销。
+        使用数据库GROUP BY + COUNT聚合统计，按命中次数降序返回，
+        避免全量行拉取到Python侧Counter计数；空插件名在查询条件中
+        直接排除。
 
         参数:
             days: 统计天数
@@ -116,11 +117,11 @@ class KnowledgeQueryLog(Model):
             list[dict]: 热门插件列表（含plugin/count）
         """
         since = datetime.now() - timedelta(days=days)
-        plugins = await cls.filter(
-            query_time__gte=since
-        ).values_list("matched_plugin", flat=True)
-        counter = Counter(p for p in plugins if p)
+        rows = await cls.filter(
+            query_time__gte=since,
+            matched_plugin__ne="",
+        ).group_count("matched_plugin", limit=limit)
         return [
-            {"plugin": p, "count": c}
-            for p, c in counter.most_common(limit)
+            {"plugin": plugin, "count": count}
+            for plugin, count in rows
         ]

@@ -446,6 +446,28 @@ class PersonaResponder:
         }
         return hints.get(output_mode, "")
 
+    @staticmethod
+    def _safe_ambiguity(value: object) -> float:
+        """容错解析模糊度：数值直接钳位，字符串枚举映射为数值
+
+        参数:
+            value: LLM返回的原始值（float/str）
+
+        返回:
+            float: 0.0-1.0 的模糊度
+        """
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            return max(0.0, min(1.0, float(value)))
+        match str(value).strip().lower():
+            case "high":
+                return 0.8
+            case "medium":
+                return 0.5
+            case "low":
+                return 0.2
+            case _:
+                return 0.0
+
     def _parse_response(
         self, response: str, plan: TurnPlan
     ) -> PersonaResponse:
@@ -479,10 +501,9 @@ class PersonaResponder:
         if not reply_text:
             reply_text = raw
 
-        ambiguity = float(
+        ambiguity = self._safe_ambiguity(
             data.get("ambiguity_level", data.get("ambiguitylevel", 0.0))
         )
-        ambiguity = max(0.0, min(1.0, ambiguity))
 
         return PersonaResponse(
             reply_text=reply_text,

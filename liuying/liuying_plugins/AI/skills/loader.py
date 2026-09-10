@@ -438,6 +438,7 @@ class SkillpackLoader:
 
         优先级：meta.entrypoint / meta.script → scripts/main.py →
         scripts/run.py → scripts/skill.py → scripts 下首个 .py。
+        声明式入口必须位于技能目录内，越界路径直接拒绝加载。
 
         参数:
             skill_dir: 技能目录
@@ -451,7 +452,16 @@ class SkillpackLoader:
             meta.get("entrypoint") or meta.get("script") or ""
         ).strip()
         if entry:
+            root = skill_dir.resolve()
             for candidate in (skill_dir / entry, scripts_dir / entry):
+                # 入口路径可由外部 skill.yaml 声明，必须锁定在
+                # 技能目录内，防止 ../ 路径穿越加载任意文件。
+                if not candidate.resolve().is_relative_to(root):
+                    logger.warning(
+                        f"技能入口路径越界，拒绝加载: {candidate}",
+                        command="AI",
+                    )
+                    return None
                 if candidate.exists():
                     return candidate
 
