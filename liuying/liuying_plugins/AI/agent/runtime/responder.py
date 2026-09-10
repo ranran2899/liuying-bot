@@ -393,6 +393,29 @@ class PersonaResponder:
             options=chat_options,
             provider_name=role.provider or None,
         )
+
+        # LLM偶发返回空content（内容过滤/输出截断）时：
+        # 先记录诊断，再原样重试一次，仍空则返回空响应由上层兜底
+        if not response_text or not response_text.strip():
+            logger.warning(
+                f"响应LLM返回空内容，重试一次: "
+                f"mode={plan.output_mode} max_tokens={dynamic_max_tokens} "
+                f"evidence={len(evidence_text)}",
+                command="AI",
+            )
+            _, response_text = await llm.chat(
+                llm_messages,
+                model=role.model or None,
+                options=chat_options,
+                provider_name=role.provider or None,
+            )
+            if not response_text or not response_text.strip():
+                logger.error(
+                    f"响应LLM重试仍为空，返回空响应: "
+                    f"mode={plan.output_mode} max_tokens={dynamic_max_tokens}",
+                    command="AI",
+                )
+                return PersonaResponse(reply_text="")
         return self._parse_response(response_text, plan)
 
     def _extract_system_prompt(

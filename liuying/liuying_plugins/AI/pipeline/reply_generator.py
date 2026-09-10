@@ -178,6 +178,15 @@ class ReplyGenerator:
                     and result.response.recommend_silence
                 ):
                     return "", result
+                # Agent返回空文本（如LLM空响应）时兜底回复，
+                # 避免出现"无回复且无报错"的静默现象
+                if not result.text.strip():
+                    logger.warning(
+                        f"Agent回复为空，使用兜底文案: "
+                        f"user={ctx.user_id} group={ctx.group_id or ''}",
+                        command="AI",
+                    )
+                    return random.choice(_FALLBACK_REPLIES), result
                 return result.text, result
             except Exception as e:
                 logger.warning(
@@ -200,6 +209,13 @@ class ReplyGenerator:
                     options=chat_options,
                     provider_name=use_provider,
                 )
+                # LLM返回空响应时兜底回复，避免静默
+                if not reply_text.strip():
+                    logger.warning(
+                        "LLM对话返回空，使用兜底文案",
+                        command="AI",
+                    )
+                    return random.choice(_FALLBACK_REPLIES), None
                 return reply_text, None
             except Exception as e:
                 logger.error(
@@ -260,6 +276,13 @@ class ReplyGenerator:
                 extract=lambda r: r or "",
                 purpose="chat",
             )
+            # 过滤/LLM均返回空时兜底回复，避免静默
+            if not reply_text.strip():
+                logger.warning(
+                    "安全过滤后回复为空，使用兜底文案",
+                    command="AI",
+                )
+                return random.choice(_FALLBACK_REPLIES), None
             return reply_text, None
         except SafetyRefusalError as e:
             logger.warning(
