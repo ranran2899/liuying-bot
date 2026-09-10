@@ -202,7 +202,7 @@ class TurnPlanner:
 
         先用元数据兜底生成 fallback，LLM 调用失败或解析失败时
         返回 fallback。LLM 成功时用 parse_turn_plan_payload 解析。
-        保留 max_tokens=800 与 reasoning_enabled=False 的token优化，
+        保留 max_tokens=800 的token优化，
         以及 has_image 的视觉路由增强。
 
         参数:
@@ -268,10 +268,9 @@ class TurnPlanner:
         try:
             llm = self._get_llm()
             role = model_router.resolve(ROLE_INTENT)
-            # 限制输出token：规划JSON约400-600 tokens，
-            # 禁用思考模式避免消耗思考token
+            # 限制输出token：规划JSON约400-600 tokens
             plan_options = role.apply_to_options(
-                {"max_tokens": 800, "reasoning_enabled": False}
+                {"max_tokens": 800}
             )
             _, response = await llm.chat(
                 [

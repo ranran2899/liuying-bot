@@ -29,10 +29,15 @@ LLM_CONFIGS: list[RegisterConfig] = [
     ),
     # ===== 思考模式 =====
     cfg(
-        "THINKING_MODE_ENABLED",
-        False,
-        "是否开启深度思考请求（开启时向模型请求思考链）",
-        bool,
+        "THINKING",
+        {"enabled": False, "effort": "high"},
+        "深度思考配置\n"
+        " - enabled: 是否开启深度思考（开启时向模型请求思考链）\n"
+        " - effort: 思考强度，可选值：\n"
+        "   max: 深度推理（最消耗token）\n"
+        "   high: 增强推理（默认）\n"
+        "   low: 轻度推理",
+        dict,
     ),
     # ===== 用户对话Token额度 =====
     cfg(

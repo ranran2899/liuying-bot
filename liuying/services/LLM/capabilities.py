@@ -10,15 +10,25 @@ class Capability(StrEnum):
     """能力类型枚举"""
 
     CHAT = "chat"
+    """对话能力"""
     IMAGE = "image"
+    """图像生成能力"""
     AUDIO = "audio"
+    """音频生成能力"""
     VIDEO = "video"
+    """视频生成能力"""
     EMBEDDING = "embedding"
+    """嵌入能力"""
     RERANK = "rerank"
+    """排序能力"""
     DOCUMENT = "document"
+    """文档能力"""
     TOKENIZER = "tokenizer"
+    """分词能力"""
     TOOLS = "tools"
+    """工具能力"""
     WEB_SEARCH = "web_search"
+    """网络搜索能力"""
 
     @classmethod
     def values(cls) -> list[str]:
@@ -45,7 +55,8 @@ class ChatCapability(Protocol):
         Args:
             model: 模型名称
             messages: 对话消息列表
-            options: 额外选项，支持标准键 reasoning_enabled 控制深度思考
+            options: 额外选项，原样透传给模型 API（如 reasoning_effort、
+                thinking 等原生思考参数，由调用方自行指定）
 
         Returns:
             tuple[str, str]: (reasoning_content, content)
@@ -65,7 +76,8 @@ class ChatCapability(Protocol):
         Args:
             model: 模型名称
             messages: 对话消息列表
-            options: 额外选项，支持标准键 reasoning_enabled 控制深度思考
+            options: 额外选项，原样透传给模型 API（如 reasoning_effort、
+                thinking 等原生思考参数，由调用方自行指定）
 
         Yields:
             流式响应片段

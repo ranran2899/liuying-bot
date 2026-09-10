@@ -145,7 +145,8 @@ class BaseProvider(ABC):
         Args:
             model: 模型名称
             messages: 对话消息列表
-            options: 额外选项，支持标准键 reasoning_enabled 控制深度思考
+            options: 额外选项，原样透传给模型 API（如 reasoning_effort、
+                thinking 等原生思考参数，由调用方自行指定）
 
         Returns:
             tuple[str, str]: (reasoning_content, content)

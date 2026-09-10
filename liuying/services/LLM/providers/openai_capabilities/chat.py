@@ -32,7 +32,8 @@ class OpenAIChatCapability:
         Args:
             model: 模型名称
             messages: 对话消息列表
-            options: 额外选项，支持标准键 reasoning_enabled 控制深度思考
+            options: 额外选项，原样透传到请求体（如 reasoning_effort
+                等模型原生思考参数，由调用方自行指定）
 
         Returns:
             tuple[str, str]: (reasoning_content, content)
@@ -83,7 +84,8 @@ class OpenAIChatCapability:
             provider: 提供商配置对象
             model: 模型名称
             messages: 对话消息列表
-            options: 额外选项，支持标准键 reasoning_enabled 控制深度思考
+            options: 额外选项，原样透传到请求体（如 reasoning_effort
+                等模型原生思考参数，由调用方自行指定）
             is_ernie: 是否为文心一言 API
 
         Returns:
@@ -97,7 +99,6 @@ class OpenAIChatCapability:
             actual_model = model_cfg_result[1].model_name or actual_model
 
         options = options or {}
-        reasoning_enabled = options.pop("reasoning_enabled", False)
 
         defaults = get_llm_config().request_defaults
         request_data: dict[str, Any] = {
@@ -110,9 +111,6 @@ class OpenAIChatCapability:
             if options.get("baseUrl"):
                 custom_url = options.pop("baseUrl").rstrip("/")
                 url = custom_url if is_ernie else f"{custom_url}/chat/completions"
-
-        if reasoning_enabled:
-            request_data["reasoning_effort"] = "medium"
 
         headers = self._client.get_headers(provider)
         if is_ernie and provider.api_key:
@@ -150,7 +148,8 @@ class OpenAIChatCapability:
         Args:
             model: 模型名称
             messages: 对话消息列表
-            options: 额外选项，支持标准键 reasoning_enabled 控制深度思考
+            options: 额外选项，原样透传到请求体（如 reasoning_effort
+                等模型原生思考参数，由调用方自行指定）
 
         Yields:
             流式响应的文本片段
@@ -160,7 +159,6 @@ class OpenAIChatCapability:
         url = f"{base_url}/chat/completions"
 
         options = options or {}
-        reasoning_enabled = options.pop("reasoning_enabled", False)
 
         defaults = get_llm_config().request_defaults
         request_data: dict[str, Any] = {
@@ -171,9 +169,6 @@ class OpenAIChatCapability:
         }
         if options:
             request_data.update(options)
-
-        if reasoning_enabled:
-            request_data["reasoning_effort"] = "medium"
 
         headers = self._client.get_headers(provider)
 

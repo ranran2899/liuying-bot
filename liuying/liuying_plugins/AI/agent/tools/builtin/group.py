@@ -6,8 +6,6 @@
 不作为 LLM 参数暴露。
 """
 
-import nonebot
-
 from ....core.group import group_member_service
 from ...runtime.constants import (
     EVIDENCE_KIND_CONTEXT,
@@ -39,7 +37,6 @@ from ..decorators import register_tool
     intent_tags=[INTENT_TAG_LOCAL],
     latency_class=LATENCY_CLASS_FAST,
     evidence_kind=EVIDENCE_KIND_CONTEXT,
-    metadata={"requires_bot": True},
 )
 async def get_group_members(limit: int = 50) -> str:
     """查询当前群成员列表
@@ -53,27 +50,15 @@ async def get_group_members(limit: int = 50) -> str:
     group_id = get_current_group_id()
     if not group_id:
         return "当前不在群聊中，无法查询群成员"
-    try:
-        bot = nonebot.get_bot()
-    except Exception:
-        bot = None
 
     try:
-        snapshot = await group_member_service.get_members(
-            group_id, bot=bot
-        )
+        snapshot = await group_member_service.get_members(group_id)
         if snapshot.total == 0:
             return f"群 {group_id} 暂无成员信息"
-        lines: list[str] = [
-            f"群 {group_id} 成员总数: {snapshot.total}"
-            f"（来源: {snapshot.source}）"
-        ]
+        lines: list[str] = [f"群 {group_id} 成员总数: {snapshot.total}"]
         for m in snapshot.members[:limit]:
-            name = m.nickname or m.username or m.user_id
-            role_tag = (
-                f"[{m.role}]" if m.role != "member" else ""
-            )
-            lines.append(f"- {name}({m.user_id}){role_tag}")
+            role_tag = f"[{m.role}]" if m.role != "member" else ""
+            lines.append(f"- {m.display_name()}({m.user_id}){role_tag}")
         return "\n".join(lines)
     except Exception as e:
         return f"查询群成员失败: {e}"
@@ -98,7 +83,6 @@ async def get_group_members(limit: int = 50) -> str:
     intent_tags=[INTENT_TAG_LOCAL],
     latency_class=LATENCY_CLASS_FAST,
     evidence_kind=EVIDENCE_KIND_CONTEXT,
-    metadata={"requires_bot": True},
 )
 async def get_group_member_info(user_id: str) -> str:
     """查询当前群中指定成员信息
@@ -112,24 +96,16 @@ async def get_group_member_info(user_id: str) -> str:
     group_id = get_current_group_id()
     if not group_id:
         return "当前不在群聊中，无法查询成员信息"
-    try:
-        bot = nonebot.get_bot()
-    except Exception:
-        bot = None
 
     try:
-        member = (
-            await group_member_service.get_member(
-                group_id, user_id, bot=bot
-            )
-        )
+        member = await group_member_service.get_member(group_id, user_id)
         if not member:
             return f"未找到用户 {user_id} 在群 {group_id}"
         info = member.to_full()
         lines = [
             f"用户ID: {info['user_id']}",
-            f"昵称: {info['nickname']}",
-            f"用户名: {info.get('username', '')}",
+            f"昵称: {info['user_name']}",
+            f"自定义名称: {info['user_nickname']}",
             f"角色: {info['role']}",
             f"入群时间: {info.get('join_time', '')}",
         ]
@@ -157,7 +133,6 @@ async def get_group_member_info(user_id: str) -> str:
     intent_tags=[INTENT_TAG_LOCAL],
     latency_class=LATENCY_CLASS_FAST,
     evidence_kind=EVIDENCE_KIND_CONTEXT,
-    metadata={"requires_bot": True},
 )
 async def find_group_member(name: str) -> str:
     """按名称模糊查找当前群成员
@@ -171,25 +146,17 @@ async def find_group_member(name: str) -> str:
     group_id = get_current_group_id()
     if not group_id:
         return "当前不在群聊中，无法查找成员"
-    try:
-        bot = nonebot.get_bot()
-    except Exception:
-        bot = None
 
     try:
-        members = (
-            await group_member_service.find_members_by_name(
-                group_id, name, bot=bot, limit=10
-            )
+        members = await group_member_service.find_members_by_name(
+            group_id, name, limit=10
         )
         if not members:
             return f"未找到匹配 '{name}' 的群成员"
         lines = [f"匹配 '{name}' 的群成员:"]
         for m in members:
-            name_str = m.nickname or m.username or m.user_id
             lines.append(
-                f"- {name_str}({m.user_id}) "
-                f"[{m.role}]"
+                f"- {m.display_name()}({m.user_id}) [{m.role}]"
             )
         return "\n".join(lines)
     except Exception as e:

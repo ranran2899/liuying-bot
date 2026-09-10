@@ -364,11 +364,10 @@ class PersonaResponder:
         # 接入模型按角色路由：使用 ROLE_CHAT 配置的模型/温度/provider
         # 根据字数约束动态计算max_tokens，中文字符约1.5 tokens，
         # 加上JSON结构开销约200 tokens，上限800避免过长输出
-        # 禁用思考模式避免消耗思考token
         role = model_router.resolve(ROLE_CHAT)
         dynamic_max_tokens = min(800, int(max_chars * 2) + 200)
         chat_options = role.apply_to_options(
-            {"max_tokens": dynamic_max_tokens, "reasoning_enabled": False}
+            {"max_tokens": dynamic_max_tokens}
         )
         _, response_text = await llm.chat(
             llm_messages,

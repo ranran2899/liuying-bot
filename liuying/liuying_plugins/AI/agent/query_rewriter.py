@@ -459,7 +459,7 @@ async def contextual_query_rewriter(
         use_llm = llm or llm_helper
         role = model_router.resolve(ROLE_INTENT)
         options = role.apply_to_options(
-            {"max_tokens": 600, "reasoning_enabled": False}
+            {"max_tokens": 600}
         )
         _, response = await use_llm.chat(
             [

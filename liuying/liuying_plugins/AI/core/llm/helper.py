@@ -22,6 +22,34 @@ provider注册与能力集在运行期不变，冷却切换由
 provider_router 在故障转移时处理，候选枚举无需每次重算。
 """
 
+_VALID_EFFORTS = {"max", "high", "low"}
+"""思考强度合法值：max（深度推理）/ high（增强推理）/ low（轻度推理）"""
+
+
+def _build_thinking_options(cap: Any) -> dict[str, Any]:
+    """按 provider 家族构建模型原生思考请求参数（原样透传）
+
+    THINKING.enabled 开启时按 THINKING.effort 传思考强度，
+    关闭时对智谱链路显式关闭思考（openai 兼容链路不传即无思考）。
+
+    参数:
+        cap: provider 的对话能力实例，用于识别 provider 家族
+
+    返回:
+        dict[str, Any]: 模型原生思考参数（reasoning_effort / thinking）
+    """
+    thinking_cfg = get_config("THINKING", {}) or {}
+    enabled = bool(thinking_cfg.get("enabled", False))
+    is_zhipu = "zhipu" in type(cap).__module__.lower()
+    if not enabled:
+        return {"thinking": {"type": "disabled"}} if is_zhipu else {}
+    raw = str(thinking_cfg.get("effort", "high") or "").strip().lower()
+    effort = raw if raw in _VALID_EFFORTS else "high"
+    if is_zhipu:
+        # 智谱思考仅有开关，强度由模型自行决定
+        return {"thinking": {"type": "enabled"}}
+    return {"reasoning_effort": effort}
+
 
 class LLMHelper:
     """LLM调用助手
@@ -160,7 +188,8 @@ class LLMHelper:
         """对话调用
 
         返回思考链与回复内容两个字段。
-        根据 THINKING_MODE_ENABLED 配置向 provider 传递深度思考请求标志。
+        根据 THINKING 配置（enabled/effort）向 provider
+        传递模型原生思考参数（reasoning_effort / thinking，原样透传）。
 
         参数:
             messages: 消息列表
@@ -183,17 +212,15 @@ class LLMHelper:
             Capability.CHAT,
             provider_name or chat_cfg.get("provider", None),
         )
-        call_options = {
-            **(options or {}),
-            "reasoning_enabled": get_config(
-                "THINKING_MODE_ENABLED", False
-            ),
-        }
 
         async def _call(name: str) -> tuple[str, str]:
             chat_cap = LLMHelper._resolve_capability(
                 name, Capability.CHAT, "对话能力"
             )
+            call_options = {
+                **(options or {}),
+                **_build_thinking_options(chat_cap),
+            }
             return await chat_cap.chat(
                 use_model, messages, call_options
             )
@@ -293,9 +320,7 @@ class LLMHelper:
         use_model = model or stream_cfg.get("model", None) or ""
         call_options = {
             **(options or {}),
-            "reasoning_enabled": get_config(
-                "THINKING_MODE_ENABLED", False
-            ),
+            **_build_thinking_options(chat_cap),
         }
         async for chunk in chat_cap.chat_stream(
             use_model, messages, call_options

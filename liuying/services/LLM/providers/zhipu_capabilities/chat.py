@@ -31,7 +31,8 @@ class ZhipuChatCapability:
         Args:
             model: 模型名称
             messages: 对话消息列表
-            options: 额外选项，支持标准键 reasoning_enabled 控制深度思考
+            options: 额外选项，原样透传到请求体（如 thinking
+                等模型原生思考参数，由调用方自行指定）
 
         Returns:
             tuple[str, str]: (reasoning_content, content)
@@ -42,7 +43,6 @@ class ZhipuChatCapability:
         actual_model = model_cfg_result[1].model_name if model_cfg_result else model
 
         options = options or {}
-        reasoning_enabled = options.pop("reasoning_enabled", False)
 
         defaults = get_llm_config().request_defaults
         request_data: dict[str, Any] = {
@@ -53,10 +53,6 @@ class ZhipuChatCapability:
 
         if options:
             request_data.update(options)
-
-        request_data["thinking"] = {
-            "type": "enabled" if reasoning_enabled else "disabled"
-        }
 
         logger.info(f"智谱AI对话: {actual_model}")
 
@@ -83,7 +79,8 @@ class ZhipuChatCapability:
         Args:
             model: 模型名称
             messages: 对话消息列表
-            options: 额外选项，支持标准键 reasoning_enabled 控制深度思考
+            options: 额外选项，原样透传到请求体（如 thinking
+                等模型原生思考参数，由调用方自行指定）
 
         Yields:
             流式响应的文本片段
@@ -92,7 +89,6 @@ class ZhipuChatCapability:
         actual_model = model_cfg_result[1].model_name if model_cfg_result else model
 
         options = options or {}
-        reasoning_enabled = options.pop("reasoning_enabled", False)
 
         defaults = get_llm_config().request_defaults
         request_data: dict[str, Any] = {
@@ -104,10 +100,6 @@ class ZhipuChatCapability:
 
         if options:
             request_data.update(options)
-
-        request_data["thinking"] = {
-            "type": "enabled" if reasoning_enabled else "disabled"
-        }
 
         url = f"{self._client.get_base_url(actual_model)}/chat/completions"
         headers = self._client.get_headers(model=actual_model)

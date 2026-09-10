@@ -27,12 +27,17 @@ class GroupInfoUser(Model):
         String(255), nullable=False, comment="用户id"
     )
     """用户id"""
-    user_name: Mapped[str] = mapped_column(
-        String(255), default="", comment="用户昵称"
+    user_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="用户昵称"
     )
     """用户昵称"""
+    user_nickname: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="自定义用户名称，一般为用户在群内的备注"
+    )
+    """户在群内的备注"""
     user_role: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="群成员角色 member-普通成员，owner-群主，admin-管理员"
+        String(255), nullable=True,
+        comment="群成员角色 member-普通成员，owner-群主，admin-管理员",
     )
     """群成员角色 member-普通成员，owner-群主，admin-管理员"""
     user_bot: Mapped[bool | None] = mapped_column(
@@ -47,10 +52,6 @@ class GroupInfoUser(Model):
         String(255), nullable=False, comment="群聊id"
     )
     """群聊id"""
-    nickname: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="群聊昵称"
-    )
-    """群聊昵称"""
     uid: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True, comment="用户uid"
     )
@@ -72,7 +73,10 @@ class GroupInfoUser(Model):
     """启用锁类型"""
 
     @classmethod
-    async def get_all_uid(cls, group_id: str) -> set[str]:
+    async def get_all_uid(
+        cls,
+        group_id: str
+        ) -> set[str]:
         """获取该群所有用户id
 
         参数:
@@ -85,6 +89,21 @@ class GroupInfoUser(Model):
         return {result.user_id for result in results}
 
     @classmethod
+    async def get_all_members(
+        cls,
+        group_id: str
+        ) -> list["GroupInfoUser"]:
+        """获取该群所有群员的完整信息
+
+        参数:
+            group_id: 群号
+
+        返回:
+            list[GroupInfoUser]: 群员信息模型列表
+        """
+        return await cls.filter(group_id=group_id).all()
+
+    @classmethod
     async def set_user_nickname(
         cls,
         user_id: str,
@@ -93,16 +112,16 @@ class GroupInfoUser(Model):
         user_name: str | None = None,
         platform: str | None = None,
     ):
-        """设置群员在该群内的昵称
+        """设置用户自定义名称（一般为用户在群内的备注）
 
         参数:
             user_id: 用户id
             group_id: 群号
-            nickname: 昵称
+            nickname: 自定义用户名称
             user_name: 用户昵称
             platform: 平台
         """
-        defaults = {"nickname": nickname}
+        defaults = {"user_nickname": nickname}
         if user_name is not None:
             defaults["user_name"] = user_name
         if platform is not None:
@@ -129,17 +148,17 @@ class GroupInfoUser(Model):
 
     @classmethod
     async def get_user_nickname(cls, user_id: str, group_id: str) -> str:
-        """获取用户在该群的昵称
+        """获取用户自定义名称（一般为用户在群内的备注）
 
         参数:
             user_id: 用户id
             group_id: 群号
 
         返回:
-            str: 用户昵称，如果不存在则返回空字符串
+            str: 用户自定义名称，如果不存在则返回空字符串
         """
         if user := await cls.filter(user_id=user_id, group_id=group_id).first():
-            return user.nickname or ""
+            return user.user_nickname or ""
         return ""
 
     @classmethod
@@ -148,8 +167,8 @@ class GroupInfoUser(Model):
         user_id: str,
         group_id: str,
         user_name: str | None = None,
+        user_nickname: str | None = None,
         user_join_time: datetime | None = None,
-        nickname: str | None = None,
         uid: int | None = None,
         platform: str | None = None,
     ):
@@ -159,18 +178,18 @@ class GroupInfoUser(Model):
             user_id: 用户id
             group_id: 群号
             user_name: 用户昵称
+            user_nickname: 自定义用户名称（一般为用户在群内的备注）
             user_join_time: 用户入群时间
-            nickname: 群聊昵称
             uid: 用户uid
             platform: 平台
         """
         defaults = {}
         if user_name is not None:
             defaults["user_name"] = user_name
+        if user_nickname is not None:
+            defaults["user_nickname"] = user_nickname
         if user_join_time is not None:
             defaults["user_join_time"] = user_join_time
-        if nickname is not None:
-            defaults["nickname"] = nickname
         if uid is not None:
             defaults["uid"] = uid
         if platform is not None:
@@ -248,23 +267,28 @@ class GroupInfoUser(Model):
             list: SQL语句列表，用于数据库表结构更新
         """
         return [
-            "ALTER TABLE group_member_info "
-            "ALTER COLUMN user_join_time DROP NOT NULL;",
-            "ALTER TABLE group_member_info ALTER COLUMN uid TYPE BIGINT;",
-            "ALTER TABLE group_member_info "
-            "ADD COLUMN platform VARCHAR(255) default 'qq';",
-            "ALTER TABLE group_member_info "
-            "ADD COLUMN group_description VARCHAR(255);",
-            "ALTER TABLE group_member_info "
-            "ADD COLUMN group_category VARCHAR(255);",
-            "ALTER TABLE group_member_info "
-            "ADD COLUMN group_tags JSON;",
-            "ALTER TABLE group_member_info "
-            "ADD COLUMN member_count INTEGER;",
-            "ALTER TABLE group_member_info "
-            "ADD COLUMN user_role VARCHAR(255);",
-            "ALTER TABLE group_member_info "
-            "ADD COLUMN user_bot BOOLEAN;",
-            "ALTER TABLE group_member_info "
-            "ADD COLUMN user_identifier VARCHAR(255);",
+            # "DROP TABLE IF EXISTS group_member_info;",
+
+            # "ALTER TABLE group_member_info "
+            # "ALTER COLUMN user_join_time DROP NOT NULL;",
+            # "ALTER TABLE group_member_info ALTER COLUMN uid TYPE BIGINT;",
+            # "ALTER TABLE group_member_info DROP COLUMN nickname;",
+            # "ALTER TABLE group_member_info "
+            # "ADD COLUMN platform VARCHAR(255) default 'qq';",
+            # "ALTER TABLE group_member_info "
+            # "ADD COLUMN group_description VARCHAR(255);",
+            # "ALTER TABLE group_member_info "
+            # "ADD COLUMN group_category VARCHAR(255);",
+            # "ALTER TABLE group_member_info "
+            # "ADD COLUMN group_tags JSON;",
+            # "ALTER TABLE group_member_info "
+            # "ADD COLUMN member_count INTEGER;",
+            # "ALTER TABLE group_member_info "
+            # "ADD COLUMN user_nickname VARCHAR(255) default '';",
+            # "ALTER TABLE group_member_info "
+            # "ADD COLUMN user_role VARCHAR(255);",
+            # "ALTER TABLE group_member_info "
+            # "ADD COLUMN user_bot BOOLEAN;",
+            # "ALTER TABLE group_member_info "
+            # "ADD COLUMN user_identifier VARCHAR(255);",
         ]
