@@ -14,7 +14,7 @@ from liuying.liuying_plugins.AI.agent.runtime.constants import (
     INTENT_TAG_LOCAL,
     LATENCY_CLASS_FAST,
 )
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_EXPR_LENGTH = 200
 """表达式最大长度，防御超长输入"""

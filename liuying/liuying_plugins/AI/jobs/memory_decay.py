@@ -10,9 +10,9 @@ from datetime import datetime, timedelta
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 
+from ..agent.warmup_persona import persona_manager
 from ..config import get_config
 from ..core.memory import memory_manager
-from ..core.persona import persona_manager
 from ..models.conversation_record import ConversationRecord
 
 _DECAY_TASK_ID = "ai_memory_decay"

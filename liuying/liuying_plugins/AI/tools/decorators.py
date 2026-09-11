@@ -7,7 +7,7 @@ register_external_tool 作为别名保留，兼容旧版第三方插件 API。
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from ..runtime.constants import (
+from ..agent.runtime.constants import (
     EVIDENCE_KIND_TOOL,
     LATENCY_CLASS_FAST,
 )
@@ -47,7 +47,7 @@ def register_tool(
         装饰器函数
 
     使用示例:
-        from liuying_plugins.AI.agent.tools import register_tool
+        from liuying_plugins.AI.tools import register_tool
 
         @register_tool(
             name="my_tool",

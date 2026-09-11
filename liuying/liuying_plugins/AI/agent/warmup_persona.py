@@ -17,9 +17,10 @@ from liuying.utils.log import logger
 from liuying.utils.user.favor import UserFavor
 
 from ..config import get_config, set_config
+from ..core.llm import llm_helper as _default_llm_helper
+from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..models.user_persona import UserPersonaProfile
 from ..models.user_persona_selection import UserPersonaSelection
-from .llm import llm_helper as _default_llm_helper
 
 _PERSONAS_DIR = Path(__file__).parent.parent / "personas"
 """人格配置文件目录"""
@@ -485,9 +486,12 @@ class PersonaManager:
         )
 
         try:
+            role = model_router.resolve(ROLE_WARMUP)
             persona = await _default_llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.4},
+                model=role.model or None,
+                options=role.apply_to_options({"temperature": 0.4}),
+                provider_name=role.provider or None,
             )
             await UserPersonaProfile.update_persona(user_id, persona)
             logger.debug(

@@ -8,11 +8,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..runtime.constants import (
+from ..agent.runtime.constants import (
     EVIDENCE_KIND_TOOL,
     LATENCY_CLASS_FAST,
 )
-from ..runtime.tool_catalog import tool_catalog
+from ..agent.runtime.tool_catalog import tool_catalog
 
 
 @dataclass(slots=True)

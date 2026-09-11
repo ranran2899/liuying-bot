@@ -9,16 +9,17 @@ from datetime import datetime, timedelta
 
 from liuying.utils.log import logger
 
-from ...models.conversation_record import ConversationRecord
-from ...models.memory_item import MemoryItem
-from ..knowledge_db import KnowledgeBase
-from ..llm import llm_helper
-from ._common import (
+from ..core.knowledge_db import KnowledgeBase
+from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_INTENT, model_router
+from ..core.memory._common import (
     _DEFAULT_PERSONA,
     _EPISODIC_EXPIRE_DAYS,
     _REINFORCE_THRESHOLD,
     _WORKING_EXPIRE_HOURS,
 )
+from ..models.conversation_record import ConversationRecord
+from ..models.memory_item import MemoryItem
 
 
 class MemoryConsolidationService:
@@ -173,9 +174,12 @@ class MemoryConsolidationService:
             "4. 只返回摘要文本"
         )
         try:
+            role = model_router.resolve(ROLE_INTENT)
             summary = await llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.3},
+                model=role.model or None,
+                options=role.apply_to_options({"temperature": 0.3}),
+                provider_name=role.provider or None,
             )
             await self._add_memory(
                 user_id=user_id,

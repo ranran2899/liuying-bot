@@ -5,7 +5,7 @@
 
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_WEATHER_RESULTS = 3
 """天气查询最大结果数"""

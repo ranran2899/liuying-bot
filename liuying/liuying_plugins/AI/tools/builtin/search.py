@@ -9,13 +9,13 @@ liuying/plugins/web_search 插件提供免配置降级兜底。
 
 from liuying.utils.log import logger
 
-from ....core.llm import llm_helper
-from ....core.tools import web_fetch
-from ...runtime.constants import (
+from ...agent.runtime.constants import (
     INTENT_TAG_NETWORK,
     INTENT_TAG_REALTIME,
     LATENCY_CLASS_NETWORK,
 )
+from ...core.llm import llm_helper
+from ...core.tools import web_fetch
 from ..decorators import register_tool
 
 

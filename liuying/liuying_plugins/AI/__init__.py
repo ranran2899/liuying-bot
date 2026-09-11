@@ -20,12 +20,7 @@ from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.rules import admin_check
 
-from .agent.mcp_bridge import mcp_bridge
-from .agent.tools import (  # 公开API供第三方注册工具
-    AgentTool,
-    register_external_tool,
-    tool_registry,
-)
+from .agent.mcp import mcp_bridge
 from .config import PluginConfig, get_config
 from .core.knowledge_db import knowledge_base
 from .core.llm import llm_helper, token_ledger
@@ -42,9 +37,12 @@ from .handlers import (
     TtsCommands,
 )
 from .jobs import setup_jobs
-
-
 from .skills import SkillRuntime, skill_loader
+from .tools import (  # 公开API供第三方注册工具
+    AgentTool,
+    register_external_tool,
+    tool_registry,
+)
 
 __all__ = [
     "AgentTool",
@@ -142,8 +140,8 @@ async def handle_peer_detection(session: Uninfo, message: UniMsg) -> None:
 
 # AI对话主入口：私聊自动命中，群聊@bot或回复bot时命中
 private_msg_cmd = on_message(
-    rule=to_me(), 
-    priority=520, 
+    rule=to_me(),
+    priority=520,
     block=False
 )
 
@@ -470,7 +468,7 @@ async def _init_ai_plugin() -> None:
         command="AI",
     )
 
-    # 内置Agent工具在 agent.tools 导入时自动注册
+    # 内置Agent工具在 tools 包导入时自动注册
     logger.debug("Agent内置工具已自动注册", command="AI")
 
     # 初始化运行时开关（从配置加载全局状态）

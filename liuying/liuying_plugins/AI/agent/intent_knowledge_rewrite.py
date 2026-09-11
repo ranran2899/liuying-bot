@@ -9,8 +9,9 @@ import time
 
 from liuying.utils.log import logger
 
-from ..llm import llm_helper
-from ..tools.json_utils import extract_json_payload
+from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_INTENT, model_router
+from ..core.tools.json_utils import extract_json_payload
 
 __all__ = ["rewrite_query"]
 
@@ -60,9 +61,12 @@ async def rewrite_query(query: str) -> str:
         "}\n"
     )
     try:
+        role = model_router.resolve(ROLE_INTENT)
         text = await llm_helper.chat_text(
             [{"role": "user", "content": prompt}],
-            options={"temperature": 0.2},
+            model=role.model or None,
+            options=role.apply_to_options({"temperature": 0.2}),
+            provider_name=role.provider or None,
         )
         data = extract_json_payload(text)
         if data is None:

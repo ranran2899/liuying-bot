@@ -17,7 +17,6 @@ from liuying.liuying_plugins.AI.agent.runtime.constants import (
     INTENT_TAG_NETWORK,
     LATENCY_CLASS_SLOW,
 )
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
 from liuying.liuying_plugins.AI.core.vision import (
     summarize_gif,
     summarize_image,
@@ -27,6 +26,7 @@ from liuying.liuying_plugins.AI.skills.media import (
     fetch_images,
     is_gif,
 )
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_IMAGES = 3
 """单次最多分析的图片数，超出截断以控制视觉模型开销"""

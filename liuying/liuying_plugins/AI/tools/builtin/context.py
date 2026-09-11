@@ -5,12 +5,12 @@
 
 from liuying.utils.user.favor import UserFavor
 
-from ...runtime.constants import (
+from ...agent.runtime.constants import (
     EVIDENCE_KIND_CONTEXT,
     INTENT_TAG_LOCAL,
     LATENCY_CLASS_FAST,
 )
-from ...runtime.session_context import get_current_user_id
+from ...agent.runtime.session_context import get_current_user_id
 from ..decorators import register_tool
 
 

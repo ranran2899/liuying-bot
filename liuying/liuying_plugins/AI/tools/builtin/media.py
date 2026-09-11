@@ -5,12 +5,12 @@
 
 from liuying.utils.log import logger
 
-from ....core.llm import llm_helper
-from ...runtime.constants import (
+from ...agent.runtime.constants import (
     INTENT_TAG_IMAGE,
     INTENT_TAG_NETWORK,
     LATENCY_CLASS_SLOW,
 )
+from ...core.llm import llm_helper
 from ..decorators import register_tool
 
 

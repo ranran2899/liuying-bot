@@ -8,13 +8,13 @@
 
 from liuying.utils.log import logger
 
-from ....core.group import group_member_service
-from ...runtime.constants import (
+from ...agent.runtime.constants import (
     EVIDENCE_KIND_CONTEXT,
     INTENT_TAG_LOCAL,
     LATENCY_CLASS_FAST,
 )
-from ...runtime.session_context import get_current_group_id
+from ...agent.runtime.session_context import get_current_group_id
+from ...core.group import group_member_service
 from ..decorators import register_tool
 
 

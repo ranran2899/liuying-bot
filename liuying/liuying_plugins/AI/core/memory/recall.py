@@ -11,10 +11,10 @@ from typing import Any
 
 from liuying.utils.log import logger
 
+from ...agent.intent_knowledge_rewrite import rewrite_query
 from ...config import get_config
 from ...models.memory_item import MemoryItem
 from ..knowledge_db import KnowledgeBase
-from ..knowledge_db.query_rewriter import rewrite_query
 from ._common import (
     _DEFAULT_PERSONA,
     _EPISODIC_EXPIRE_DAYS,

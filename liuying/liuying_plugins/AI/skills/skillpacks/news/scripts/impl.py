@@ -5,7 +5,7 @@
 
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _CATEGORY_KEYWORDS: dict[str, str] = {
     "general": "今日新闻",

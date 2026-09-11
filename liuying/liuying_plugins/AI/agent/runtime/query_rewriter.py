@@ -17,8 +17,8 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ..core.llm import llm_helper
-from ..core.llm.model_router import ROLE_INTENT, model_router
+from ...core.llm import llm_helper
+from ...core.llm.model_router import ROLE_INTENT, model_router
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.S)
 """JSON 块提取正则"""

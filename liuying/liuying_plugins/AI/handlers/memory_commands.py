@@ -7,9 +7,9 @@ from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.message import MessageUtils
 
+from ..agent.warmup_persona import persona_manager
 from ..config import get_config
 from ..core.memory import memory_manager
-from ..core.persona import persona_manager
 from ..models.conversation_record import ConversationRecord
 
 __all__ = [

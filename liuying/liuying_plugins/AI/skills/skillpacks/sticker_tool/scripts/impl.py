@@ -19,12 +19,12 @@ from liuying.liuying_plugins.AI.agent.runtime.session_context import (
     get_current_group_id,
     get_current_user_id,
 )
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
 from liuying.liuying_plugins.AI.core.sticker import (
     StickerMood,
     sticker_curation,
     sticker_library,
 )
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _SEARCH_LIMIT = 5
 """检索结果条数上限，控制送入LLM的token"""

@@ -4,12 +4,12 @@
 向量嵌入与记忆召回、记忆进化、后台智能与搜索排名。
 """
 
+from ...agent.intent_memory_evolve import MemoryEvolveService
 from .background_intelligence import (
     BackgroundIntelligence,
     background_intelligence,
 )
 from .curator import CurationReport, MemoryCurator, memory_curator
-from .evolves import MemoryEvolveService
 from .extractors import EntityMention
 from .manager import MemoryManager, memory_manager
 from .search_ranker import SearchRanker, search_ranker

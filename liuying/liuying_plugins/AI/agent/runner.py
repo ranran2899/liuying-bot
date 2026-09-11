@@ -16,7 +16,7 @@ from liuying.utils.log import logger
 
 from ..config import get_config
 from ..core.llm import LLMHelper
-from .query_rewriter import contextual_query_rewriter
+from ..tools import ToolRegistry, tool_registry
 from .runtime.constants import (
     OUTPUT_MODE_CHAT_SHORT,
     TURN_ACTION_REPLY,
@@ -24,10 +24,10 @@ from .runtime.constants import (
 from .runtime.executor import ToolExecutor
 from .runtime.plan_types import TurnPlan
 from .runtime.planner import TurnPlanner
+from .runtime.query_rewriter import contextual_query_rewriter
 from .runtime.responder import PersonaResponder, PersonaResponse
 from .runtime.session_context import bind_session_context
 from .runtime.tool_catalog import semantic_tool_guidance
-from .tools import ToolRegistry, tool_registry
 
 # 多话题防串扰硬约束（参考参考插件 runner.py 的防串话 system 消息）
 _ANTI_CROSSTALK_PROMPT = (

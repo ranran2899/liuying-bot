@@ -11,8 +11,9 @@ from typing import Any
 from liuying.services.cache import CacheDict
 from liuying.utils.log import logger
 
-from ...models.group_context import GroupContextSnapshot
-from ..tools.json_utils import extract_json_payload
+from ..core.llm.model_router import ROLE_INTENT, model_router
+from ..core.tools.json_utils import extract_json_payload
+from ..models.group_context import GroupContextSnapshot
 
 __all__ = [
     "ProfileToolkit",
@@ -102,9 +103,12 @@ async def extract_group_style(
         f"{conversation[:2000]}"
     )
     try:
+        role = model_router.resolve(ROLE_INTENT)
         response = await llm_helper.chat_text(
             [{"role": "user", "content": prompt}],
-            options={"temperature": 0.3},
+            model=role.model or None,
+            options=role.apply_to_options({"temperature": 0.3}),
+            provider_name=role.provider or None,
         )
         return extract_json_payload(response) or {}
     except Exception as e:

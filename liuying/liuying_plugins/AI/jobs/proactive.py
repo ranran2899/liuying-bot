@@ -18,11 +18,11 @@ from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
+from ..agent.warmup_persona import persona_manager
 from ..config import get_config
 from ..core.context import context_manager
 from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_WARMUP, model_router
-from ..core.persona import persona_manager
 from ..core.tools.json_utils import extract_json_payload
 from ..models.group_context import GroupContextSnapshot
 

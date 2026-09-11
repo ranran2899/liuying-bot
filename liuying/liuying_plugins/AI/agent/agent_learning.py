@@ -13,9 +13,10 @@ from datetime import datetime, timedelta
 from liuying.utils.log import logger
 
 from ..config import get_config
-from .llm import llm_helper
-from .memory import memory_manager
-from .tools.json_utils import extract_json_payload
+from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_AGENT, ROLE_INTENT, model_router
+from ..core.memory import memory_manager
+from ..core.tools.json_utils import extract_json_payload
 
 _DAILY_QUOTA = 10
 """每日主动学习配额"""
@@ -118,9 +119,12 @@ class ActiveLearning:
             "- worth_researching: 是否值得深入查证（高价值问题为true）"
         )
         try:
+            role = model_router.resolve(ROLE_INTENT)
             _, content = await llm_helper.chat(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.1},
+                model=role.model or None,
+                options=role.apply_to_options({"temperature": 0.1}),
+                provider_name=role.provider or None,
             )
             return self._parse_uncertainty(content)
         except Exception as e:
@@ -169,9 +173,12 @@ class ActiveLearning:
                 "4. 只返回查证结果，不要其他内容"
             )
             try:
+                role = model_router.resolve(ROLE_AGENT)
                 finding = await llm_helper.chat_text(
                     [{"role": "user", "content": prompt}],
-                    options={"temperature": 0.3},
+                    model=role.model or None,
+                    options=role.apply_to_options({"temperature": 0.3}),
+                    provider_name=role.provider or None,
                 )
                 finding = finding.strip()
                 if not finding:

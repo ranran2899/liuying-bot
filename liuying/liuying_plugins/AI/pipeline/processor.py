@@ -14,16 +14,17 @@ from typing import Any
 from liuying.models.ban_console import BanConsole
 from liuying.utils.log import logger
 
+from ..agent.agent_learning import active_learning
+from ..agent.warmup_persona import persona_manager
 from ..config import get_config
-from ..core.active_learning import active_learning
 from ..core.context import ContextPolicy
 from ..core.group import GroupMuteTracker
 from ..core.llm import (
     TokenTrackingHelper,
     llm_helper,
 )
+from ..core.llm.model_router import ROLE_INTENT, model_router
 from ..core.peer_awareness import peer_awareness
-from ..core.persona import persona_manager
 from ..core.reply_turn_trace import reply_turn_trace
 from ..core.safety import token_quota_service
 from ..models.conversation_record import ConversationRecord
@@ -134,7 +135,13 @@ class ReplyProcessor:
                 返回:
                     str: LLM返回的摘要
                 """
-                return await llm_helper.chat_text(msgs)
+                role = model_router.resolve(ROLE_INTENT)
+                return await llm_helper.chat_text(
+                    msgs,
+                    model=role.model or None,
+                    options=role.apply_to_options(),
+                    provider_name=role.provider or None,
+                )
 
             compressed_chunks = await ContextPolicy.compress_context_if_needed(
                 chunks,

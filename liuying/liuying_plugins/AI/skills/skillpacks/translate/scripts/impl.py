@@ -11,7 +11,11 @@ from liuying.liuying_plugins.AI.agent.runtime.constants import (
     INTENT_TAG_NETWORK,
     LATENCY_CLASS_NETWORK,
 )
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
+from liuying.liuying_plugins.AI.core.llm.model_router import (
+    ROLE_AGENT,
+    model_router,
+)
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_TEXT_LENGTH = 1500
 """单次翻译文本上限，超出截断以控制token"""
@@ -87,6 +91,7 @@ async def translate(
     language = normalize_language(target_language)
     # LLM 调用属外部不确定性，失败需降级为可读提示而非中断 Agent 循环。
     try:
+        role = model_router.resolve(ROLE_AGENT)
         result = await llm_helper.chat_text(
             [
                 {"role": "system", "content": _SYSTEM_PROMPT},
@@ -95,7 +100,11 @@ async def translate(
                     "content": f"翻译成{language}：\n{content}",
                 },
             ],
-            options={"temperature": _TRANSLATE_TEMPERATURE},
+            model=role.model or None,
+            options=role.apply_to_options(
+                {"temperature": _TRANSLATE_TEMPERATURE}
+            ),
+            provider_name=role.provider or None,
         )
     except Exception as e:
         return f"翻译失败: {type(e).__name__}"

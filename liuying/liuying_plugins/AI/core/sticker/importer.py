@@ -12,12 +12,13 @@ from pathlib import Path
 from liuying.utils.bed_layout import BedLayout
 from liuying.utils.log import logger
 
+from ...agent.sticker_semantics import sticker_semantics_analyzer
 from ...models.sticker_item import StickerItem
 from ..llm import llm_helper
+from ..llm.model_router import ROLE_STICKER, model_router
 from ..tools.json_utils import extract_json_payload
 from ..vision import summarize_image
 from .constants import MOOD_FILENAMES, SOURCE_AI_STICKER
-from .semantics import sticker_semantics_analyzer
 
 _DEFAULT_STICKER_ROOT = Path("data") / "ai_plugin" / "stickers"
 """默认表情包根目录"""
@@ -368,6 +369,7 @@ class StickerImporter:
                 "\n"
                 "只返回JSON。"
             )
+            role = model_router.resolve(ROLE_STICKER)
             response = await llm_helper.chat_text(
                 [
                     {
@@ -382,7 +384,9 @@ class StickerImporter:
                         ),
                     },
                 ],
-                options={"temperature": 0.2},
+                model=role.model or None,
+                options=role.apply_to_options({"temperature": 0.2}),
+                provider_name=role.provider or None,
             )
 
             description = ""

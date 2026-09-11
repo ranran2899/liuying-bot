@@ -5,13 +5,13 @@
 
 from liuying.utils.log import logger
 
-from ....core.knowledge import knowledge_store
-from ...runtime.constants import (
+from ...agent.runtime.constants import (
     EVIDENCE_KIND_CONTEXT,
     INTENT_TAG_LOCAL,
     INTENT_TAG_PLUGIN,
     LATENCY_CLASS_FAST,
 )
+from ...core.knowledge import knowledge_store
 from ..decorators import register_tool
 
 

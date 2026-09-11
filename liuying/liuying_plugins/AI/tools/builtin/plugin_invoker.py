@@ -10,14 +10,15 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ....core.knowledge import knowledge_store
-from ....core.llm import llm_helper
-from ...runtime.constants import (
+from ...agent.runtime.constants import (
     EVIDENCE_KIND_CONTEXT,
     INTENT_TAG_LOCAL,
     INTENT_TAG_PLUGIN,
     LATENCY_CLASS_FAST,
 )
+from ...core.knowledge import knowledge_store
+from ...core.llm import llm_helper
+from ...core.llm.model_router import ROLE_AGENT, model_router
 from ..decorators import register_tool
 
 _MAX_COMMANDS_IN_PROMPT = 8
@@ -156,9 +157,12 @@ async def invoke_plugin_command(
             "3. 参数缺失时使用合理的默认值或占位符\n"
             "4. 若用户意图与插件能力无关，输出空字符串"
         )
+        role = model_router.resolve(ROLE_AGENT)
         command_text = await llm_helper.chat_text(
             [{"role": "user", "content": prompt}],
-            options={"temperature": 0.2},
+            model=role.model or None,
+            options=role.apply_to_options({"temperature": 0.2}),
+            provider_name=role.provider or None,
         )
         command_text = command_text.strip()
         if not command_text:

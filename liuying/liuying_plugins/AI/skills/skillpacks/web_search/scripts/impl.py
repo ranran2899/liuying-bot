@@ -20,9 +20,9 @@ from liuying.liuying_plugins.AI.agent.runtime.constants import (
     INTENT_TAG_REALTIME,
     LATENCY_CLASS_SLOW,
 )
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
 from liuying.liuying_plugins.AI.core.vision import summarize_image
 from liuying.liuying_plugins.AI.skills.media import fetch_images
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_IMAGES = 2
 """参与线索抽取的图片数上限"""

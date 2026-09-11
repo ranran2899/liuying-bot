@@ -16,8 +16,8 @@ from liuying.liuying_plugins.AI.agent.runtime.constants import (
     INTENT_TAG_LOCAL,
     LATENCY_CLASS_NETWORK,
 )
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
 from liuying.liuying_plugins.AI.core.vision import vision_router
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _ROUTE_TIMEOUT = 20.0
 """能力探测超时（秒），探测可能触发一次真实的模型请求"""

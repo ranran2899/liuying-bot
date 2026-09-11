@@ -111,7 +111,7 @@ SKILL.md 会随技能清单进入模型视野，直接决定调用准确率，�
 
 十、避免与内置工具重名
 
-`agent/tools/builtin/` 已注册一批内置工具（含 `web_search`、
+`tools/builtin/` 已注册一批内置工具（含 `web_search`、
 `get_current_time` 等）。注册表对同名工具**静默覆盖**，
 重名会让内置实现失效且难以定位。新增工具前先确认名字未被占用，
 定位相近时用更具体的名字区分（如 `visual_web_search`）。

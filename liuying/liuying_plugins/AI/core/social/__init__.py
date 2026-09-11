@@ -3,13 +3,13 @@
 提供主动社交门控、配额管理、触发器框架。
 """
 
+from ...agent.review_social_gate import SocialGate, social_gate
 from .framework import (
     SocialContext,
     SocialTrigger,
     SocialTriggerRegistry,
     social_trigger_registry,
 )
-from .gate import SocialGate, social_gate
 from .quota import SocialQuota, social_quota
 
 __all__ = [

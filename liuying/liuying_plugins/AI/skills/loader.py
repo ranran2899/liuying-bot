@@ -32,12 +32,12 @@ import yaml
 
 from liuying.utils.log import logger
 
-from ..agent.mcp_bridge import mcp_bridge
+from ..agent.mcp import mcp_bridge
 from ..agent.runtime.tool_catalog import (
     apply_tool_metadata_defaults,
 )
-from ..agent.tools import AgentTool, ToolRegistry, tool_registry
 from ..config import get_config
+from ..tools import AgentTool, ToolRegistry, tool_registry
 from .api import SkillRuntime
 
 __all__ = [

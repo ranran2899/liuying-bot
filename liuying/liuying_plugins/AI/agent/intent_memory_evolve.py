@@ -12,11 +12,12 @@ import re
 
 from liuying.utils.log import logger
 
-from ...models.memory_item import MemoryItem
-from ..llm import llm_helper
-from ._common import _DEFAULT_PERSONA
-from .consolidation import MemoryConsolidationService
-from .recall import MemoryRecallService
+from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_INTENT, model_router
+from ..core.memory._common import _DEFAULT_PERSONA
+from ..core.memory.recall import MemoryRecallService
+from ..models.memory_item import MemoryItem
+from .intent_memory_consolidate import MemoryConsolidationService
 
 _RELATION_REPLACES = "replaces"
 """新记忆覆盖旧记忆"""
@@ -220,9 +221,12 @@ class MemoryEvolveService:
             "每项的 index 对应旧记忆列表的序号。"
         )
         try:
+            role = model_router.resolve(ROLE_INTENT)
             _, content = await llm_helper.chat(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.0},
+                model=role.model or None,
+                options=role.apply_to_options({"temperature": 0.0}),
+                provider_name=role.provider or None,
             )
         except Exception as e:
             logger.debug(
@@ -307,9 +311,12 @@ class MemoryEvolveService:
             "只输出一个英文单词，不要任何其他内容。"
         )
         try:
+            role = model_router.resolve(ROLE_INTENT)
             _, content = await llm_helper.chat(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.0},
+                model=role.model or None,
+                options=role.apply_to_options({"temperature": 0.0}),
+                provider_name=role.provider or None,
             )
             relation = content.strip().lower()
             if relation not in _VALID_RELATIONS:
@@ -389,9 +396,12 @@ class MemoryEvolveService:
             "3. 不输出任何解释"
         )
         try:
+            role = model_router.resolve(ROLE_INTENT)
             merged = await llm_helper.chat_text(
                 [{"role": "user", "content": prompt}],
-                options={"temperature": 0.3},
+                model=role.model or None,
+                options=role.apply_to_options({"temperature": 0.3}),
+                provider_name=role.provider or None,
             )
             merged = merged.strip()
         except Exception as e:

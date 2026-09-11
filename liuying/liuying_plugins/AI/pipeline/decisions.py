@@ -17,11 +17,11 @@ from nonebot_plugin_alconna import Image
 
 from liuying.utils.log import logger
 
+from ..agent.intent_emotion import emotion_manager
 from ..agent.runner import AgentResult
+from ..agent.warmup_persona import persona_manager
 from ..config import get_config
-from ..core.emotion.manager import emotion_manager
 from ..core.llm import llm_helper
-from ..core.persona import persona_manager
 from .humanize import HumanizeToolkit
 from .sticker import sticker_manager
 from .types import ReplyContext

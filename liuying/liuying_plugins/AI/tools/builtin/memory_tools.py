@@ -5,16 +5,16 @@
 
 from liuying.utils.log import logger
 
-from ....core.memory import memory_manager
-from ...runtime.constants import (
+from ...agent.runtime.constants import (
     EVIDENCE_KIND_CONTEXT,
     INTENT_TAG_MEMORY,
     LATENCY_CLASS_FAST,
 )
-from ...runtime.session_context import (
+from ...agent.runtime.session_context import (
     get_current_persona_name,
     get_current_user_id,
 )
+from ...core.memory import memory_manager
 from ..decorators import register_tool
 
 

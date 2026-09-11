@@ -11,7 +11,7 @@ from liuying.liuying_plugins.AI.agent.runtime.constants import (
     INTENT_TAG_NETWORK,
     LATENCY_CLASS_NETWORK,
 )
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_RESULTS = 4
 """检索结果条数"""

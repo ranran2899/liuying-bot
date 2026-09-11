@@ -3,6 +3,11 @@
 提供群组成员管理、社交分析、群风格画像与禁言状态。
 """
 
+from ...agent.intent_group_style import (
+    ProfileToolkit,
+    extract_group_style,
+    group_profile,
+)
 from .members import (
     GroupMemberInfo,
     GroupMemberService,
@@ -10,11 +15,6 @@ from .members import (
     group_member_service,
 )
 from .mute import GroupMuteTracker, group_mute_tracker
-from .profile import (
-    ProfileToolkit,
-    extract_group_style,
-    group_profile,
-)
 from .social import GroupSocialService, group_social
 
 __all__ = [

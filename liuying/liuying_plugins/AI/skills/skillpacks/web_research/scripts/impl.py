@@ -16,7 +16,11 @@ from liuying.liuying_plugins.AI.agent.runtime.constants import (
     INTENT_TAG_REALTIME,
     LATENCY_CLASS_SLOW,
 )
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
+from liuying.liuying_plugins.AI.core.llm.model_router import (
+    ROLE_AGENT,
+    model_router,
+)
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_QUERIES = 4
 """单次最多并发的子查询数，超出截断"""
@@ -211,6 +215,7 @@ async def research(
     material = format_material(merged)
     # 汇总失败时退化为直接返回材料，保证工具始终产出可用信息。
     try:
+        role = model_router.resolve(ROLE_AGENT)
         summary = await llm_helper.chat_text(
             [
                 {"role": "system", "content": _SUMMARY_PROMPT},
@@ -218,7 +223,10 @@ async def research(
                     "role": "user",
                     "content": f"问题：{question}\n\n材料：\n{material}",
                 },
-            ]
+            ],
+            model=role.model or None,
+            options=role.apply_to_options(),
+            provider_name=role.provider or None,
         )
     except Exception:
         return f"检索到{len(merged)}条资料：\n{material}"

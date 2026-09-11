@@ -12,6 +12,8 @@ from typing import Any
 
 from liuying.utils.log import logger
 
+from ...agent.intent_memory_consolidate import MemoryConsolidationService
+from ...agent.intent_memory_evolve import MemoryEvolveService
 from ...config import get_config
 from ...models.memory_item import MemoryItem
 from ..knowledge_db import knowledge_base
@@ -21,9 +23,7 @@ from ._common import (
     MemoryEmbeddingUtils,
 )
 from .background_intelligence import background_intelligence
-from .consolidation import MemoryConsolidationService
 from .embedding_service import EmbeddingService
-from .evolves import MemoryEvolveService
 from .recall import MemoryRecallService
 
 _BG_SEMAPHORE = asyncio.Semaphore(4)

@@ -19,7 +19,7 @@ from liuying.liuying_plugins.AI.agent.runtime.session_context import (
     get_current_persona_name,
     get_current_user_id,
 )
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_FACT_LENGTH = 200
 """单条记忆内容上限"""

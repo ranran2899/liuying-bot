@@ -74,12 +74,12 @@ class TurnPlanner:
     def _get_registry(self):
         """获取工具注册表单例
 
-        延迟导入避免真实循环依赖：agent.tools 包在导入期
-        引用 runtime.session_context/constants，而 planner 由
-        runtime 包初始化时导入，顶部导入 tools 会成环。
+        延迟导入避免循环依赖：tools.registry 在导入期引用
+        agent.runtime.tool_catalog，顶部导入会在 tools 与
+        runtime 之间形成初始化顺序耦合，保持函数内导入。
         """
         if self._registry is None:
-            from ..tools import tool_registry
+            from ...tools import tool_registry
 
             self._registry = tool_registry
         return self._registry

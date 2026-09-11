@@ -11,10 +11,10 @@ from typing import Any
 from liuying.utils.log import logger
 
 from ..agent.runner import AgentResult, AgentRunner
+from ..agent.warmup_persona import persona_manager
 from ..config import get_config
 from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_CHAT, model_router
-from ..core.persona import persona_manager
 from ..core.safety import SafetyFilter, SafetyRefusalError
 from ..core.vision import summarize_image, vision_router
 from .helpers import ReplyPipeline

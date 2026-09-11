@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from liuying.liuying_plugins.AI.core.persona import persona_manager
+from liuying.liuying_plugins.AI.agent.warmup_persona import persona_manager
 
 from ....base_model import Result
 from ....utils import authentication

@@ -5,7 +5,7 @@
 
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.tools import AgentTool
+from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_GAME_RESULTS = 4
 """游戏信息查询最大结果数"""
