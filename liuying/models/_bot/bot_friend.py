@@ -34,19 +34,19 @@ class BotFriend(Model):
     )
     """用户id"""
     user_name: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="用户名称"
+        String(255), default="", comment="用户名称"
     )
     """用户名称"""
     user_avatar: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="用户头像url"
+        String(255), default="", comment="用户头像url"
     )
     """用户头像url"""
     nickname: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="用户自定义昵称"
+        String(255), default="", comment="用户自定义昵称"
     )
     """私聊下自定义昵称(备注)"""
     platform: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="平台"
+        String(255), default="", comment="平台"
     )
     """平台"""
 
@@ -121,6 +121,65 @@ class BotFriend(Model):
         )
 
     @classmethod
+    async def add_friend(
+        cls,
+        bot_id: str,
+        user_id: str,
+        user_name: str | None = None,
+        user_avatar: str | None = None,
+        nickname: str | None = None,
+        platform: str | None = None,
+    ) -> tuple["BotFriend", bool]:
+        """添加好友
+
+        好友不存在时创建，已存在时更新信息
+
+        参数:
+            bot_id: 机器人ID
+            user_id: 用户id
+            user_name: 用户名称
+            user_avatar: 用户头像url
+            nickname: 用户自定义昵称(备注)
+            platform: 平台
+
+        返回:
+            tuple[BotFriend, bool]: 模型实例和是否为新创建的布尔值
+        """
+        defaults: dict[str, str] = {}
+        if user_name is not None:
+            defaults["user_name"] = user_name
+        if user_avatar is not None:
+            defaults["user_avatar"] = user_avatar
+        if nickname is not None:
+            defaults["nickname"] = nickname
+        if platform is not None:
+            defaults["platform"] = platform
+
+        return await cls.update_or_create(
+            bot_id=bot_id,
+            user_id=user_id,
+            defaults=defaults,
+        )
+        
+    @classmethod
+    async def delete_friend(cls, bot_id: str, user_id: str) -> bool:
+        """删除机器人好友
+
+        参数:
+            bot_id: 机器人ID
+            user_id: 用户id
+
+        返回:
+            bool: 是否删除成功
+        """
+        friend = await cls.filter(bot_id=bot_id, user_id=user_id).first()
+        if not friend:
+            return False
+        await friend.delete()
+        return True
+
+
+    @classmethod
     async def get_friends(cls, bot_id: str) -> list["BotFriend"]:
         """获取机器人的所有好友
 
@@ -146,23 +205,6 @@ class BotFriend(Model):
         return await cls.filter(bot_id=bot_id, user_id=user_id).exists()
 
     @classmethod
-    async def delete_friend(cls, bot_id: str, user_id: str) -> bool:
-        """删除机器人好友
-
-        参数:
-            bot_id: 机器人ID
-            user_id: 用户id
-
-        返回:
-            bool: 是否删除成功
-        """
-        friend = await cls.filter(bot_id=bot_id, user_id=user_id).first()
-        if not friend:
-            return False
-        await friend.delete()
-        return True
-
-    @classmethod
     def _run_script(cls):
         """数据库迁移
 
@@ -172,6 +214,6 @@ class BotFriend(Model):
         return [
             # "ALTER TABLE bot_friends "
             # "ALTER COLUMN user_id TYPE VARCHAR(255);",
-            "ALTER TABLE bot_friends ADD COLUMN user_name VARCHAR(255);",
-            "ALTER TABLE bot_friends ADD COLUMN user_avatar VARCHAR(255);",
+            "ALTER TABLE bot_friends ADD COLUMN user_name VARCHAR(255) DEFAULT '';",
+            "ALTER TABLE bot_friends ADD COLUMN user_avatar VARCHAR(255) DEFAULT '';",
         ]

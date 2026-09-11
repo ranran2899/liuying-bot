@@ -1,3 +1,5 @@
+"""QQ官方用户群组监听插件"""
+
 from nonebot import on_message
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_uninfo import Uninfo
@@ -38,14 +40,16 @@ async def _(session: Uninfo):
         await GroupInfoUser.update_or_create(
             user_id=session.user.id,
             group_id=session.group.id,
-            platform=PlatformUtils.get_platform(session),
+            platform=session.adapter,
         )
     elif not await BotFriend.filter(
         bot_id=session.self_id, user_id=session.user.id
     ).exists():
-        await BotFriend.create(
+        await BotFriend.add_friend(
             bot_id=session.self_id,
             user_id=session.user.id,
-            platform=PlatformUtils.get_platform(session),
+            user_name=session.user.name,
+            platform=session.adapter,
         )
+        # logger.info(f'添加好友{session.user.name}({session.user.id})成功')
         logger.info("添加当前好友用户信息", "", session=session)

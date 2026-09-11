@@ -14,6 +14,7 @@ from nonebot.adapters import Event
 from nonebot.adapters.qq import Bot, FriendAddEvent, FriendDelEvent
 from nonebot.adapters.qq import Event
 from nonebot.plugin import PluginMetadata
+from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.utils import PluginExtraData
 from liuying.models._bot import BotFriend
@@ -49,10 +50,10 @@ async def _handle_friend_event(event: Event, bot: Bot) -> None:
     if isinstance(event, FriendAddEvent):
         open_id = event.openid
         logger.info("新好友添加", "QQ官方事件", target=open_id)
-        await BotFriend.update_or_create(
+        await BotFriend.add_friend(
             bot_id=bot.self_id,
             user_id=open_id,
-            defaults={"platform": "QQ"},
+            platform="QQ",
         )
     elif isinstance(event, FriendDelEvent):
         open_id = event.openid
