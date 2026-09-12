@@ -60,7 +60,7 @@ __plugin_meta__ = PluginMetadata(
             AICallableTag(
                 name="query_bot_help",
                 description=(
-                    "查询流萤机器人的插件功能帮助；"
+                    "查询当前机器人的插件功能帮助；"
                     "name为空时列出全部可用插件，"
                     "提供插件名称或模块名时返回该插件的功能详情与命令用法"
                 ),
