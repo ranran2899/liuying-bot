@@ -3,18 +3,17 @@ from typing import Literal
 
 from nonebot_plugin_uninfo import Uninfo
 
+# AI Agent 会话上下文：工具被 LLM 调用时由 AgentRunner 绑定当前
+# 对话的用户/群组，智能工具据此确定操作者与作用群组。
+# 仅在 AI 插件的智能模式下存在，普通命令路径不读取。
+from liuying.liuying_plugins.AI.agent.runtime.session_context import (
+    get_current_group_id,
+    get_current_session,
+)
 from liuying.models._user import UserPermLevel
 from liuying.models.ban_console import BanConsole
 from liuying.utils.image import BuildRankMat
 from liuying.utils.log import logger
-
-# AI Agent 会话上下文：工具被 LLM 调用时由 AgentRunner 绑定当前
-# 对话的用户/群组，智能工具据此确定操作者与作用群组。
-# 仅在 AI 插件的智能模式下存在，普通命令路径不读取。
-from liuying_plugins.AI.agent.runtime.session_context import (
-    get_current_group_id,
-    get_current_session,
-)
 
 # 智能工具所需管理员等级（与 ban 命令 admin_check(5) 保持一致）
 _SMART_BAN_LEVEL = 5
