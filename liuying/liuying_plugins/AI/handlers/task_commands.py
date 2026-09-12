@@ -9,7 +9,6 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.utils.message import MessageUtils
 
 from ..config import get_config
-from ..core.safety.acl import AclChecker
 from ..core.tasks_service import task_service
 
 __all__ = [
@@ -144,7 +143,6 @@ class TaskCommands:
         创建前依次执行三道防线：cron 分钟位频率限制、
         消息长度上限截断、每用户进行中任务数上限。
         """
-        # 黑名单用户不可创建定时任务（定时发消息刷屏风险）
         if not await TaskCommands._check_task_enabled(session):
             return
 
@@ -254,7 +252,9 @@ class TaskCommands:
 
     @staticmethod
     async def _check_task_enabled(session: Uninfo) -> bool:
-        """任务功能前置校验：AI总开关 + 任务开关 + 黑名单
+        """任务功能前置校验：AI总开关 + 任务开关
+
+        用户/群组黑名单已由流萤本体 hooks/auth_ban 在事件级拦截。
 
         参数:
             session: 会话信息
@@ -265,10 +265,5 @@ class TaskCommands:
         if not get_config("ENABLE_AI", False):
             return False
         if not get_config("USER_TASKS_ENABLED", True):
-            return False
-        if await AclChecker.check_blacklist(
-            session.user.id,
-            session.scene.id if session.scene.is_group else None,
-        ):
             return False
         return True

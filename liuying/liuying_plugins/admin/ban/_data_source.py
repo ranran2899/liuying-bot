@@ -1,11 +1,23 @@
-import time
+﻿import time
 from typing import Literal
 
 from nonebot_plugin_uninfo import Uninfo
 
+from liuying.models._user import UserPermLevel
 from liuying.models.ban_console import BanConsole
 from liuying.utils.image import BuildRankMat
 from liuying.utils.log import logger
+
+# AI Agent 会话上下文：工具被 LLM 调用时由 AgentRunner 绑定当前
+# 对话的用户/群组，智能工具据此确定操作者与作用群组。
+# 仅在 AI 插件的智能模式下存在，普通命令路径不读取。
+from liuying_plugins.AI.agent.runtime.session_context import (
+    get_current_group_id,
+    get_current_session,
+)
+
+# 智能工具所需管理员等级（与 ban 命令 admin_check(5) 保持一致）
+_SMART_BAN_LEVEL = 5
 
 
 def _is_ban_active(data: BanConsole) -> bool:
@@ -244,3 +256,99 @@ class BanManage:
         logger.info(f"{operator} 对 {target_type} {target_id} 执行Unban操作")
 
         return True, f"已成功将{target_type} {target_id} 从黑名单中移除"
+
+    @staticmethod
+    async def _check_smart_operator() -> tuple[str, str]:
+        """校验智能工具的调用者权限与上下文
+
+        读取 AI Agent 会话上下文中的操作者与群组，
+        校验操作者具备管理员等级或为超级用户。
+
+        返回:
+            tuple[str, str]: (操作者用户ID, 群组ID)
+
+        异常:
+            PermissionError: 缺少会话上下文或权限不足时抛出
+        """
+        session = get_current_session()
+        if session is None:
+            raise PermissionError("缺少会话上下文，无法确定操作者")
+        operator = session.user.id
+        if not operator:
+            raise PermissionError("缺少会话上下文，无法确定操作者")
+        if operator == session.self_id:
+            raise PermissionError("操作者是机器人本体，禁止执行封禁操作")
+        level = await UserPermLevel.get_level(operator)
+        if level < _SMART_BAN_LEVEL:
+            raise PermissionError(
+                f"权限不足，封禁操作需要管理员等级{_SMART_BAN_LEVEL}以上"
+            )
+        group_id = session.scene.id if session.scene.is_group else ""
+        return operator, group_id
+
+    @classmethod
+    async def smart_ban_user(
+        cls, user_id: str, duration: int | None = None
+    ) -> str:
+        """智能模式封禁用户（admin.ban 插件的 AI 工具入口）
+
+        由 AI Agent 智能调用，操作者与作用群组取自当前会话上下文，
+        委托 BanManage.ban 写入 BanConsole。
+
+        参数:
+            user_id: 被封禁的用户ID
+            duration: 封禁时长（分钟），None表示永久
+
+        返回:
+            str: 执行结果文本
+        """
+        target = (user_id or "").strip()
+        if not target:
+            return "请提供要封禁的用户ID"
+        operator, _ = await cls._check_smart_operator()
+        if target == operator:
+            return "不能封禁自己"
+        ban_time = duration if duration and int(duration) > 0 else -1
+        try:
+            await cls.ban(
+                target,
+                session=None,
+                ban_level=1,
+                duration=ban_time,
+                is_group=False,
+            )
+        except Exception as e:
+            logger.warning(
+                f"智能封禁失败: operator={operator} target={target}: {e}",
+                command="ban",
+                e=e,
+            )
+            return f"封禁失败: {e}"
+        duration_str = "永久" if ban_time < 0 else f"{ban_time}分钟"
+        return f"已成功将用户 {target} 拉黑，时长: {duration_str}"
+
+    @classmethod
+    async def smart_unban_user(cls, user_id: str) -> str:
+        """智能模式解禁用户（admin.ban 插件的 AI 工具入口）
+
+        由 AI Agent 智能调用，操作者与作用群组取自当前会话上下文，
+        解除用户在群内/全局的封禁记录。
+
+        参数:
+            user_id: 被解禁的用户ID
+
+        返回:
+            str: 执行结果文本
+        """
+        target = (user_id or "").strip()
+        if not target:
+            return "请提供要解禁的用户ID"
+        await cls._check_smart_operator()
+        try:
+            ok, msg = await cls.unban(target, get_current_group_id(), session=None)
+        except Exception as e:
+            logger.warning(
+                f"智能解禁失败: target={target}: {e}", command="ban", e=e
+            )
+            return f"解禁失败: {e}"
+        return msg if ok else f"用户 {target} 未被封禁"

@@ -14,11 +14,11 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
+from ..agent.runtime.session_context import bind_session
 from ..config import get_config
 from ..core.group import group_social
 from ..core.peer_awareness import peer_awareness
 from ..core.runtime import ProtocolHelper, runtime_switch
-from ..core.safety import AclChecker
 from ..core.target_inference import MessageTarget, target_inference
 from ..pipeline.processor import ReplyResult, reply_processor
 from ..pipeline.reply_buffer import reply_buffer
@@ -93,25 +93,21 @@ class ChatCommands:
 
         使用 nonebot 的 to_me() 规则：私聊自动命中，
         群聊中@bot或回复bot时命中。
+
+        注：用户/群组黑名单已由流萤本体 hooks/auth_ban 在事件级拦截，
+        此处不再重复检查。
         """
         if not get_config("ENABLE_AI", False):
             return
+
+        # 绑定 uninfo 注入的真实会话，供本轮 Agent 工具链统一读取
+        bind_session(session)
 
         user_id = session.user.id
 
         group_id = (
             session.scene.id if session.scene.is_group else None
         )
-
-        # ACL黑名单检查（拉黑用户/群组不响应）。前移至视觉理解与
-        # 消息缓冲之前，黑名单用户的消息不再消耗算力。
-        if await AclChecker.check_blacklist(user_id, group_id):
-            logger.debug(
-                f"用户/群组在黑名单，跳过回复: "
-                f"user={user_id} group={group_id}",
-                command="AI",
-            )
-            return
 
         # 运行时开关检查
         if not runtime_switch.is_enabled(
@@ -205,9 +201,6 @@ class ChatCommands:
         message_id: int | None = None,
     ) -> None:
         """统一处理回复生成与发送
-
-        黑名单检查已前移至消息入口（handle_chat_message），
-        此处只负责回复生成与发送。
 
         参数:
             session: 会话信息
@@ -328,6 +321,7 @@ class ChatCommands:
             return
         if not session.scene.is_group:
             return
+        bind_session(session)
         group_id = session.scene.id
         user_id = session.user.id
         if user_id == session.self_id:

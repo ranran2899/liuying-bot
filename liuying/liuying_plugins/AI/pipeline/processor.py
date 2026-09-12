@@ -11,7 +11,6 @@ import asyncio
 import time
 from typing import Any
 
-from liuying.models.ban_console import BanConsole
 from liuying.utils.log import logger
 
 from ..agent.agent.learning import active_learning
@@ -53,7 +52,10 @@ class ReplyProcessor:
     async def _check_permission(
         self, ctx: ReplyContext
     ) -> bool:
-        """权限检查（含BanConsole与群禁言感知）
+        """权限检查（群禁言感知与环境感知）
+
+        用户/群组黑名单（ban）已由流萤本体 hooks/auth_ban 统一拦截，
+        此处仅处理AI私有的禁言感知与peer感知。
 
         参数:
             ctx: 回复上下文
@@ -61,13 +63,6 @@ class ReplyProcessor:
         返回:
             bool: 是否允许回复
         """
-        if await BanConsole.is_ban(ctx.user_id, ctx.group_id):
-            logger.debug(
-                f"用户被ban，跳过回复: {ctx.user_id}",
-                command="AI",
-            )
-            return False
-
         if ctx.group_id and get_config("GROUP_MUTE_AWARE", True):
             if GroupMuteTracker.is_group_muted(ctx.group_id):
                 logger.info(

@@ -11,7 +11,6 @@ from liuying.utils.message import MessageUtils
 from ..config import get_config
 from ..core.llm import llm_helper
 from ..core.persona import persona_manager
-from ..core.safety.acl import AclChecker
 from .chat_helpers import ChatMatchersHelper
 
 __all__ = [
@@ -34,15 +33,10 @@ class TtsCommands:
 
         使用当前用户激活的人格对应的语音配置，
         文本超长时拒绝合成。
+
+        注：用户/群组黑名单已由流萤本体 hooks/auth_ban 在事件级拦截。
         """
         if not get_config("ENABLE_AI", False):
-            return
-
-        # 黑名单用户不可触发语音合成（消耗配额且直发音频）
-        if not await AclChecker.check_blacklist(
-            session.user.id,
-            session.scene.id if session.scene.is_group else None,
-        ):
             return
 
         # TTS 配置只读取一次，供开关与音色兜底共用
