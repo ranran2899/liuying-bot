@@ -7,7 +7,6 @@
 from .builtin import (  # noqa: F401  触发内置工具注册
     context,
     group,
-    knowledge,
     media,
     memory_tools,
     search,

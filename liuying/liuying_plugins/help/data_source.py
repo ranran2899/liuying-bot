@@ -118,6 +118,71 @@ class HelpManage:
         return await cls._build_help_detail(plugin, is_superuser, user_id)
 
     @classmethod
+    async def get_smart_help_text(cls, name: str = "") -> str:
+        """
+        获取智能模式帮助文本（供AI智能工具调用）
+
+        参数:
+            name: 插件名称或模块名，空串时列出全部可用插件
+
+        返回:
+            str: 帮助文本
+        """
+        keyword = (name or "").strip()
+        if not keyword:
+            plugins = await cls.get_plugin_list()
+            if not plugins:
+                return "暂无可用插件"
+            lines: list[str] = ["可用插件列表："]
+            current_menu = ""
+            for plugin in plugins:
+                menu = str(plugin.get("menu_type") or "其他")
+                if menu != current_menu:
+                    current_menu = menu
+                    lines.append(f"[{menu}]")
+                desc = str(plugin.get("description") or "")[:60]
+                lines.append(
+                    f"- {plugin.get('name')}（{plugin.get('module')}）: {desc}"
+                )
+            return "\n".join(lines)
+
+        info = await cls.get_plugin_full_info(keyword)
+        if not info:
+            return f"未找到插件: {keyword}"
+        return cls._format_plugin_detail(info)
+
+    @staticmethod
+    def _format_plugin_detail(info: dict[str, Any]) -> str:
+        """
+        将插件完整信息格式化为帮助文本
+
+        参数:
+            info: get_plugin_full_info 返回的插件完整信息
+
+        返回:
+            str: 插件详情文本
+        """
+        parts: list[str] = [f"{info.get('name')}（{info.get('module')}）"]
+        if description := str(info.get("description") or ""):
+            parts.append(f"描述: {description}")
+        if usage := str(info.get("usage") or ""):
+            parts.append(f"用法: {usage}")
+        commands = info.get("commands") or []
+        if commands:
+            parts.append("命令:")
+            for cmd in commands:
+                line = f"- {cmd.get('command', '')}"
+                params = cmd.get("params") or []
+                if params:
+                    line += " " + " ".join(f"[{p}]" for p in params)
+                if cmd.get("description"):
+                    line += f": {cmd['description']}"
+                parts.append(line)
+        if info.get("status") is False:
+            parts.append("（当前已禁用）")
+        return "\n".join(parts)
+
+    @classmethod
     async def get_plugin_list(cls) -> list[dict[str, Any]]:
         """
         获取全部可见插件摘要列表（普通/管理员/超级用户）

@@ -18,7 +18,6 @@ from .constants import EVIDENCE_KIND_CONTEXT, EVIDENCE_KIND_TOOL
 RETRYABLE_LOOKUP_TOOLS: set[str] = {
     "web_search",
     "fetch_webpage",
-    "search_plugin_knowledge",
     "search_plugin_by_capability",
 }
 """空结果可重试工具白名单"""

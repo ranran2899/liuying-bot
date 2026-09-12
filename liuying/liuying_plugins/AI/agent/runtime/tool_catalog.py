@@ -234,22 +234,6 @@ _TOOL_METADATA_DEFAULTS: dict[str, dict[str, Any]] = {
         "requires_network": True,
         "latency_class": "network",
     },
-    # 插件知识类
-    "search_plugin_knowledge": {
-        "intent_tags": [INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
-        "evidence_kind": "plugin",
-        "latency_class": "fast",
-    },
-    "get_plugin_detail": {
-        "intent_tags": [INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
-        "evidence_kind": "plugin",
-        "latency_class": "fast",
-    },
-    "list_available_plugins": {
-        "intent_tags": [INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
-        "evidence_kind": "plugin",
-        "latency_class": "fast",
-    },
     # 记忆类
     "recall_memory": {
         "intent_tags": [INTENT_TAG_MEMORY],

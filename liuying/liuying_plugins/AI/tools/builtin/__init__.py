@@ -6,7 +6,6 @@
 from . import (
     context,
     group,
-    knowledge,
     media,
     memory_tools,
     plugin_invoker,
@@ -16,7 +15,6 @@ from . import (
 __all__ = [
     "context",
     "group",
-    "knowledge",
     "media",
     "memory_tools",
     "plugin_invoker",

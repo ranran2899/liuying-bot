@@ -18,7 +18,13 @@ from nonebot_plugin_alconna import (
 )
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.configs.utils import PluginExtraData, RegisterConfig, AICallableTag
+from liuying.configs.utils import (
+    AICallableParam,
+    AICallableProperties,
+    AICallableTag,
+    PluginExtraData,
+    RegisterConfig,
+)
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
@@ -52,10 +58,25 @@ __plugin_meta__ = PluginMetadata(
         ],
         smart_tools=[
             AICallableTag(
-                name="help",
-                description="查看当前机器人可用的插件功能列表",
-                parameters=[],
-                func=_,
+                name="query_bot_help",
+                description=(
+                    "查询流萤机器人的插件功能帮助；"
+                    "name为空时列出全部可用插件，"
+                    "提供插件名称或模块名时返回该插件的功能详情与命令用法"
+                ),
+                parameters=AICallableParam(
+                    type="object",
+                    properties={
+                        "name": AICallableProperties(
+                            type="string",
+                            description=(
+                                "插件名称或模块名，留空列出全部插件"
+                            ),
+                        ),
+                    },
+                    required=[],
+                ),
+                func=HelpManage.get_smart_help_text,
             ),
         ],
     ).to_dict(),
