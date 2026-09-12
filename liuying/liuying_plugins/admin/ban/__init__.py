@@ -1,4 +1,4 @@
-from arclet.alconna import Args
+﻿from arclet.alconna import Args
 from nonebot.adapters import Bot
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
@@ -12,12 +12,7 @@ from nonebot_plugin_alconna import (
 )
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.configs.utils import (
-    AICallableParam,
-    AICallableProperties,
-    AICallableTag,
-    PluginExtraData,
-)
+from liuying.configs.utils import PluginExtraData
 from liuying.utils.enum import PluginType
 from liuying.utils.message import MessageUtils
 from liuying.utils.rules import admin_check
@@ -42,55 +37,6 @@ __plugin_meta__ = PluginMetadata(
         version="1.0",
         admin_level=5,
         plugin_type=PluginType.SUPER_AND_ADMIN,
-        smart_tools=[
-            AICallableTag(
-                name="ban_user",
-                description=(
-                    "封禁（拉黑）指定用户，使其无法使用机器人的任何功能；"
-                    "需要调用人具备管理员等级（等级5及以上或超级用户），"
-                    "且不能封禁自己；duration为分钟数，省略表示永久封禁"
-                ),
-                parameters=AICallableParam(
-                    type="object",
-                    properties={
-                        "user_id": AICallableProperties(
-                            type="string",
-                            description=(
-                                "要封禁的用户ID，可从群成员信息工具获取"
-                            ),
-                        ),
-                        "duration": AICallableProperties(
-                            type="integer",
-                            description=(
-                                "封禁时长（分钟），省略表示永久封禁"
-                            ),
-                        ),
-                    },
-                    required=["user_id"],
-                ),
-                func=BanManage.smart_ban_user,
-            ),
-            AICallableTag(
-                name="unban_user",
-                description=(
-                    "解除（解禁）指定用户的封禁，使其恢复正常使用机器人；"
-                    "需要调用人具备管理员等级（等级5及以上或超级用户）"
-                ),
-                parameters=AICallableParam(
-                    type="object",
-                    properties={
-                        "user_id": AICallableProperties(
-                            type="string",
-                            description=(
-                                "要解禁的用户ID，可从群成员信息工具获取"
-                            ),
-                        ),
-                    },
-                    required=["user_id"],
-                ),
-                func=BanManage.smart_unban_user,
-            ),
-        ],
         superuser_help="""
         超级管理员额外命令
         格式:
