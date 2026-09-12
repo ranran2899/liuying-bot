@@ -9,17 +9,17 @@ from datetime import datetime, timedelta
 
 from liuying.utils.log import logger
 
-from ..core.knowledge_db import KnowledgeBase
-from ..core.llm import llm_helper
-from ..core.llm.model_router import ROLE_INTENT, model_router
-from ..core.memory._common import (
+from ...core.knowledge_db import KnowledgeBase
+from ...core.llm import llm_helper
+from ...core.llm.model_router import ROLE_INTENT, model_router
+from ...core.memory._common import (
     _DEFAULT_PERSONA,
     _EPISODIC_EXPIRE_DAYS,
     _REINFORCE_THRESHOLD,
     _WORKING_EXPIRE_HOURS,
 )
-from ..models.conversation_record import ConversationRecord
-from ..models.memory_item import MemoryItem
+from ...models.conversation_record import ConversationRecord
+from ...models.memory_item import MemoryItem
 
 
 class MemoryConsolidationService:

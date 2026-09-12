@@ -133,6 +133,7 @@ class PluginSetting(BaseModel):
 
 
 class AICallableProperties(BaseModel):
+    """参数属性"""
     type: str
     """参数类型"""
     description: str
@@ -140,6 +141,7 @@ class AICallableProperties(BaseModel):
 
 
 class AICallableParam(BaseModel):
+    """工具参数"""
     type: str
     """类型"""
     properties: dict[str, AICallableProperties]
@@ -149,6 +151,7 @@ class AICallableParam(BaseModel):
 
 
 class AICallableTag(BaseModel):
+    """工具标签"""
     name: str
     """工具名称"""
     parameters: AICallableParam | None = None

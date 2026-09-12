@@ -18,7 +18,7 @@ from nonebot_plugin_alconna import (
 )
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.configs.utils import PluginExtraData, RegisterConfig
+from liuying.configs.utils import PluginExtraData, RegisterConfig, AICallableTag
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
@@ -49,6 +49,14 @@ __plugin_meta__ = PluginMetadata(
                 help="帮助详情图片样式 ['liuying']",
                 default_value="liuying",
             )
+        ],
+        smart_tools=[
+            AICallableTag(
+                name="help",
+                description="查看当前机器人可用的插件功能列表",
+                parameters=[],
+                func=_,
+            ),
         ],
     ).to_dict(),
 )

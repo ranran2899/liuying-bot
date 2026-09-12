@@ -12,11 +12,9 @@
 
 from liuying.utils.log import logger
 
-from ..core.llm import llm_helper
-from ..core.llm.model_router import ROLE_REVIEW, model_router
-from ..core.tools.json_utils import extract_json_payload
-
-__all__ = ["SocialGate", "social_gate"]
+from ...core.llm import llm_helper
+from ...core.llm.model_router import ROLE_REVIEW, model_router
+from ...core.tools.json_utils import extract_json_payload
 
 
 class SocialGate:

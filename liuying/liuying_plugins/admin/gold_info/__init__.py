@@ -44,27 +44,27 @@ __plugin_meta__ = PluginMetadata(
 add_gold_cmd = on_alconna(
     Alconna("添加金币", Args["user_id", str], Args["amount", int]),
     permission=SUPERUSER,
-    priority=5000,
+    priority=50,
     block=True,
 )
 
 reduce_gold_cmd = on_alconna(
     Alconna("减少金币", Args["user_id", str], Args["amount", int]),
     permission=SUPERUSER,
-    priority=5000,
+    priority=50,
     block=True,
 )
 
 set_gold_cmd = on_alconna(
     Alconna("设置金币", Args["user_id", str], Args["amount", int]),
     permission=SUPERUSER,
-    priority=5000,
+    priority=50,
     block=True,
 )
 
 free_copper_cmd = on_alconna(
     Alconna("免费铜币"),
-    priority=5000,
+    priority=50,
     block=True,
 )
 
@@ -159,7 +159,6 @@ async def handle_free_copper(session: Uninfo):
         f"用户 {user_id} 领取免费铜币",
         "免费铜币",
         session=session,
-        command="免费铜币",
     )
 
     current_copper = await UserCurr.add_user_copper(

@@ -14,13 +14,11 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ..core.context import context_manager
-from ..core.llm import llm_helper as _default_llm_helper
-from ..core.llm.model_router import ROLE_INTENT, model_router
-from ..core.tools.json_utils import extract_json_payload
-from ..models.emotion_state import EmotionState
-
-__all__ = ["EmotionManager", "InnerStateHelper", "emotion_manager"]
+from ...core.context import context_manager
+from ...core.llm import llm_helper as _default_llm_helper
+from ...core.llm.model_router import ROLE_INTENT, model_router
+from ...core.tools.json_utils import extract_json_payload
+from ...models.emotion_state import EmotionState
 
 _DEFAULT_PERSONA = "default"
 """默认人格名（未指定时回退）"""

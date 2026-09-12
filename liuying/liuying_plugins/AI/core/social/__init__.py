@@ -1,7 +1,7 @@
 """社交智能子包
 
 提供主动社交配额管理与触发器框架。
-主动发言门控已迁移至 agent.review_social_gate，
+主动发言门控已迁移至 agent.review.social_gate，
 需要时直接从该模块导入。
 """
 

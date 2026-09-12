@@ -1,7 +1,7 @@
 """表情包系统
 
 提供表情包库管理、策展、反馈与导入。
-语义分析已迁移至 agent.sticker_semantics，
+语义分析已迁移至 agent.sticker.semantics，
 需要时直接从该模块导入。
 """
 

@@ -9,11 +9,9 @@ import time
 
 from liuying.utils.log import logger
 
-from ..core.llm import llm_helper
-from ..core.llm.model_router import ROLE_INTENT, model_router
-from ..core.tools.json_utils import extract_json_payload
-
-__all__ = ["rewrite_query"]
+from ...core.llm import llm_helper
+from ...core.llm.model_router import ROLE_INTENT, model_router
+from ...core.tools.json_utils import extract_json_payload
 
 # 改写结果缓存：同查询TTL内直接复用，避免重复LLM调用
 _REWRITE_TTL_SECONDS = 600.0

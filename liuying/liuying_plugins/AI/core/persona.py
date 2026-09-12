@@ -22,6 +22,7 @@ from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..models.user_persona import UserPersonaProfile
 from ..models.user_persona_selection import UserPersonaSelection
 
+# 文件位于 AI/core/，向上两级回到 AI/ 插件根目录
 _PERSONAS_DIR = Path(__file__).parent.parent / "personas"
 """人格配置文件目录"""
 

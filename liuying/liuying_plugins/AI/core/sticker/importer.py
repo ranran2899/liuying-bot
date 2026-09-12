@@ -12,7 +12,7 @@ from pathlib import Path
 from liuying.utils.bed_layout import BedLayout
 from liuying.utils.log import logger
 
-from ...agent.sticker_semantics import sticker_semantics_analyzer
+from ...agent.sticker.semantics import sticker_semantics_analyzer
 from ...models.sticker_item import StickerItem
 from ..llm import llm_helper
 from ..llm.model_router import ROLE_STICKER, model_router

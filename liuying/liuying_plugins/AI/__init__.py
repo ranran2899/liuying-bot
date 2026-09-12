@@ -42,6 +42,7 @@ from .tools import (  # 公开API供第三方注册工具
     register_external_tool,
     tool_registry,
 )
+from .tools.external import smart_tool_bridge
 from .tools.mcp import mcp_bridge
 
 __all__ = [
@@ -493,6 +494,13 @@ async def _init_ai_plugin() -> None:
     if mcp_count:
         logger.debug(
             f"MCP远程工具已注册{mcp_count}个", command="AI"
+        )
+
+    # 注册本体插件声明的智能模式函数工具（smart_tools桥接）
+    smart_count = smart_tool_bridge.register_all()
+    if smart_count:
+        logger.info(
+            f"已注册本体插件智能工具{smart_count}个", command="AI"
         )
 
 

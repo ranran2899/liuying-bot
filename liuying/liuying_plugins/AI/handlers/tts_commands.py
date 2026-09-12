@@ -8,9 +8,9 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
-from ..agent.warmup_persona import persona_manager
 from ..config import get_config
 from ..core.llm import llm_helper
+from ..core.persona import persona_manager
 from ..core.safety.acl import AclChecker
 from .chat_helpers import ChatMatchersHelper
 

@@ -11,12 +11,12 @@ import random
 from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 
-from ..agent.warmup_persona import persona_manager
 from ..config import get_config
 from ..core.context import context_manager
 from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..core.memory import memory_manager
+from ..core.persona import persona_manager
 
 __all__ = ["setup_diary_job"]
 

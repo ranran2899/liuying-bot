@@ -9,15 +9,15 @@ import asyncio
 
 from liuying.utils.log import logger
 
-from ..agent.intent_emotion import emotion_manager
-from ..agent.intent_group_style import ProfileToolkit, group_profile
-from ..agent.warmup_persona import persona_manager
+from ..agent.intent.emotion import emotion_manager
+from ..agent.intent.group_style import ProfileToolkit, group_profile
 from ..config import get_config
 from ..core.context import ContextPolicy, context_manager, thread_tracker
 from ..core.group import group_social
 from ..core.llm import llm_helper
 from ..core.memory import memory_manager
 from ..core.peer_awareness import peer_awareness
+from ..core.persona import persona_manager
 from ..core.safety import SafetyFilter
 from .humanize import HumanizeToolkit
 from .style_policy import ReplyStylePolicy

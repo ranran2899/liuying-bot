@@ -25,7 +25,7 @@ from typing import Any, Self
 
 from liuying.utils.log import logger
 
-from .. import AgentTool, ToolRegistry
+from ...tools import AgentTool, ToolRegistry
 
 __all__ = [
     "McpBridge",

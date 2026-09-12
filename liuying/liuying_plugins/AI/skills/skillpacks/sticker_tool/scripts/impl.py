@@ -19,7 +19,7 @@ from liuying.liuying_plugins.AI.agent.runtime.session_context import (
     get_current_group_id,
     get_current_user_id,
 )
-from liuying.liuying_plugins.AI.agent.sticker_semantics import StickerMood
+from liuying.liuying_plugins.AI.agent.sticker.semantics import StickerMood
 from liuying.liuying_plugins.AI.core.sticker import (
     sticker_curation,
     sticker_library,

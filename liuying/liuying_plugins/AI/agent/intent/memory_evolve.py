@@ -12,12 +12,12 @@ import re
 
 from liuying.utils.log import logger
 
-from ..core.llm import llm_helper
-from ..core.llm.model_router import ROLE_INTENT, model_router
-from ..core.memory._common import _DEFAULT_PERSONA
-from ..core.memory.recall import MemoryRecallService
-from ..models.memory_item import MemoryItem
-from .intent_memory_consolidate import MemoryConsolidationService
+from ...core.llm import llm_helper
+from ...core.llm.model_router import ROLE_INTENT, model_router
+from ...core.memory._common import _DEFAULT_PERSONA
+from ...core.memory.recall import MemoryRecallService
+from ...models.memory_item import MemoryItem
+from .memory_consolidate import MemoryConsolidationService
 
 _RELATION_REPLACES = "replaces"
 """新记忆覆盖旧记忆"""

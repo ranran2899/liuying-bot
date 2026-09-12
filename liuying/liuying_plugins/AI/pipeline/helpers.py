@@ -10,7 +10,7 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ..agent.intent_emotion import emotion_manager
+from ..agent.intent.emotion import emotion_manager
 from ..agent.runner import AgentResult
 from ..config import get_config
 from ..core.context import ContextPolicy, context_manager
