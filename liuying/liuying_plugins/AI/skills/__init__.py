@@ -6,7 +6,7 @@
 - `loader.py`：标准技能包的发现、元数据解析、模块加载与工具注册
 - `skillpacks/`：全部标准技能包，每个技能一个目录，五件套结构
 
-MCP 协议桥（`agent/mcp/bridge.py`）属于 Agent 侧基础设施，
+MCP 协议桥（`tools/mcp/bridge.py`）属于工具侧基础设施，
 由本层调用而不在本层实现。
 """
 

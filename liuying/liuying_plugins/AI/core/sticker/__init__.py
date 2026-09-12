@@ -1,15 +1,10 @@
 """表情包系统
 
-提供表情包库管理、策展、反馈、导入与语义分析。
+提供表情包库管理、策展、反馈与导入。
+语义分析已迁移至 agent.sticker_semantics，
+需要时直接从该模块导入。
 """
 
-from ...agent.sticker_semantics import (
-    StickerMood,
-    StickerScene,
-    StickerSemantics,
-    StickerSemanticsAnalyzer,
-    sticker_semantics_analyzer,
-)
 from .curation import StickerCuration, sticker_curation
 from .feedback import StickerPreference
 from .importer import StickerImporter, sticker_importer
@@ -20,13 +15,8 @@ __all__ = [
     "StickerCuration",
     "StickerImporter",
     "StickerLibrary",
-    "StickerMood",
     "StickerPreference",
-    "StickerScene",
-    "StickerSemantics",
-    "StickerSemanticsAnalyzer",
     "sticker_curation",
     "sticker_importer",
     "sticker_library",
-    "sticker_semantics_analyzer",
 ]

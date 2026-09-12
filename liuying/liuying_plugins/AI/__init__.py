@@ -20,7 +20,6 @@ from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.rules import admin_check
 
-from .agent.mcp import mcp_bridge
 from .config import PluginConfig, get_config
 from .core.knowledge_db import knowledge_base
 from .core.llm import llm_helper, token_ledger
@@ -43,6 +42,7 @@ from .tools import (  # 公开API供第三方注册工具
     register_external_tool,
     tool_registry,
 )
+from .tools.mcp import mcp_bridge
 
 __all__ = [
     "AgentTool",

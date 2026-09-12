@@ -1,13 +1,10 @@
 """群组智能
 
-提供群组成员管理、社交分析、群风格画像与禁言状态。
+提供群组成员管理、社交分析、禁言状态。
+群风格画像抽取已迁移至 agent.intent_group_style，
+需要时直接从该模块导入。
 """
 
-from ...agent.intent_group_style import (
-    ProfileToolkit,
-    extract_group_style,
-    group_profile,
-)
 from .members import (
     GroupMemberInfo,
     GroupMemberService,
@@ -23,10 +20,7 @@ __all__ = [
     "GroupMemberSnapshot",
     "GroupMuteTracker",
     "GroupSocialService",
-    "ProfileToolkit",
-    "extract_group_style",
     "group_member_service",
     "group_mute_tracker",
-    "group_profile",
     "group_social",
 ]

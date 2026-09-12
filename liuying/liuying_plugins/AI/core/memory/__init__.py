@@ -1,10 +1,11 @@
 """记忆系统
 
 提供多层级记忆管理（工作/情景/语义/背景）、记忆整理、
-向量嵌入与记忆召回、记忆进化、后台智能与搜索排名。
+向量嵌入与记忆召回、后台智能与搜索排名。
+记忆进化已迁移至 agent.intent_memory_evolve，
+需要时直接从该模块导入。
 """
 
-from ...agent.intent_memory_evolve import MemoryEvolveService
 from .background_intelligence import (
     BackgroundIntelligence,
     background_intelligence,
@@ -19,7 +20,6 @@ __all__ = [
     "CurationReport",
     "EntityMention",
     "MemoryCurator",
-    "MemoryEvolveService",
     "MemoryManager",
     "SearchRanker",
     "background_intelligence",

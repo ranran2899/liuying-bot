@@ -1,9 +1,10 @@
 """社交智能子包
 
-提供主动社交门控、配额管理、触发器框架。
+提供主动社交配额管理与触发器框架。
+主动发言门控已迁移至 agent.review_social_gate，
+需要时直接从该模块导入。
 """
 
-from ...agent.review_social_gate import SocialGate, social_gate
 from .framework import (
     SocialContext,
     SocialTrigger,
@@ -14,11 +15,9 @@ from .quota import SocialQuota, social_quota
 
 __all__ = [
     "SocialContext",
-    "SocialGate",
     "SocialQuota",
     "SocialTrigger",
     "SocialTriggerRegistry",
-    "social_gate",
     "social_quota",
     "social_trigger_registry",
 ]

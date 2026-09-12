@@ -16,7 +16,6 @@ SQLite 数据库文件（data/db/knowledge_base.db）。
     ```
 """
 
-from ...agent.intent_knowledge_rewrite import rewrite_query
 from .connection import KbConnectionManager, kb_connection
 from .manager import KnowledgeBase, knowledge_base
 from .retriever import KnowledgeQueryUtils, KnowledgeRetrieverMixin
@@ -28,6 +27,5 @@ __all__ = [
     "KnowledgeRetrieverMixin",
     "kb_connection",
     "knowledge_base",
-    "rewrite_query",
 ]
 """知识库包公开 API"""

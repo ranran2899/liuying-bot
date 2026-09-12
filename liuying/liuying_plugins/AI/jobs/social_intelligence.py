@@ -17,14 +17,15 @@ from liuying.models._user.user_info import UserInfo
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
+from ..agent.intent_group_style import ProfileToolkit
+from ..agent.review_social_gate import social_gate
 from ..agent.warmup_persona import persona_manager
 from ..config import get_config
 from ..core.context import context_manager
-from ..core.group import ProfileToolkit
 from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..core.runtime import ProtocolHelper
-from ..core.social import social_gate, social_quota
+from ..core.social import social_quota
 from ..core.social.framework import (
     SocialContext,
     SocialTrigger,
