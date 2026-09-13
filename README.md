@@ -79,7 +79,7 @@
 ## 🛠️ 安装与部署
 
 ### 环境要求
-- **Python**: 3.14 及以上
+- **Python**: 3.14 及以上，点击 [python-3.14.7](https://www.python.org/ftp/python/3.14.7/python-3.14.7-amd64.exe) 下载安装。
 - **包管理器**: uv
 - **协议端**: 推荐 LLOneBot (NTQQ) 或 OneBot 兼容客户端
 
