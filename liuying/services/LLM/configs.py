@@ -21,7 +21,7 @@ class APIType(StrEnum):
     def values(cls) -> list[str]:
         """获取所有API类型值列表
 
-        Returns:
+        返回:
             API类型字符串列表
         """
         return [m.value for m in cls]
@@ -37,7 +37,7 @@ class RequestDefaults:
     def to_dict(self) -> dict[str, Any]:
         """转换为字典
 
-        Returns:
+        返回:
             默认参数字典
         """
         return {"temperature": self.temperature, "max_tokens": self.max_tokens}
@@ -67,10 +67,10 @@ class ProviderConfig:
     def get_model_config(self, model_name: str) -> ModelConfig | None:
         """获取指定模型配置
 
-        Args:
+        参数:
             model_name: 模型名称
 
-        Returns:
+        返回:
             模型配置，不存在则返回None
         """
         return next(
@@ -81,10 +81,10 @@ class ProviderConfig:
     def get_api_url(self, model_name: str | None = None) -> str:
         """获取API基础URL
 
-        Args:
+        参数:
             model_name: 模型名称，某些提供商需要追加模型名
 
-        Returns:
+        返回:
             API URL
         """
         if not self.api_base:
@@ -98,7 +98,7 @@ class ProviderConfig:
     def is_openai_compatible(self) -> bool:
         """判断是否为OpenAI兼容API
 
-        Returns:
+        返回:
             是否兼容OpenAI格式
         """
         return self.api_type in (APIType.OPENAI, APIType.ARK, APIType.OPENROUTER)
@@ -138,10 +138,10 @@ class LLMConfig:
     def get_provider(self, provider_name: str) -> ProviderConfig | None:
         """获取指定提供商配置
 
-        Args:
+        参数:
             provider_name: 提供商名称
 
-        Returns:
+        返回:
             提供商配置，不存在则返回None
         """
         name_lower = provider_name.lower()
@@ -155,10 +155,10 @@ class LLMConfig:
     ) -> tuple[ProviderConfig, ModelConfig] | None:
         """获取指定模型的完整配置
 
-        Args:
+        参数:
             model_name: 模型名称
 
-        Returns:
+        返回:
             (提供商配置, 模型配置) 元组，不存在则返回None
         """
         for provider in self.providers:
@@ -169,7 +169,7 @@ class LLMConfig:
     def get_default_provider(self) -> ProviderConfig | None:
         """获取默认提供商配置
 
-        Returns:
+        返回:
             默认提供商配置
         """
         if not self.default_model_name:
@@ -185,7 +185,7 @@ class LLMConfig:
     def get_default_model(self) -> str | None:
         """获取默认模型名称
 
-        Returns:
+        返回:
             默认模型名称
         """
         if not self.default_model_name:
@@ -201,10 +201,10 @@ class LLMConfig:
     def get_providers_by_type(self, api_type: str) -> list[ProviderConfig]:
         """按API类型获取提供商列表
 
-        Args:
+        参数:
             api_type: API类型
 
-        Returns:
+        返回:
             匹配的提供商配置列表
         """
         return [p for p in self.providers if p.api_type == api_type]
@@ -229,7 +229,7 @@ class LLMConfigManager:
     def config(self) -> LLMConfig:
         """获取配置对象
 
-        Returns:
+        返回:
             LLM配置对象
         """
         if self._config is None:
@@ -249,10 +249,10 @@ class LLMConfigManager:
     def _parse_config(self, raw: dict[str, Any]) -> LLMConfig:
         """解析原始配置字典
 
-        Args:
+        参数:
             raw: 原始配置字典
 
-        Returns:
+        返回:
             LLMConfig对象
         """
         config = LLMConfig()
@@ -285,10 +285,10 @@ class LLMConfigManager:
     ) -> list[ProviderConfig]:
         """解析提供商列表
 
-        Args:
+        参数:
             providers_raw: 原始提供商列表
 
-        Returns:
+        返回:
             提供商配置列表
         """
         return [
@@ -311,11 +311,11 @@ class LLMConfigManager:
     ) -> list[ModelConfig]:
         """解析模型列表
 
-        Args:
+        参数:
             models_raw: 原始模型列表
             api_type: API类型
 
-        Returns:
+        返回:
             模型配置列表
         """
         return [
@@ -330,10 +330,10 @@ class LLMConfigManager:
     def _parse_client_settings(self, raw: dict[str, Any]) -> ClientSettings:
         """解析客户端设置
 
-        Args:
+        参数:
             raw: 原始客户端设置字典
 
-        Returns:
+        返回:
             ClientSettings对象
         """
         return ClientSettings(
@@ -347,10 +347,10 @@ class LLMConfigManager:
     def _parse_debug_log(self, raw: dict[str, Any]) -> DebugLogConfig:
         """解析调试日志配置
 
-        Args:
+        参数:
             raw: 原始调试日志配置字典
 
-        Returns:
+        返回:
             DebugLogConfig对象
         """
         return DebugLogConfig(
@@ -372,7 +372,7 @@ llm_config_manager = LLMConfigManager()
 def get_llm_config() -> LLMConfig:
     """获取LLM全局配置
 
-    Returns:
+    返回:
         LLM配置对象
     """
     return llm_config_manager.config
@@ -381,10 +381,10 @@ def get_llm_config() -> LLMConfig:
 def get_provider_config(provider_name: str) -> ProviderConfig | None:
     """获取指定提供商配置
 
-    Args:
+    参数:
         provider_name: 提供商名称
 
-    Returns:
+    返回:
         提供商配置，不存在则返回None
     """
     return llm_config_manager.config.get_provider(provider_name)
@@ -395,10 +395,10 @@ def get_model_config(
 ) -> tuple[ProviderConfig, ModelConfig] | None:
     """获取指定模型的完整配置
 
-    Args:
+    参数:
         model_name: 模型名称
 
-    Returns:
+    返回:
         (提供商配置, 模型配置) 元组，不存在则返回None
     """
     return llm_config_manager.config.get_model_config(model_name)
@@ -407,7 +407,7 @@ def get_model_config(
 def get_all_providers() -> list[ProviderConfig]:
     """获取所有已配置的提供商
 
-    Returns:
+    返回:
         提供商配置列表
     """
     return llm_config_manager.config.providers
@@ -416,7 +416,7 @@ def get_all_providers() -> list[ProviderConfig]:
 def get_supported_api_types() -> list[str]:
     """获取所有支持的API类型
 
-    Returns:
+    返回:
         API类型列表
     """
     return list({p.api_type for p in llm_config_manager.config.providers if p.api_type})

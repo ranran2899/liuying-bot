@@ -34,7 +34,7 @@ class SearchClientMeta:
 
     声明客户端的标识、展示信息、配置要求与识别规则。
 
-    Attributes:
+    属性:
         name: 客户端类型标识符（如 baidu/bocha/bing_http）
         display_name: 展示名称
         description: 描述

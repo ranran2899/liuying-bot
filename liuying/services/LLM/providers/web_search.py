@@ -103,21 +103,30 @@ class WebSearchProvider(BaseProvider, WebSearchCapability):
         count: int = 10,
         options: dict[str, Any] | None = None,
     ) -> SearchResponse:
-        """执行网络搜索
+        """执行网络搜索，优先使用已配置引擎，失败时自动降级到免配置客户端。
 
-        Args:
-            query: 搜索关键词
-            engine: 搜索引擎名称，None 则使用默认
-            count: 返回结果数量
-            options: 额外选项
+        参数:
+            query: 搜索关键词，不可为空。
+            engine: 搜索引擎名称（如 "bing"），None 则使用默认引擎。
+            count: 返回结果数量，范围 1-50，默认 10。
+            options: 额外搜索选项字典，支持以下字段：
+                - enable_free_fallback (bool): 主引擎失败时是否降级到免配置客户端，默认 True。
+                - freshness (FreshnessType | str): 时间范围过滤，可选值
+                  "noLimit"/"oneDay"/"oneWeek"/"oneMonth"/"oneYear"，默认 "noLimit"。
+                - search_filter (SearchFilter | dict): 站点过滤条件，dict 形式接受
+                  include_sites/exclude_sites/city 字段。
+                - summary (bool): 是否返回结果摘要，默认 True（免配置降级时为 False）。
+                - instruction (str): 搜索指令文本，仅支持指令的引擎生效。
+                - chat_model (str): 聊天模型名称，用于支持总结的引擎。
+                - extra (dict): 引擎特定专属参数，各引擎自行解析。
 
-        Returns:
-            搜索响应对象
+        返回:
+            SearchResponse: 包含 web_pages/images/total_matches/provider 等字段的响应对象。
 
-        Raises:
-            SearchError: 没有可用搜索引擎时抛出
+        异常:
+            SearchError: 指定引擎不可用、或所有引擎（含降级）均失败时抛出。
         """
-        options = options or {}
+        options = options if options is not None else {}
         enable_fallback = options.get("enable_free_fallback", True)
 
         try:

@@ -18,7 +18,7 @@ class OpenAIClient(BaseLLMClient):
     def get_provider_config(self) -> ProviderConfig | None:
         """获取当前提供商配置
 
-        Returns:
+        返回:
             提供商配置对象，不存在则返回None
         """
         configs = self.get_provider_configs()
@@ -27,7 +27,7 @@ class OpenAIClient(BaseLLMClient):
     def get_provider_configs(self) -> list[ProviderConfig]:
         """获取所有OpenAI兼容的提供商配置
 
-        Returns:
+        返回:
             提供商配置列表
         """
         if self._provider_configs is not None:
@@ -43,10 +43,10 @@ class OpenAIClient(BaseLLMClient):
     def get_random_provider(self) -> ProviderConfig:
         """随机获取一个有效提供商配置
 
-        Returns:
+        返回:
             提供商配置对象
 
-        Raises:
+        异常:
             APIError: 当没有有效配置时
         """
         configs = self.get_provider_configs()
@@ -57,10 +57,10 @@ class OpenAIClient(BaseLLMClient):
     def get_headers(self, provider: ProviderConfig) -> dict[str, str]:
         """构建请求头
 
-        Args:
+        参数:
             provider: 提供商配置对象
 
-        Returns:
+        返回:
             请求头字典
         """
         return self.build_headers(
@@ -71,10 +71,10 @@ class OpenAIClient(BaseLLMClient):
     def get_base_url(self, provider: ProviderConfig) -> str:
         """获取提供商的基础URL
 
-        Args:
+        参数:
             provider: 提供商配置对象
 
-        Returns:
+        返回:
             基础URL
         """
         return provider.api_base.rstrip("/")
@@ -89,14 +89,14 @@ class OpenAIClient(BaseLLMClient):
     ) -> Any:
         """发送POST请求
 
-        Args:
+        参数:
             provider: 提供商配置对象
             endpoint: API端点路径
             data: 请求数据
             timeout: 超时时间（秒）
             **kwargs: 额外参数
 
-        Returns:
+        返回:
             API响应数据
         """
         base_url = self.get_base_url(provider)
@@ -114,13 +114,13 @@ class OpenAIClient(BaseLLMClient):
     ) -> Any:
         """发送POST请求并返回原始响应
 
-        Args:
+        参数:
             provider: 提供商配置对象
             endpoint: API端点路径
             data: 请求数据
             timeout: 超时时间（秒）
 
-        Returns:
+        返回:
             原始响应数据
         """
         base_url = self.get_base_url(provider)
@@ -138,13 +138,13 @@ class OpenAIClient(BaseLLMClient):
     ) -> Any:
         """发送GET请求
 
-        Args:
+        参数:
             provider: 提供商配置对象
             endpoint: API端点路径
             params: 查询参数
             timeout: 超时时间（秒）
 
-        Returns:
+        返回:
             API响应数据
         """
         base_url = self.get_base_url(provider)
@@ -156,14 +156,14 @@ class OpenAIClient(BaseLLMClient):
     def check_response(self, response: Any, is_ernie: bool = False) -> Any:
         """检查API响应
 
-        Args:
+        参数:
             response: API响应数据
             is_ernie: 是否为文心一言API
 
-        Returns:
+        返回:
             响应数据
 
-        Raises:
+        异常:
             APIError: 当API返回错误时
         """
         provider = "ernie" if is_ernie else "openai"

@@ -11,7 +11,7 @@ class ZhipuImageCapability:
     def __init__(self, client: ZhipuClient | None = None):
         """初始化图像能力
 
-        Args:
+        参数:
             client: 智谱客户端实例
         """
         self._client = client or ZhipuClient()
@@ -26,14 +26,14 @@ class ZhipuImageCapability:
     ) -> list[str]:
         """生成图像
 
-        Args:
+        参数:
             prompt: 图像描述文本
             model: 模型名称
             size: 图像尺寸
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             生成的图像 URL 列表
         """
         request_data: dict[str, Any] = {
@@ -64,7 +64,7 @@ class ZhipuImageCapability:
     ) -> list[str]:
         """编辑图像
 
-        Args:
+        参数:
             image: 原始图像 URL 或 Base64
             prompt: 编辑描述
             mask: 蒙版图像（智谱暂不支持，保留接口统一）
@@ -73,7 +73,7 @@ class ZhipuImageCapability:
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             编辑后的图像 URL 列表
         """
         request_data: dict[str, Any] = {
@@ -103,14 +103,14 @@ class ZhipuImageCapability:
     ) -> list[str]:
         """创建图像变体
 
-        Args:
+        参数:
             image: 原始图像 URL 或 Base64
             model: 模型名称
             size: 图像尺寸
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             变体图像 URL 列表
         """
         request_data: dict[str, Any] = {

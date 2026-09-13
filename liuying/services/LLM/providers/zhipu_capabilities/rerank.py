@@ -10,7 +10,7 @@ class ZhipuRerankCapability:
     def __init__(self, client: ZhipuClient | None = None):
         """初始化重排序能力
 
-        Args:
+        参数:
             client: 智谱客户端实例
         """
         self._client = client or ZhipuClient()
@@ -25,14 +25,14 @@ class ZhipuRerankCapability:
     ) -> list[dict[str, Any]]:
         """文本重排序
 
-        Args:
+        参数:
             query: 查询文本
             documents: 待排序文档列表
             model: 重排序模型名称
             top_n: 返回前 N 个结果
             options: 额外选项
 
-        Returns:
+        返回:
             重排序结果列表
         """
         request_data: dict[str, Any] = {
@@ -71,14 +71,14 @@ class ZhipuRerankCapability:
     ) -> list[dict[str, Any]]:
         """带分数阈值的重排序
 
-        Args:
+        参数:
             query: 查询文本
             documents: 文档列表
             model: 模型名称
             threshold: 相关性分数阈值
             options: 额外选项
 
-        Returns:
+        返回:
             过滤后的结果列表
         """
         results = await self.rerank(query, documents, model, options=options)

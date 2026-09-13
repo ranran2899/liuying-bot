@@ -11,7 +11,7 @@ class OpenAIImageCapability:
     def __init__(self, client: OpenAIClient | None = None):
         """初始化图像能力
 
-        Args:
+        参数:
             client: OpenAI 客户端实例
         """
         self._client = client or OpenAIClient()
@@ -26,14 +26,14 @@ class OpenAIImageCapability:
     ) -> list[str]:
         """生成图片
 
-        Args:
+        参数:
             prompt: 图片描述
             model: 模型名称
             size: 图片尺寸
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             图片 URL 列表
         """
         provider = self._client.get_random_provider()
@@ -71,7 +71,7 @@ class OpenAIImageCapability:
     ) -> list[str]:
         """编辑图片
 
-        Args:
+        参数:
             image: 原始图片路径或 URL
             prompt: 编辑描述
             mask: 蒙版图片路径或 URL
@@ -80,7 +80,7 @@ class OpenAIImageCapability:
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             图片 URL 列表
         """
         provider = self._client.get_random_provider()
@@ -119,14 +119,14 @@ class OpenAIImageCapability:
     ) -> list[str]:
         """创建图片变体
 
-        Args:
+        参数:
             image: 原始图片路径或 URL
             model: 模型名称
             size: 图片尺寸
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             图片 URL 列表
         """
         provider = self._client.get_random_provider()

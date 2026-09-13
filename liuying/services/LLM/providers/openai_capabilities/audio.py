@@ -12,7 +12,7 @@ class OpenAIAudioCapability:
     def __init__(self, client: OpenAIClient | None = None):
         """初始化语音能力
 
-        Args:
+        参数:
             client: OpenAI 客户端实例
         """
         self._client = client or OpenAIClient()
@@ -27,14 +27,14 @@ class OpenAIAudioCapability:
     ) -> bytes:
         """文本转语音
 
-        Args:
+        参数:
             text: 要转换的文本
             model: TTS 模型名称
             voice: 声音类型
             speed: 语速
             options: 额外选项
 
-        Returns:
+        返回:
             音频字节数据
         """
         provider = self._client.get_random_provider()
@@ -72,13 +72,13 @@ class OpenAIAudioCapability:
     ) -> str:
         """语音转文本
 
-        Args:
+        参数:
             audio: 音频文件字节数据
             model: STT 模型名称
             language: 音频语言代码
             options: 额外选项
 
-        Returns:
+        返回:
             转录文本
         """
         provider = self._client.get_random_provider()
@@ -117,12 +117,12 @@ class OpenAIAudioCapability:
     ) -> str:
         """音频翻译（翻译为英文）
 
-        Args:
+        参数:
             audio: 音频文件字节数据
             model: 翻译模型名称
             options: 额外选项
 
-        Returns:
+        返回:
             翻译后的文本
         """
         provider = self._client.get_random_provider()
@@ -160,13 +160,13 @@ class OpenAIAudioCapability:
     ) -> str:
         """从文件路径进行语音转文本
 
-        Args:
+        参数:
             audio_file: 音频文件路径
             model: STT 模型名称
             language: 音频语言代码
             options: 额外选项
 
-        Returns:
+        返回:
             转录文本
         """
         audio_bytes = Path(audio_file).read_bytes()
@@ -180,12 +180,12 @@ class OpenAIAudioCapability:
     ) -> str:
         """从文件路径进行音频翻译
 
-        Args:
+        参数:
             audio_file: 音频文件路径
             model: 翻译模型名称
             options: 额外选项
 
-        Returns:
+        返回:
             翻译后的文本
         """
         audio_bytes = Path(audio_file).read_bytes()
@@ -194,7 +194,7 @@ class OpenAIAudioCapability:
     async def get_available_voices(self) -> list[str]:
         """获取可用的声音类型列表
 
-        Returns:
+        返回:
             声音类型列表
         """
         return ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]

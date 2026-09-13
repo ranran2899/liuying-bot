@@ -10,7 +10,7 @@ class ZhipuTokenizerCapability:
     def __init__(self, client: ZhipuClient | None = None):
         """初始化分词能力
 
-        Args:
+        参数:
             client: 智谱客户端实例
         """
         self._client = client or ZhipuClient()
@@ -22,11 +22,11 @@ class ZhipuTokenizerCapability:
     ) -> int:
         """计算文本或消息列表的 token 数量
 
-        Args:
+        参数:
             text: 输入文本或消息列表
             model: 模型名称
 
-        Returns:
+        返回:
             token 数量
         """
         if isinstance(text, list):
@@ -40,11 +40,11 @@ class ZhipuTokenizerCapability:
     async def _count_text(self, text: str, model: str) -> int:
         """计算单段文本的 token 数量
 
-        Args:
+        参数:
             text: 输入文本
             model: 模型名称
 
-        Returns:
+        返回:
             token 数量
         """
         request_data: dict[str, Any] = {"model": model, "text": text}
@@ -56,10 +56,10 @@ class ZhipuTokenizerCapability:
     def estimate(self, text: str) -> int:
         """快速估算 token 数量（基于字符数，不调用 API）
 
-        Args:
+        参数:
             text: 输入文本
 
-        Returns:
+        返回:
             估算的 token 数量
         """
         chinese_chars = sum(1 for char in text if "\u4e00" <= char <= "\u9fff")

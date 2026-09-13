@@ -46,7 +46,7 @@ class LLMManager:
     def config(self) -> LLMConfig:
         """获取LLM全局配置
 
-        Returns:
+        返回:
             LLM配置对象
         """
         return llm_config_manager.config
@@ -56,10 +56,10 @@ class LLMManager:
     ) -> tuple[ProviderConfig, ModelConfig] | None:
         """获取指定模型的完整配置
 
-        Args:
+        参数:
             model_name: 模型名称
 
-        Returns:
+        返回:
             (提供商配置, 模型配置) 元组，不存在则返回None
         """
         return self.config.get_model_config(model_name)
@@ -67,10 +67,10 @@ class LLMManager:
     def get_provider_config(self, provider_name: str) -> ProviderConfig | None:
         """获取指定提供商配置
 
-        Args:
+        参数:
             provider_name: 提供商名称
 
-        Returns:
+        返回:
             提供商配置，不存在则返回None
         """
         return self.config.get_provider(provider_name)
@@ -78,10 +78,10 @@ class LLMManager:
     def get_provider(self, provider_name: str) -> BaseProvider | None:
         """获取指定 Provider 实例
 
-        Args:
+        参数:
             provider_name: 提供商名称
 
-        Returns:
+        返回:
             Provider 实例，不存在则返回 None
         """
         return self._providers.get(provider_name.lower())
@@ -89,7 +89,7 @@ class LLMManager:
     def get_default_provider(self) -> BaseProvider | None:
         """获取默认 Provider 实例
 
-        Returns:
+        返回:
             默认 Provider 实例，不存在则返回 None
         """
         if not self.config.default_model_name:
@@ -107,7 +107,7 @@ class LLMManager:
     def get_all_providers(self) -> list[ProviderConfig]:
         """获取所有已配置的提供商
 
-        Returns:
+        返回:
             提供商配置列表
         """
         return self.config.providers
@@ -115,7 +115,7 @@ class LLMManager:
     def get_available_models(self) -> list[ModelConfig]:
         """获取所有可用模型列表
 
-        Returns:
+        返回:
             模型配置列表
         """
         models: list[ModelConfig] = []
@@ -126,7 +126,7 @@ class LLMManager:
     def get_available_model_names(self) -> list[str]:
         """获取所有可用模型名称列表
 
-        Returns:
+        返回:
             模型名称列表
         """
         return [m.model_name for m in self.get_available_models()]
@@ -136,11 +136,11 @@ class LLMManager:
     ) -> Any | None:
         """获取指定 Provider 的某个能力实现
 
-        Args:
+        参数:
             provider_name: 提供商名称
             capability: 能力类型
 
-        Returns:
+        返回:
             能力实现实例，不存在或不支持则返回 None
         """
         if provider := self._providers.get(provider_name.lower()):
@@ -150,10 +150,10 @@ class LLMManager:
     def get_capabilities(self, provider_name: str) -> dict[str, Any]:
         """获取指定 Provider 支持的所有能力实现
 
-        Args:
+        参数:
             provider_name: 提供商名称
 
-        Returns:
+        返回:
             能力名称到实例的映射字典
         """
         if provider := self._providers.get(provider_name.lower()):
@@ -173,17 +173,17 @@ class LLMManager:
     ) -> Any:
         """统一调用指定 Provider 的某个能力方法
 
-        Args:
+        参数:
             provider_name: 提供商名称
             capability: 能力类型
             method: 能力方法名
             *args: 位置参数
             **kwargs: 关键字参数
 
-        Returns:
+        返回:
             方法返回值
 
-        Raises:
+        异常:
             APIError: Provider 不存在或能力不支持
         """
         cap = self.get_capability(provider_name, capability)

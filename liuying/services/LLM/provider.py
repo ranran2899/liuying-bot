@@ -24,20 +24,20 @@ _PROVIDER_REGISTRY: dict[str, type["BaseProvider"]] = {}
 def register_provider(api_type: str) -> Any:
     """Provider 注册装饰器
 
-    Args:
+    参数:
         api_type: API 类型标识
 
-    Returns:
+    返回:
         装饰器函数
     """
 
     def wrapper(cls: type["BaseProvider"]) -> type["BaseProvider"]:
         """将 Provider 类注册到注册表
 
-        Args:
+        参数:
             cls: Provider 类
 
-        Returns:
+        返回:
             注册后的 Provider 类
         """
         _PROVIDER_REGISTRY[api_type] = cls
@@ -49,10 +49,10 @@ def register_provider(api_type: str) -> Any:
 def get_provider_class(api_type: str) -> type["BaseProvider"] | None:
     """根据 API 类型获取已注册的 Provider 类
 
-    Args:
+    参数:
         api_type: API 类型标识
 
-    Returns:
+    返回:
         Provider 类，未注册则返回 None
     """
     return _PROVIDER_REGISTRY.get(api_type)
@@ -61,7 +61,7 @@ def get_provider_class(api_type: str) -> type["BaseProvider"] | None:
 def get_registered_api_types() -> list[str]:
     """获取所有已注册的 API 类型
 
-    Returns:
+    返回:
         API 类型字符串列表
     """
     return list(_PROVIDER_REGISTRY.keys())
@@ -79,7 +79,7 @@ class BaseProvider(ABC):
     def __init__(self, config: ProviderConfig):
         """初始化 Provider
 
-        Args:
+        参数:
             config: 提供商配置
         """
         self._config = config
@@ -88,7 +88,7 @@ class BaseProvider(ABC):
     def name(self) -> str:
         """获取 Provider 名称
 
-        Returns:
+        返回:
             Provider 名称
         """
         return self._config.name
@@ -97,7 +97,7 @@ class BaseProvider(ABC):
     def config(self) -> ProviderConfig:
         """获取 Provider 配置
 
-        Returns:
+        返回:
             提供商配置对象
         """
         return self._config
@@ -106,7 +106,7 @@ class BaseProvider(ABC):
     def capabilities(self) -> set[Capability]:
         """获取当前 Provider 支持的所有能力
 
-        Returns:
+        返回:
             能力类型集合
         """
         ...
@@ -115,10 +115,10 @@ class BaseProvider(ABC):
     def get_capability(self, capability: Capability) -> Any | None:
         """获取指定能力的实现实例
 
-        Args:
+        参数:
             capability: 能力类型
 
-        Returns:
+        返回:
             能力实现实例，不支持则返回 None
         """
         ...
@@ -126,10 +126,10 @@ class BaseProvider(ABC):
     def has_capability(self, capability: Capability) -> bool:
         """判断是否支持指定能力
 
-        Args:
+        参数:
             capability: 能力类型
 
-        Returns:
+        返回:
             是否支持
         """
         return capability in self.capabilities()
@@ -142,18 +142,18 @@ class BaseProvider(ABC):
     ) -> tuple[str, str]:
         """便捷方法：执行对话
 
-        Args:
+        参数:
             model: 模型名称
             messages: 对话消息列表
             options: 额外选项，原样透传给模型 API（如 reasoning_effort、
                 thinking 等原生思考参数，由调用方自行指定）
 
-        Returns:
+        返回:
             tuple[str, str]: (reasoning_content, content)
                 - reasoning_content: 思考链内容，无思考链时为空串
                 - content: 正常回复内容
 
-        Raises:
+        异常:
             APIError: 当前 Provider 不支持对话能力
         """
         cap = self.get_capability(Capability.CHAT)
@@ -175,14 +175,14 @@ class BaseProvider(ABC):
     ) -> list[str]:
         """便捷方法：生成图像
 
-        Args:
+        参数:
             prompt: 图像描述
             model: 模型名称
             size: 图像尺寸
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             图像 URL 列表
         """
         cap = self.get_capability(Capability.IMAGE)
@@ -204,14 +204,14 @@ class BaseProvider(ABC):
     ) -> bytes:
         """便捷方法：文本转语音
 
-        Args:
+        参数:
             text: 要转换的文本
             model: TTS 模型名称
             voice: 声音类型
             speed: 语速
             options: 额外选项
 
-        Returns:
+        返回:
             音频字节数据
         """
         cap = self.get_capability(Capability.AUDIO)
@@ -232,13 +232,13 @@ class BaseProvider(ABC):
     ) -> str:
         """便捷方法：语音转文本
 
-        Args:
+        参数:
             audio: 音频字节数据
             model: STT 模型名称
             language: 音频语言代码
             options: 额外选项
 
-        Returns:
+        返回:
             转录文本
         """
         cap = self.get_capability(Capability.AUDIO)
@@ -260,14 +260,14 @@ class BaseProvider(ABC):
     ) -> dict[str, Any]:
         """便捷方法：生成视频
 
-        Args:
+        参数:
             prompt: 视频描述
             model: 视频模型名称
             duration: 视频时长（秒）
             resolution: 分辨率
             options: 额外选项
 
-        Returns:
+        返回:
             包含视频信息的字典
         """
         cap = self.get_capability(Capability.VIDEO)
@@ -288,13 +288,13 @@ class BaseProvider(ABC):
     ) -> list[list[float]]:
         """便捷方法：创建文本嵌入
 
-        Args:
+        参数:
             input_text: 输入文本或文本列表
             model: 嵌入模型名称
             dimensions: 嵌入维度
             options: 额外选项
 
-        Returns:
+        返回:
             嵌入向量列表
         """
         cap = self.get_capability(Capability.EMBEDDING)
@@ -316,14 +316,14 @@ class BaseProvider(ABC):
     ) -> list[dict[str, Any]]:
         """便捷方法：文本重排序
 
-        Args:
+        参数:
             query: 查询文本
             documents: 待排序文档列表
             model: 重排序模型名称
             top_n: 返回前 N 个结果
             options: 额外选项
 
-        Returns:
+        返回:
             重排序结果列表
         """
         cap = self.get_capability(Capability.RERANK)
@@ -344,13 +344,13 @@ class BaseProvider(ABC):
     ) -> dict[str, Any]:
         """便捷方法：解析文档
 
-        Args:
+        参数:
             file: 文件字节数据或 URL
             file_name: 文件名
             model: 解析模型名称
             options: 额外选项
 
-        Returns:
+        返回:
             解析结果字典
         """
         cap = self.get_capability(Capability.DOCUMENT)
@@ -369,11 +369,11 @@ class BaseProvider(ABC):
     ) -> int:
         """便捷方法：计算 token 数量
 
-        Args:
+        参数:
             text: 输入文本或消息列表
             model: 模型名称
 
-        Returns:
+        返回:
             token 数量
         """
         cap = self.get_capability(Capability.TOKENIZER)
@@ -394,13 +394,13 @@ class BaseProvider(ABC):
     ) -> dict[str, Any]:
         """便捷方法：工具级网络搜索
 
-        Args:
+        参数:
             query: 搜索关键词
             engine: 搜索引擎类型
             count: 返回结果数量
             options: 额外选项
 
-        Returns:
+        返回:
             搜索结果字典
         """
         cap = self.get_capability(Capability.TOOLS)
@@ -421,13 +421,13 @@ class BaseProvider(ABC):
     ) -> Any:
         """便捷方法：统一网络搜索
 
-        Args:
+        参数:
             query: 搜索关键词
             engine: 搜索引擎名称，None 则使用默认
             count: 返回结果数量
             options: 额外选项
 
-        Returns:
+        返回:
             搜索响应对象
         """
         cap = self.get_capability(Capability.WEB_SEARCH)

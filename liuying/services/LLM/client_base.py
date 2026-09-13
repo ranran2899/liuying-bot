@@ -15,7 +15,7 @@ class BaseLLMClient(ABC):
     def __init__(self, provider_name: str):
         """初始化客户端基类
 
-        Args:
+        参数:
             provider_name: 提供商名称，用于日志和错误信息
         """
         self._provider_name = provider_name
@@ -25,7 +25,7 @@ class BaseLLMClient(ABC):
     def provider_name(self) -> str:
         """获取提供商名称
 
-        Returns:
+        返回:
             提供商名称
         """
         return self._provider_name
@@ -34,7 +34,7 @@ class BaseLLMClient(ABC):
     def timeout(self) -> int:
         """获取超时配置
 
-        Returns:
+        返回:
             超时时间（秒）
         """
         return self._client_settings.timeout
@@ -43,7 +43,7 @@ class BaseLLMClient(ABC):
     def max_retries(self) -> int:
         """获取最大重试次数
 
-        Returns:
+        返回:
             最大重试次数
         """
         return self._client_settings.max_retries
@@ -56,12 +56,12 @@ class BaseLLMClient(ABC):
     ) -> dict[str, str]:
         """构建请求头
 
-        Args:
+        参数:
             api_key: API密钥
             extra_headers: 额外请求头
             content_type: 内容类型
 
-        Returns:
+        返回:
             请求头字典
         """
         headers: dict[str, str] = {"Content-Type": content_type}
@@ -74,11 +74,11 @@ class BaseLLMClient(ABC):
     def build_url(self, base_url: str, endpoint: str) -> str:
         """构建完整URL
 
-        Args:
+        参数:
             base_url: 基础URL
             endpoint: API端点路径
 
-        Returns:
+        返回:
             完整URL
         """
         return f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
@@ -94,7 +94,7 @@ class BaseLLMClient(ABC):
     ) -> Any:
         """发送POST请求并解析JSON响应
 
-        Args:
+        参数:
             base_url: 基础URL
             endpoint: API端点路径
             data: 请求数据
@@ -102,7 +102,7 @@ class BaseLLMClient(ABC):
             timeout: 超时时间（秒）
             **kwargs: 额外参数
 
-        Returns:
+        返回:
             API响应数据
         """
         url = self.build_url(base_url, endpoint)
@@ -126,14 +126,14 @@ class BaseLLMClient(ABC):
     ) -> Any:
         """发送POST请求并返回原始响应
 
-        Args:
+        参数:
             base_url: 基础URL
             endpoint: API端点路径
             data: 请求数据
             headers: 请求头
             timeout: 超时时间（秒）
 
-        Returns:
+        返回:
             原始响应数据
         """
         url = self.build_url(base_url, endpoint)
@@ -152,14 +152,14 @@ class BaseLLMClient(ABC):
     ) -> Any:
         """发送GET请求并解析JSON响应
 
-        Args:
+        参数:
             base_url: 基础URL
             endpoint: API端点路径
             headers: 请求头
             params: 查询参数
             timeout: 超时时间（秒）
 
-        Returns:
+        返回:
             API响应数据
         """
         url = self.build_url(base_url, endpoint)
@@ -184,7 +184,7 @@ class BaseLLMClient(ABC):
     ) -> Any:
         """发送multipart POST请求（用于文件上传）
 
-        Args:
+        参数:
             base_url: 基础URL
             endpoint: API端点路径
             files: 文件数据
@@ -192,7 +192,7 @@ class BaseLLMClient(ABC):
             headers: 请求头
             timeout: 超时时间（秒）
 
-        Returns:
+        返回:
             API响应数据
         """
         url = self.build_url(base_url, endpoint)
@@ -211,13 +211,13 @@ class BaseLLMClient(ABC):
     def check_response(self, response: Any) -> Any:
         """检查API响应
 
-        Args:
+        参数:
             response: API响应数据
 
-        Returns:
+        返回:
             响应数据
 
-        Raises:
+        异常:
             APIError: 当API返回错误时
         """
         if not response:
@@ -252,7 +252,7 @@ class BaseLLMClient(ABC):
     def get_provider_config(self) -> ProviderConfig | None:
         """获取当前提供商配置
 
-        Returns:
+        返回:
             提供商配置对象，不存在则返回None
         """
         ...

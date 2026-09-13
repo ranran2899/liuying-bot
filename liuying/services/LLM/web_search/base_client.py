@@ -44,7 +44,7 @@ class BaseSearchClient(ABC):
     def _get_api_key(self) -> str:
         """获取 API 密钥，子类应覆盖此方法从自身配置系统读取
 
-        Raises:
+        异常:
             APIKeyError: API密钥未配置
         """
         raise APIKeyError(self._provider_name)

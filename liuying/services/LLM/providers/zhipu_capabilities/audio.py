@@ -12,7 +12,7 @@ class ZhipuAudioCapability:
     def __init__(self, client: ZhipuClient | None = None):
         """初始化语音能力
 
-        Args:
+        参数:
             client: 智谱客户端实例
         """
         self._client = client or ZhipuClient()
@@ -27,14 +27,14 @@ class ZhipuAudioCapability:
     ) -> bytes:
         """文本转语音（TTS）
 
-        Args:
+        参数:
             text: 要转换的文本
             model: TTS 模型名称
             voice: 声音类型
             speed: 语速
             options: 额外选项
 
-        Returns:
+        返回:
             音频字节数据
         """
         request_data: dict[str, Any] = {
@@ -74,13 +74,13 @@ class ZhipuAudioCapability:
     ) -> str:
         """语音转文本（STT/Whisper）
 
-        Args:
+        参数:
             audio: 音频文件字节数据
             model: 模型名称
             language: 音频语言代码
             options: 额外选项
 
-        Returns:
+        返回:
             转录文本
         """
         files = {"file": ("audio.wav", audio, "audio/wav")}
@@ -107,12 +107,12 @@ class ZhipuAudioCapability:
     ) -> str:
         """音频翻译（翻译为英文）
 
-        Args:
+        参数:
             audio: 音频文件字节数据
             model: 模型名称
             options: 额外选项
 
-        Returns:
+        返回:
             翻译后的文本
         """
         files = {"file": ("audio.wav", audio, "audio/wav")}
@@ -135,13 +135,13 @@ class ZhipuAudioCapability:
     ) -> str:
         """通过 URL 进行语音转文本
 
-        Args:
+        参数:
             audio_url: 音频文件 URL
             model: 模型名称
             language: 语言代码
             options: 额外选项
 
-        Returns:
+        返回:
             转录文本
         """
         request_data: dict[str, Any] = {"model": model, "url": audio_url}

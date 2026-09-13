@@ -9,18 +9,29 @@ class FreshnessType(StrEnum):
     """时间范围类型"""
 
     NO_LIMIT = "noLimit"
+    """无时间限制"""
     ONE_DAY = "oneDay"
+    """最近一天"""
     ONE_WEEK = "oneWeek"
+    """最近一周"""
     ONE_MONTH = "oneMonth"
+    """最近一个月"""
     ONE_YEAR = "oneYear"
+    """最近一年"""
 
 
 class ResourceType(StrEnum):
     """资源类型"""
 
     WEB = "web"
+    """网页"""
     IMAGE = "image"
+    """图片"""
     VIDEO = "video"
+    """视频"""
+    AUDIO = "audio"
+    """音频"""
+
 
 
 @dataclass(slots=True)
@@ -88,7 +99,7 @@ class ImageResult:
 class SearchRequest:
     """搜索请求
 
-    Attributes:
+    属性:
         query: 搜索关键词
         count: 返回结果数量
         summary: 是否返回摘要
@@ -126,7 +137,7 @@ class SearchRequest:
 class SearchResponse:
     """搜索响应
 
-    Attributes:
+    属性:
         query: 搜索关键词
         web_pages: 网页结果列表
         images: 图片结果列表

@@ -39,7 +39,7 @@ class ZhipuProvider(BaseProvider):
     def __init__(self, config: ProviderConfig):
         """初始化智谱 Provider
 
-        Args:
+        参数:
             config: 提供商配置
         """
         super().__init__(config)
@@ -56,7 +56,7 @@ class ZhipuProvider(BaseProvider):
     def capabilities(self) -> set[Capability]:
         """获取支持的能力集合
 
-        Returns:
+        返回:
             能力类型集合
         """
         declared = self._config.capabilities
@@ -69,10 +69,10 @@ class ZhipuProvider(BaseProvider):
     def get_capability(self, capability: Capability) -> Any | None:
         """获取指定能力的实现
 
-        Args:
+        参数:
             capability: 能力类型
 
-        Returns:
+        返回:
             能力实现实例，不支持则返回 None
         """
         mapping = {

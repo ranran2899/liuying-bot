@@ -11,7 +11,7 @@ class ZhipuDocumentCapability:
     def __init__(self, client: ZhipuClient | None = None):
         """初始化文档解析能力
 
-        Args:
+        参数:
             client: 智谱客户端实例
         """
         self._client = client or ZhipuClient()
@@ -25,13 +25,13 @@ class ZhipuDocumentCapability:
     ) -> dict[str, Any]:
         """解析文档
 
-        Args:
+        参数:
             file: 文件字节数据或 URL
             file_name: 文件名（字节模式下必须）
             model: 解析模型名称
             options: 额外选项
 
-        Returns:
+        返回:
             解析结果字典
         """
         if isinstance(file, bytes):
@@ -62,12 +62,12 @@ class ZhipuDocumentCapability:
     ) -> str:
         """提取文档纯文本内容
 
-        Args:
+        参数:
             file: 文件字节数据或 URL
             file_name: 文件名
             options: 额外选项
 
-        Returns:
+        返回:
             提取的文本内容
         """
         result = await self.parse(file, file_name, options=options)
@@ -81,12 +81,12 @@ class ZhipuDocumentCapability:
     ) -> dict[str, Any]:
         """提取文档结构化内容
 
-        Args:
+        参数:
             file: 文件字节数据或 URL
             file_name: 文件名
             options: 额外选项
 
-        Returns:
+        返回:
             结构化数据字典
         """
         result = await self.parse(file, file_name, options=options)
@@ -102,10 +102,10 @@ class ZhipuDocumentCapability:
     def _get_mime_type(file_name: str) -> str:
         """根据文件名获取 MIME 类型
 
-        Args:
+        参数:
             file_name: 文件名
 
-        Returns:
+        返回:
             MIME 类型字符串
         """
         mime_map: dict[str, str] = {

@@ -30,7 +30,7 @@ class ZhipuClient(BaseLLMClient):
     def __init__(self, api_key: str | None = None, api_base: str | None = None):
         """初始化客户端
 
-        Args:
+        参数:
             api_key: 显式 API 密钥。传值时使用该值，跳过 model 路由。
             api_base: 显式 API 基础 URL。传值时使用该值，跳过 model 路由。
         """
@@ -43,11 +43,11 @@ class ZhipuClient(BaseLLMClient):
     ) -> ProviderConfig | None:
         """获取当前请求应使用的提供商配置
 
-        Args:
+        参数:
             model: 模型名，传入时按 model 路由到对应 provider；
                 None 时回退到默认 zhipu provider。
 
-        Returns:
+        返回:
             ProviderConfig 或 None
         """
         return self._resolve_provider(model)
@@ -59,10 +59,25 @@ class ZhipuClient(BaseLLMClient):
         第一个 api_type=zhipu 的 provider。显式 api_key/api_base
         模式下返回 None，由调用方使用显式配置。
 
-        Args:
+        参数:
             model: 模型名，可为 None
 
-        Returns:
+        返回:
+            解析到的 ProviderConfig；解析不到返回 None
+        """
+        return self._resolve_provider(model)
+
+    def _resolve_provider(self, model: str | None) -> ProviderConfig | None:
+        """解析指定 model 对应的 provider 配置
+
+        优先级：model 配置 -> 名为 zhipu 的 provider ->
+        第一个 api_type=zhipu 的 provider。显式 api_key/api_base
+        模式下返回 None，由调用方使用显式配置。
+
+        参数:
+            model: 模型名，可为 None
+
+        返回:
             解析到的 ProviderConfig；解析不到返回 None
         """
         if self._explicit_api_key or self._explicit_api_base:
@@ -93,10 +108,10 @@ class ZhipuClient(BaseLLMClient):
         显式传入的 api_key/api_base 直接覆盖；否则根据 model 找
         对应 provider 与 model 配置，找不到时回退到默认 zhipu 配置。
 
-        Args:
+        参数:
             model: 模型名，可为 None
 
-        Returns:
+        返回:
             (api_key, api_base, provider_cfg, model_cfg) 元组
         """
         if self._explicit_api_key or self._explicit_api_base:
@@ -148,10 +163,10 @@ class ZhipuClient(BaseLLMClient):
     def get_base_url(self, model: str | None = None) -> str:
         """获取指定 model 对应的 API 基础 URL
 
-        Args:
+        参数:
             model: 模型名，None 时返回默认 base URL
 
-        Returns:
+        返回:
             API 基础 URL
         """
         if self._explicit_api_base:
@@ -166,11 +181,11 @@ class ZhipuClient(BaseLLMClient):
     ) -> dict[str, str]:
         """构建请求头，自动合并 provider 与 model 的 extra_headers
 
-        Args:
+        参数:
             model: 模型名，可为 None
             content_type: 内容类型
 
-        Returns:
+        返回:
             请求头字典
         """
         api_key, _, provider_cfg, model_cfg = self._resolve_for_model(model)
@@ -194,14 +209,14 @@ class ZhipuClient(BaseLLMClient):
     ) -> Any:
         """发送POST请求
 
-        Args:
+        参数:
             endpoint: API 端点路径
             data: 请求数据
             timeout: 超时（秒）
             model: 模型名，用于按 model 路由到正确的 provider 配置
             **kwargs: 透传至 AsyncHttpx.post_json
 
-        Returns:
+        返回:
             解析后的响应数据
         """
         _, base_url, _, _ = self._resolve_for_model(model)
@@ -227,14 +242,14 @@ class ZhipuClient(BaseLLMClient):
     ) -> Any:
         """发送 multipart POST 请求（文件上传）
 
-        Args:
+        参数:
             endpoint: API 端点路径
             files: 文件数据
             data: 表单数据
             timeout: 超时（秒）
             model: 模型名，用于按 model 路由
 
-        Returns:
+        返回:
             解析后的响应数据
         """
         api_key, base_url, _, _ = self._resolve_for_model(model)
@@ -260,13 +275,13 @@ class ZhipuClient(BaseLLMClient):
     ) -> Any:
         """发送GET请求
 
-        Args:
+        参数:
             endpoint: API 端点路径
             params: 查询参数
             timeout: 超时（秒）
             model: 模型名，用于按 model 路由
 
-        Returns:
+        返回:
             解析后的响应数据
         """
         _, base_url, _, _ = self._resolve_for_model(model)

@@ -12,7 +12,7 @@ class OpenAIVideoCapability:
     def __init__(self, client: OpenAIClient | None = None):
         """初始化视频能力
 
-        Args:
+        参数:
             client: OpenAI 客户端实例
         """
         self._client = client or OpenAIClient()
@@ -27,14 +27,14 @@ class OpenAIVideoCapability:
     ) -> dict[str, Any]:
         """生成视频
 
-        Args:
+        参数:
             prompt: 视频描述
             model: 视频模型名称
             duration: 视频时长（秒）
             resolution: 分辨率
             options: 额外选项
 
-        Returns:
+        返回:
             包含视频信息的字典
         """
         provider = self._client.get_random_provider()
@@ -61,10 +61,10 @@ class OpenAIVideoCapability:
     async def get_status(self, video_id: str) -> dict[str, Any]:
         """获取视频生成状态
 
-        Args:
+        参数:
             video_id: 视频任务 ID
 
-        Returns:
+        返回:
             包含状态信息的字典
         """
         provider = self._client.get_random_provider()
@@ -88,12 +88,12 @@ class OpenAIVideoCapability:
     ) -> dict[str, Any]:
         """等待视频生成完成
 
-        Args:
+        参数:
             video_id: 视频任务 ID
             poll_interval: 轮询间隔（秒）
             max_wait: 最大等待时间（秒）
 
-        Returns:
+        返回:
             包含视频信息的字典
         """
         waited = 0
@@ -122,10 +122,10 @@ class OpenAIVideoCapability:
     async def cancel(self, video_id: str) -> bool:
         """取消视频生成任务
 
-        Args:
+        参数:
             video_id: 视频任务 ID
 
-        Returns:
+        返回:
             是否取消成功
         """
         provider = self._client.get_random_provider()

@@ -12,7 +12,7 @@ class ToolsAPI:
     def __init__(self, client: ZhipuClient | None = None):
         """初始化工具API
 
-        Args:
+        参数:
             client: 智谱AI客户端实例
         """
         self._client = client or ZhipuClient()
@@ -34,7 +34,7 @@ class ToolsAPI:
     ) -> dict[str, Any]:
         """网络搜索
 
-        Args:
+        参数:
             query: 搜索关键词，建议不超过70个字符
             search_engine: 搜索引擎类型
             count: 返回结果数量，范围1-50，默认10
@@ -44,7 +44,7 @@ class ToolsAPI:
             content_size: 返回内容大小
             **kwargs: 额外参数
 
-        Returns:
+        返回:
             搜索结果，包含 search_result 列表
         """
         request_data: dict[str, Any] = {
@@ -71,11 +71,11 @@ class ToolsAPI:
     ) -> dict[str, Any]:
         """网页阅读/内容提取
 
-        Args:
+        参数:
             url: 要读取的网页URL
             **kwargs: 额外参数
 
-        Returns:
+        返回:
             网页内容，包含 reader_result 字段
         """
         request_data: dict[str, Any] = {"url": url}
@@ -96,13 +96,13 @@ class ToolsAPI:
     ) -> dict[str, Any]:
         """搜索并总结
 
-        Args:
+        参数:
             query: 搜索查询
             max_results: 最大结果数
             search_engine: 搜索引擎类型
             **kwargs: 额外参数
 
-        Returns:
+        返回:
             包含搜索结果和摘要的字典
         """
         search_result = await self.web_search(

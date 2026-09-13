@@ -10,7 +10,7 @@ class ZhipuEmbeddingCapability:
     def __init__(self, client: ZhipuClient | None = None):
         """初始化文本嵌入能力
 
-        Args:
+        参数:
             client: 智谱客户端实例
         """
         self._client = client or ZhipuClient()
@@ -24,13 +24,13 @@ class ZhipuEmbeddingCapability:
     ) -> list[list[float]]:
         """创建文本嵌入向量
 
-        Args:
+        参数:
             input_text: 输入文本或文本列表
             model: 嵌入模型名称
             dimensions: 嵌入维度
             options: 额外选项
 
-        Returns:
+        返回:
             嵌入向量列表
         """
         request_data: dict[str, Any] = {
@@ -62,13 +62,13 @@ class ZhipuEmbeddingCapability:
     ) -> list[list[float]]:
         """批量创建文本嵌入（自动分批处理）
 
-        Args:
+        参数:
             texts: 文本列表
             model: 模型名称
             batch_size: 每批处理数量
             dimensions: 嵌入维度
 
-        Returns:
+        返回:
             嵌入向量列表
         """
         all_embeddings: list[list[float]] = []
@@ -83,10 +83,10 @@ class ZhipuEmbeddingCapability:
     def get_dimension(self, model: str) -> int:
         """获取模型的默认嵌入维度
 
-        Args:
+        参数:
             model: 模型名称
 
-        Returns:
+        返回:
             嵌入维度数
         """
         dimension_map: dict[str, int] = {

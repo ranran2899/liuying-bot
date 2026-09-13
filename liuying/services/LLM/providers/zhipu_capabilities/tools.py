@@ -10,7 +10,7 @@ class ZhipuToolsCapability:
     def __init__(self, client):
         """初始化工具能力
 
-        Args:
+        参数:
             client: 智谱客户端实例
         """
         self._api = ToolsAPI(client)
@@ -24,13 +24,13 @@ class ZhipuToolsCapability:
     ) -> dict[str, Any]:
         """网络搜索
 
-        Args:
+        参数:
             query: 搜索关键词
             engine: 搜索引擎类型
             count: 返回结果数量
             options: 额外选项
 
-        Returns:
+        返回:
             搜索结果字典
         """
         options = options or {}
@@ -48,11 +48,11 @@ class ZhipuToolsCapability:
     ) -> dict[str, Any]:
         """网页阅读
 
-        Args:
+        参数:
             url: 网页 URL
             options: 额外选项
 
-        Returns:
+        返回:
             网页内容字典
         """
         options = options or {}

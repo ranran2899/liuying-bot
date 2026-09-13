@@ -15,7 +15,7 @@ class ZhipuChatCapability:
     def __init__(self, client: ZhipuClient | None = None):
         """初始化对话能力
 
-        Args:
+        参数:
             client: 智谱客户端实例
         """
         self._client = client or ZhipuClient()
@@ -28,13 +28,13 @@ class ZhipuChatCapability:
     ) -> tuple[str, str]:
         """调用智谱 AI 大模型进行对话
 
-        Args:
+        参数:
             model: 模型名称
             messages: 对话消息列表
             options: 额外选项，原样透传到请求体（如 thinking
                 等模型原生思考参数，由调用方自行指定）
 
-        Returns:
+        返回:
             tuple[str, str]: (reasoning_content, content)
                 - reasoning_content: 思考链内容，无思考链时为空串
                 - content: 正常回复内容
@@ -76,13 +76,13 @@ class ZhipuChatCapability:
     ) -> Any:
         """流式调用智谱 AI 大模型
 
-        Args:
+        参数:
             model: 模型名称
             messages: 对话消息列表
             options: 额外选项，原样透传到请求体（如 thinking
                 等模型原生思考参数，由调用方自行指定）
 
-        Yields:
+        产出:
             流式响应的文本片段
         """
         model_cfg_result = get_model_config(model)
@@ -124,12 +124,12 @@ class ZhipuChatCapability:
     ) -> str:
         """生成接口 - 将 prompt 转换为 messages
 
-        Args:
+        参数:
             model: 模型名称
             prompt: 用户输入
             options: 额外选项
 
-        Returns:
+        返回:
             模型生成文本
         """
         return await self.chat(

@@ -16,7 +16,7 @@ class OpenAIChatCapability:
     def __init__(self, client: OpenAIClient | None = None):
         """初始化对话能力
 
-        Args:
+        参数:
             client: OpenAI 客户端实例
         """
         self._client = client or OpenAIClient()
@@ -29,13 +29,13 @@ class OpenAIChatCapability:
     ) -> tuple[str, str]:
         """调用 OpenAI 兼容 API 进行对话，支持多配置轮询
 
-        Args:
+        参数:
             model: 模型名称
             messages: 对话消息列表
             options: 额外选项，原样透传到请求体（如 reasoning_effort
                 等模型原生思考参数，由调用方自行指定）
 
-        Returns:
+        返回:
             tuple[str, str]: (reasoning_content, content)
                 - reasoning_content: 思考链内容，无思考链时为空串
                 - content: 正常回复内容
@@ -80,7 +80,7 @@ class OpenAIChatCapability:
     ) -> tuple[str, str]:
         """通用对话请求
 
-        Args:
+        参数:
             provider: 提供商配置对象
             model: 模型名称
             messages: 对话消息列表
@@ -88,7 +88,7 @@ class OpenAIChatCapability:
                 等模型原生思考参数，由调用方自行指定）
             is_ernie: 是否为文心一言 API
 
-        Returns:
+        返回:
             tuple[str, str]: (reasoning_content, content)
         """
         base_url = provider.api_base.rstrip("/")
@@ -145,13 +145,13 @@ class OpenAIChatCapability:
     ) -> Any:
         """流式调用 OpenAI 兼容 API
 
-        Args:
+        参数:
             model: 模型名称
             messages: 对话消息列表
             options: 额外选项，原样透传到请求体（如 reasoning_effort
                 等模型原生思考参数，由调用方自行指定）
 
-        Yields:
+        产出:
             流式响应的文本片段
         """
         provider = self._client.get_random_provider()
@@ -192,12 +192,12 @@ class OpenAIChatCapability:
     ) -> str:
         """生成接口 - 将 prompt 转换为 messages
 
-        Args:
+        参数:
             model: 模型名称
             prompt: 用户输入
             options: 额外选项
 
-        Returns:
+        返回:
             模型生成文本
         """
         return await self.chat(

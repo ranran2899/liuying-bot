@@ -34,7 +34,7 @@ class Capability(StrEnum):
     def values(cls) -> list[str]:
         """获取所有能力类型值列表
 
-        Returns:
+        返回:
             能力类型字符串列表
         """
         return [m.value for m in cls]
@@ -52,13 +52,13 @@ class ChatCapability(Protocol):
     ) -> tuple[str, str]:
         """执行对话
 
-        Args:
+        参数:
             model: 模型名称
             messages: 对话消息列表
             options: 额外选项，原样透传给模型 API（如 reasoning_effort、
                 thinking 等原生思考参数，由调用方自行指定）
 
-        Returns:
+        返回:
             tuple[str, str]: (reasoning_content, content)
                 - reasoning_content: 思考链内容，无思考链时为空串
                 - content: 正常回复内容
@@ -73,13 +73,13 @@ class ChatCapability(Protocol):
     ) -> Any:
         """流式对话
 
-        Args:
+        参数:
             model: 模型名称
             messages: 对话消息列表
             options: 额外选项，原样透传给模型 API（如 reasoning_effort、
                 thinking 等原生思考参数，由调用方自行指定）
 
-        Yields:
+        产出:
             流式响应片段
         """
         ...
@@ -99,14 +99,14 @@ class ImageCapability(Protocol):
     ) -> list[str]:
         """生成图像
 
-        Args:
+        参数:
             prompt: 图像描述
             model: 模型名称
             size: 图像尺寸
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             图像 URL 列表
         """
         ...
@@ -123,7 +123,7 @@ class ImageCapability(Protocol):
     ) -> list[str]:
         """编辑图像
 
-        Args:
+        参数:
             image: 原始图像路径或 URL
             prompt: 编辑描述
             mask: 蒙版图像路径或 URL
@@ -132,7 +132,7 @@ class ImageCapability(Protocol):
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             图像 URL 列表
         """
         ...
@@ -147,14 +147,14 @@ class ImageCapability(Protocol):
     ) -> list[str]:
         """创建图像变体
 
-        Args:
+        参数:
             image: 原始图像路径或 URL
             model: 模型名称
             size: 图像尺寸
             n: 生成数量
             options: 额外选项
 
-        Returns:
+        返回:
             图像 URL 列表
         """
         ...
@@ -174,14 +174,14 @@ class AudioCapability(Protocol):
     ) -> bytes:
         """文本转语音
 
-        Args:
+        参数:
             text: 要转换的文本
             model: TTS 模型名称
             voice: 声音类型
             speed: 语速
             options: 额外选项
 
-        Returns:
+        返回:
             音频字节数据
         """
         ...
@@ -195,13 +195,13 @@ class AudioCapability(Protocol):
     ) -> str:
         """语音转文本
 
-        Args:
+        参数:
             audio: 音频文件字节数据
             model: STT 模型名称
             language: 音频语言代码
             options: 额外选项
 
-        Returns:
+        返回:
             转录文本
         """
         ...
@@ -214,12 +214,12 @@ class AudioCapability(Protocol):
     ) -> str:
         """音频翻译（翻译为英文）
 
-        Args:
+        参数:
             audio: 音频文件字节数据
             model: 翻译模型名称
             options: 额外选项
 
-        Returns:
+        返回:
             翻译后的文本
         """
         ...
@@ -239,14 +239,14 @@ class VideoCapability(Protocol):
     ) -> dict[str, Any]:
         """生成视频
 
-        Args:
+        参数:
             prompt: 视频描述
             model: 视频模型名称
             duration: 视频时长（秒）
             resolution: 分辨率
             options: 额外选项
 
-        Returns:
+        返回:
             包含视频信息的字典
         """
         ...
@@ -254,10 +254,10 @@ class VideoCapability(Protocol):
     async def get_status(self, video_id: str) -> dict[str, Any]:
         """获取视频生成状态
 
-        Args:
+        参数:
             video_id: 视频任务 ID
 
-        Returns:
+        返回:
             包含状态信息的字典
         """
         ...
@@ -276,13 +276,13 @@ class EmbeddingCapability(Protocol):
     ) -> list[list[float]]:
         """创建文本嵌入向量
 
-        Args:
+        参数:
             input_text: 输入文本或文本列表
             model: 嵌入模型名称
             dimensions: 嵌入维度
             options: 额外选项
 
-        Returns:
+        返回:
             嵌入向量列表
         """
         ...
@@ -290,10 +290,10 @@ class EmbeddingCapability(Protocol):
     def get_dimension(self, model: str) -> int:
         """获取模型的默认嵌入维度
 
-        Args:
+        参数:
             model: 模型名称
 
-        Returns:
+        返回:
             嵌入维度数
         """
         ...
@@ -313,14 +313,14 @@ class RerankCapability(Protocol):
     ) -> list[dict[str, Any]]:
         """文本重排序
 
-        Args:
+        参数:
             query: 查询文本
             documents: 待排序文档列表
             model: 重排序模型名称
             top_n: 返回前 N 个结果
             options: 额外选项
 
-        Returns:
+        返回:
             重排序结果列表
         """
         ...
@@ -339,13 +339,13 @@ class DocumentCapability(Protocol):
     ) -> dict[str, Any]:
         """解析文档
 
-        Args:
+        参数:
             file: 文件字节数据或 URL
             file_name: 文件名（URL 模式下可选）
             model: 解析模型名称
             options: 额外选项
 
-        Returns:
+        返回:
             解析结果字典
         """
         ...
@@ -358,12 +358,12 @@ class DocumentCapability(Protocol):
     ) -> str:
         """提取文档纯文本
 
-        Args:
+        参数:
             file: 文件字节数据或 URL
             file_name: 文件名
             options: 额外选项
 
-        Returns:
+        返回:
             提取的文本内容
         """
         ...
@@ -380,11 +380,11 @@ class TokenizerCapability(Protocol):
     ) -> int:
         """计算文本或消息列表的 token 数量
 
-        Args:
+        参数:
             text: 输入文本或消息列表
             model: 模型名称
 
-        Returns:
+        返回:
             token 数量
         """
         ...
@@ -392,10 +392,10 @@ class TokenizerCapability(Protocol):
     def estimate(self, text: str) -> int:
         """快速估算 token 数量（不调用 API）
 
-        Args:
+        参数:
             text: 输入文本
 
-        Returns:
+        返回:
             估算的 token 数量
         """
         ...
@@ -414,13 +414,13 @@ class ToolsCapability(Protocol):
     ) -> dict[str, Any]:
         """网络搜索
 
-        Args:
+        参数:
             query: 搜索关键词
             engine: 搜索引擎类型
             count: 返回结果数量
             options: 额外选项
 
-        Returns:
+        返回:
             搜索结果字典
         """
         ...
@@ -432,11 +432,11 @@ class ToolsCapability(Protocol):
     ) -> dict[str, Any]:
         """网页阅读
 
-        Args:
+        参数:
             url: 网页 URL
             options: 额外选项
 
-        Returns:
+        返回:
             网页内容字典
         """
         ...
@@ -455,13 +455,13 @@ class WebSearchCapability(Protocol):
     ) -> "SearchResponse":
         """执行网络搜索
 
-        Args:
+        参数:
             query: 搜索关键词
             engine: 搜索引擎名称，None 则使用默认
             count: 返回结果数量
             options: 额外选项
 
-        Returns:
+        返回:
             搜索响应对象
         """
         ...

@@ -41,16 +41,16 @@ class ResponseParser:
         完整返回思考内容与回复内容两个字段，由调用方决定是否使用思考内容。
         协议层不做拼接决策，保持字段级隔离，避免思维链污染回复内容。
 
-        Args:
+        参数:
             response: API响应数据
             provider: 提供商名称
 
-        Returns:
+        返回:
             tuple[str, str]: (reasoning_content, content)
                 - reasoning_content: 思考链内容，无思考链时为空串
                 - content: 正常回复内容
 
-        Raises:
+        异常:
             APIError: 响应解析错误
         """
         choices = response.get("choices", [])
@@ -117,10 +117,10 @@ class ResponseParser:
     def parse_image_response(response: dict[str, Any]) -> list[str]:
         """解析图像生成响应
 
-        Args:
+        参数:
             response: API响应数据
 
-        Returns:
+        返回:
             图像URL列表
         """
         data = response.get("data", [])
@@ -134,10 +134,10 @@ class ResponseParser:
     def parse_transcription_response(response: dict[str, Any]) -> str:
         """解析语音转文本响应
 
-        Args:
+        参数:
             response: API响应数据
 
-        Returns:
+        返回:
             转录文本
         """
         return response.get("text", "")
@@ -152,11 +152,11 @@ class ResponseValidator:
     ) -> None:
         """检查响应中的错误
 
-        Args:
+        参数:
             response: API响应数据
             provider: 提供商名称
 
-        Raises:
+        异常:
             APIError: API返回错误
         """
         if not response:
@@ -174,11 +174,11 @@ class ResponseValidator:
     ) -> None:
         """检查标准格式错误（OpenAI/智谱等通用格式）
 
-        Args:
+        参数:
             response: 响应数据
             provider: 提供商名称
 
-        Raises:
+        异常:
             APIError: API错误
         """
         if "error" not in response:
@@ -198,10 +198,10 @@ class ResponseValidator:
     def _check_ernie_error(response: dict[str, Any]) -> None:
         """检查文心一言格式错误
 
-        Args:
+        参数:
             response: 响应数据
 
-        Raises:
+        异常:
             APIError: API错误
         """
         if response.get("error_code", 0) != 0:
@@ -217,12 +217,12 @@ def extract_content(
 ) -> str:
     """从响应中提取内容
 
-    Args:
+    参数:
         response: 响应字典
         key: 内容键名
         default: 默认值
 
-    Returns:
+    返回:
         提取的内容
     """
     return response.get(key, default) if isinstance(response, dict) else default
@@ -233,12 +233,12 @@ def safe_get(
 ) -> Any:
     """安全获取嵌套字典中的值
 
-    Args:
+    参数:
         data: 数据字典
         *keys: 键路径
         default: 默认值
 
-    Returns:
+    返回:
         获取的值或默认值
     """
     if data is None:
