@@ -179,11 +179,13 @@ class ReplyDecisions:
         返回:
             bool: 是否需要模拟输入状态
         """
-        if not ctx.is_private:
-            return False
-        if not get_config("INPUT_STATUS_ENABLED", False):
-            return False
-        return typing_delay > 1.5
+        match (ctx.is_private, get_config("INPUT_STATUS_ENABLED", False)):
+            case (False, _):
+                return False
+            case (True, False):
+                return False
+            case (True, True):
+                return typing_delay > 1.5
 
     @staticmethod
     async def maybe_prepend_catchphrase(

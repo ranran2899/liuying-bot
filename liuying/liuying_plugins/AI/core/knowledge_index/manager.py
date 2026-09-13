@@ -8,7 +8,7 @@
 
 公共 API 通过 ``knowledge_base`` 单例暴露，AI 插件内部调用：
     ```python
-    from ..knowledge_db import knowledge_base
+    from ..knowledge_index import knowledge_base
 
     await knowledge_base.init()
     await knowledge_base.index_document(1, "文本", embedding=[...])

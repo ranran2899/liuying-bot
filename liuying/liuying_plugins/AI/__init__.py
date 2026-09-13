@@ -21,7 +21,7 @@ from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.rules import admin_check
 
 from .config import PluginConfig, get_config
-from .core.knowledge_db import knowledge_base
+from .core.knowledge_index import knowledge_base
 from .core.llm import llm_helper, token_ledger
 from .core.memory import memory_manager
 from .core.runtime import runtime_switch

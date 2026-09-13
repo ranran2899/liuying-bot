@@ -28,22 +28,12 @@ from .runtime.query_rewriter import contextual_query_rewriter
 from .runtime.responder import PersonaResponder, PersonaResponse
 from .runtime.session_context import bind_session_context
 
-# from .runtime.tool_catalog import semantic_tool_guidance
 
-# # 多话题防串扰硬约束（参考参考插件 runner.py 的防串话 system 消息）
-# _ANTI_CROSSTALK_PROMPT = (
-#     "群聊里通常多个话题并行：A 群友讨论地震、B 群友讨论自己的近况、"
-#     "C 群友在闲扯，时间相近不代表语义相关。\n"
-#     "硬性规则：\n"
-#     "1. 你回复的是上下文中标记为当前消息的那一条；其它发言只是背景，"
-#     "不要把它们的内容拿来回答当前问题。\n"
-#     "2. 不要把不同人说的关键词（地名、人名、状态）跨话题拼接。"
-#     "拿不准时宁可简短、含糊或承认不知道，也不要把无关上下文糊上去。"
-# )
-# """多话题防串扰硬约束提示"""
-
-# 防串扰提示尾部特征子串，用于幂等检查防止重复注入
-_CROSSTALK_MARKER = "也不要把无关上下文糊上去。"
+from ..pipeline.style_policy import (
+    CROSSTALK_GUARD_PROMPT,
+    CROSSTALK_MARKER,
+    TOOL_GUIDANCE_PROMPT,
+)
 
 
 @dataclass(slots=True)
@@ -342,33 +332,11 @@ class AgentRunner:
         返回:
             list[dict[str, str]]: 注入后的消息副本
         """
-        # guidance = semantic_tool_guidance()
-        extra = (
-        "工具使用总原则：能直接回答就别起工具；不确定、高风险、时效性强、"
-        "明显需要查证时再调用工具。\n"
-        "当当前消息包含你不认识、无法确定指代或可能有圈内含义的专有名词、"
-        "角色名、作品名、游戏/动漫术语、外号、别称、缩写、谐音、梗或活动名时，"
-        "如果可用工具里有联网搜索，必须先调用查证；不要凭记忆猜，"
-        "也不要直接在群里问这是什么梗/什么意思。\n"
-        "用户明确要求生成图片时，必须调用图片生成工具，不要只给提示词。\n"
-        "最终回复只输出纯文本，不要markdown、项目符号列表、编号列表，"
-        "也不要说正在查询、根据搜索结果或我需要确认一下。\n"
-        "群聊接梗场景优先像群友接话，不要为了显得聪明而滥用工具。\n"
-        "\n\n"
-        "群聊里通常多个话题并行：A 群友讨论地震、B 群友讨论自己的近况、"
-        "C 群友在闲扯，时间相近不代表语义相关。\n"
-        "硬性规则：\n"
-        "1. 你回复的是上下文中标记为当前消息的那一条；其它发言只是背景，"
-        "不要把它们的内容拿来回答当前问题。\n"
-        "2. 不要把不同人说的关键词（地名、人名、状态）跨话题拼接。\n"
-        "拿不准时宁可简短、含糊或承认不知道，也不要把无关上下文糊上去。\n"
-        "\n\n"
-        )
+        extra = f"{TOOL_GUIDANCE_PROMPT}\n\n{CROSSTALK_GUARD_PROMPT}\n\n"
         copied = [dict(m) for m in messages]
         for msg in copied:
             if msg.get("role") == "system" and msg.get("content"):
-                # 幂等检查：已注入过则跳过，防止重复注入累积
-                if _CROSSTALK_MARKER in msg["content"]:
+                if CROSSTALK_MARKER in msg["content"]:
                     return copied
                 msg["content"] = f"{msg['content']}{extra}"
                 return copied

@@ -38,44 +38,6 @@ _REPLY_TEXT_FALLBACK_PATTERN = re.compile(
 )
 """reply_text 兜底提取正则（支持JSON转义引号）"""
 
-_STRING_FIELD_FALLBACK_PATTERNS: dict[str, re.Pattern] = {
-    "user_attitude": re.compile(
-        r'"user_attitude"\s*:\s*"?([^",}\n]+)"?',
-        re.IGNORECASE,
-    ),
-    "bot_emotion": re.compile(
-        r'"bot_emotion"\s*:\s*"?([^",}\n]+)"?',
-        re.IGNORECASE,
-    ),
-    "expression_style": re.compile(
-        r'"expression_style"\s*:\s*"?([^",}\n]+)"?',
-        re.IGNORECASE,
-    ),
-    "tts_style_hint": re.compile(
-        r'"tts_style_hint"\s*:\s*"((?:\\.|[^"\\])*)"',
-        re.IGNORECASE,
-    ),
-    "sticker_mood_hint": re.compile(
-        r'"sticker_mood_hint"\s*:\s*"((?:\\.|[^"\\])*)"',
-        re.IGNORECASE,
-    ),
-}
-"""字符串字段兜底提取正则"""
-
-_BOOL_FIELD_FALLBACK_PATTERNS: dict[str, re.Pattern] = {
-    "info_added": re.compile(
-        r'"info_added"\s*:\s*(true|false)', re.IGNORECASE
-    ),
-    "recommend_silence": re.compile(
-        r'"recommend_silence"\s*:\s*(true|false)', re.IGNORECASE
-    ),
-}
-"""布尔字段兜底提取正则"""
-
-_AMBIGUITY_FALLBACK_PATTERN = re.compile(
-    r'"ambiguity_level"\s*:\s*([\d.]+)', re.IGNORECASE
-)
-"""模糊度字段兜底提取正则"""
 
 
 @dataclass(slots=True)
@@ -466,16 +428,17 @@ class PersonaResponder:
         返回:
             str: 模式提示
         """
-        hints = {
-            OUTPUT_MODE_CHAT_SHORT: "短聊天回复，保持简洁自然",
-            OUTPUT_MODE_CHAT_ANSWER: "完整答案回复，需详细但有条理",
-            OUTPUT_MODE_SOURCE_SUMMARY: (
-                "带工具证据，自然融入证据信息，"
-                "不要直接说'根据搜索结果'"
-            ),
-            OUTPUT_MODE_SILENCE: "建议静默",
-        }
-        return hints.get(output_mode, "")
+        match output_mode:
+            case "chat_short":
+                return "短聊天回复，保持简洁自然"
+            case "chat_answer":
+                return "完整答案回复，需详细但有条理"
+            case "source_summary":
+                return "带工具证据，自然融入证据信息，不要直接说'根据搜索结果'"
+            case "silence":
+                return "建议静默"
+            case _:
+                return ""
 
     @staticmethod
     def _safe_ambiguity(value: object) -> float:
@@ -504,14 +467,8 @@ class PersonaResponder:
     ) -> PersonaResponse:
         """解析LLM响应
 
-        使用 extract_json_payload 四重兜底提取JSON：
-        1. 直接 json.loads
-        2. 去除 markdown fence 后再解析
-        3. 修复未加引号的枚举值后再解析
-        4. 正则提取首个 {...} 块再解析
-
-        JSON解析失败时，调用 _parse_response_fallback 进行正则兜底
-        提取，优先取 reply_text 字段，避免把原始JSON块直接输出。
+        使用 extract_json_payload 提取JSON，失败时用正则提取
+        reply_text 字段，最终兜底为原始文本。
 
         参数:
             response: LLM响应文本
@@ -526,49 +483,22 @@ class PersonaResponder:
         if data is None:
             return self._parse_response_fallback(raw, plan)
 
-        reply_text = str(
-            data.get("reply_text", data.get("replytext", ""))
-        ).strip()
+        reply_text = str(data.get("reply_text", "")).strip()
         if not reply_text:
             reply_text = raw
 
-        ambiguity = self._safe_ambiguity(
-            data.get("ambiguity_level", data.get("ambiguitylevel", 0.0))
-        )
-
         return PersonaResponse(
             reply_text=reply_text,
-            info_added=bool(
-                data.get("info_added", data.get("infoadded", False))
+            info_added=bool(data.get("info_added", False)),
+            user_attitude=str(data.get("user_attitude", "neutral")),
+            bot_emotion=str(data.get("bot_emotion", "neutral")),
+            expression_style=str(data.get("expression_style", "casual")),
+            tts_style_hint=str(data.get("tts_style_hint", "")),
+            sticker_mood_hint=str(data.get("sticker_mood_hint", "")),
+            ambiguity_level=self._safe_ambiguity(
+                data.get("ambiguity_level", 0.0)
             ),
-            user_attitude=str(
-                data.get("user_attitude", data.get("userattitude", "neutral"))
-            ),
-            bot_emotion=str(
-                data.get("bot_emotion", data.get("botemotion", "neutral"))
-            ),
-            expression_style=str(
-                data.get(
-                    "expression_style",
-                    data.get("expressionstyle", "casual"),
-                )
-            ),
-            tts_style_hint=str(
-                data.get("tts_style_hint", data.get("ttsstylehint", ""))
-            ),
-            sticker_mood_hint=str(
-                data.get(
-                    "sticker_mood_hint",
-                    data.get("stickermoodhint", ""),
-                )
-            ),
-            ambiguity_level=ambiguity,
-            recommend_silence=bool(
-                data.get(
-                    "recommend_silence",
-                    data.get("recommendsilence", False),
-                )
-            ),
+            recommend_silence=bool(data.get("recommend_silence", False)),
             raw_response=raw,
         )
 
@@ -577,9 +507,8 @@ class PersonaResponder:
     ) -> PersonaResponse:
         """JSON解析失败时的兜底解析
 
-        当 extract_json_payload 无法解析完整JSON时，尝试用正则
-        提取 reply_text 等关键字段，避免把原始JSON块直接输出。
-        如果正则也无法提取 reply_text，才回退到原始文本。
+        尝试用正则提取 reply_text 字段，失败时回退到原始文本。
+        其余元信息字段使用默认值，避免过度防御的正则提取。
 
         参数:
             raw: LLM原始响应
@@ -601,42 +530,9 @@ class PersonaResponder:
         if not reply_text:
             reply_text = raw
 
-        string_fields: dict[str, str] = {}
-        for name, pattern in _STRING_FIELD_FALLBACK_PATTERNS.items():
-            m = pattern.search(raw)
-            string_fields[name] = m.group(1).strip() if m else ""
-
-        bool_fields: dict[str, bool] = {}
-        for name, pattern in _BOOL_FIELD_FALLBACK_PATTERNS.items():
-            m = pattern.search(raw)
-            bool_fields[name] = m.group(1).lower() == "true" if m else False
-
-        ambiguity_match = _AMBIGUITY_FALLBACK_PATTERN.search(raw)
-        if ambiguity_match:
-            try:
-                ambiguity = float(ambiguity_match.group(1))
-                ambiguity = max(0.0, min(1.0, ambiguity))
-            except (TypeError, ValueError):
-                ambiguity = plan.ambiguity_level
-        else:
-            ambiguity = plan.ambiguity_level
-
         return PersonaResponse(
             reply_text=reply_text,
-            info_added=bool_fields.get("info_added", False),
-            user_attitude=string_fields.get("user_attitude", "neutral"),
-            bot_emotion=string_fields.get("bot_emotion", "neutral"),
-            expression_style=string_fields.get(
-                "expression_style", "casual"
-            ),
-            tts_style_hint=string_fields.get("tts_style_hint", ""),
-            sticker_mood_hint=string_fields.get(
-                "sticker_mood_hint", ""
-            ),
-            ambiguity_level=ambiguity,
-            recommend_silence=bool_fields.get(
-                "recommend_silence", False
-            ),
+            ambiguity_level=plan.ambiguity_level,
             raw_response=raw,
         )
 

@@ -229,13 +229,15 @@ def _coerce_ambiguity(value: Any) -> str:
     返回:
         str: low/medium/high
     """
-    if isinstance(value, int | float) and not isinstance(value, bool):
-        if value >= 0.7:
-            return "high"
-        if value >= 0.3:
-            return "medium"
-        return "low"
-    return _enum_value(value, ALLOWED_AMBIGUITY_LEVELS, "low")
+    match value:
+        case int() | float() if not isinstance(value, bool):
+            if value >= 0.7:
+                return "high"
+            if value >= 0.3:
+                return "medium"
+            return "low"
+        case _:
+            return _enum_value(value, ALLOWED_AMBIGUITY_LEVELS, "low")
 
 
 def parse_turn_plan_payload(payload: Any) -> TurnPlan | None:

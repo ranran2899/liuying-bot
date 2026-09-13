@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from liuying.utils.log import logger
 
-from ...core.knowledge_db import KnowledgeBase
+from ...core.knowledge_index import KnowledgeBase
 from ...core.llm import llm_helper
 from ...core.llm.model_router import ROLE_INTENT, model_router
 from ...core.memory._common import (

@@ -6,7 +6,7 @@
 
 公共 API 仍通过 ``knowledge_base`` 单例暴露，调用方无感知：
     ```python
-    from ..knowledge_db import knowledge_base
+    from ..knowledge_index import knowledge_base
 
     results = await knowledge_base.search_fts("查询", limit=5)
     ```

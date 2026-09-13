@@ -13,7 +13,7 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ..agent.agent.learning import active_learning
+from ..agent.learning import active_learning
 from ..config import get_config
 from ..core.context import ContextPolicy
 from ..core.group import GroupMuteTracker
@@ -156,90 +156,80 @@ class ReplyProcessor:
             )
             return history
 
-    async def handle(self, ctx: ReplyContext) -> ReplyResult:
-        """主入口：处理用户消息并生成回复
+    async def _check_quota(
+        self, ctx: ReplyContext, trace_id: str, start_time: float,
+    ) -> ReplyResult | None:
+        """用户对话 token 额度检查
 
-        在权限检查通过后，先解析用户当前激活的bot人格名，
-        写入 ctx.persona_name 供后续所有数据操作隔离使用。
-
-        本方法还集成用户对话 token 额度：
-        - 对话前检查额度，不足则阻止对话并（满足 CD 时）
-          返回额度不足提示；
-        - 对话周期内通过会话级用量累加器统计实际 token 消耗；
-        - 对话结束后按实际消耗扣费。
-
-        本方法同时通过 reply_turn_trace 记录各阶段耗时与状态，
-        用于事后诊断回复异常。
+        不足则阻止对话继续，满足 CD 时返回额度不足提示，
+        CD 期内静默跳过。
 
         参数:
             ctx: 回复上下文
+            trace_id: 追踪ID
+            start_time: 开始时间
 
         返回:
-            ReplyResult: 回复结果
+            ReplyResult | None: 被阻止时返回结果，允许时返回None
         """
-        start_time = time.time()
-        session_type = "private" if ctx.is_private else "group"
-        trace_id = reply_turn_trace.start_trace(
-            session_type=session_type,
-            group_id=ctx.group_id or "",
-            user_id=ctx.user_id,
-        )
-
-        if not await self._check_permission(ctx):
-            reply_turn_trace.finish_trace(
-                trace_id=trace_id,
-                outcome="permission_denied",
-            )
-            return ReplyResult(text="", typing_delay=0.0)
-        reply_turn_trace.record_stage(
-            trace_id=trace_id, key="permission", label="权限检查通过"
-        )
-
-        # 用户对话 token 额度检查（不足则阻止对话继续）
         quota = await token_quota_service.check_before_conversation(
             ctx.user_id
         )
-        if not quota.allowed:
-            logger.info(
-                f"用户对话额度不足，跳过回复: "
-                f"user={ctx.user_id} group={ctx.group_id or ''} "
-                f"reason={quota.reason}",
-                command="AI",
-            )
-            reply_turn_trace.finish_trace(
+        if quota.allowed:
+            reply_turn_trace.record_stage(
                 trace_id=trace_id,
-                outcome="quota_blocked",
-                diagnosis_code=quota.reason,
+                key="quota_check",
+                label="额度检查通过",
             )
-            if quota.need_remind:
-                tip = (
-                    f"咦？你的token似乎不足捏（剩余 {max(0, quota.remaining)} token），"
-                    "去兑换铜币再试试看~"
-                )
-                return ReplyResult(
-                    text=tip,
-                    metadata={
-                        "quota_blocked": True,
-                        "remaining": quota.remaining,
-                        "elapsed": round(time.time() - start_time, 3),
-                    },
-                )
-            # CD 期内不重复提醒，静默跳过
+            return None
+
+        logger.info(
+            f"用户对话额度不足，跳过回复: "
+            f"user={ctx.user_id} group={ctx.group_id or ''} "
+            f"reason={quota.reason}",
+            command="AI",
+        )
+        reply_turn_trace.finish_trace(
+            trace_id=trace_id,
+            outcome="quota_blocked",
+            diagnosis_code=quota.reason,
+        )
+        if quota.need_remind:
+            tip = (
+                f"咦？你的token似乎不足捏（剩余 {max(0, quota.remaining)} token），"
+                "去兑换铜币再试试看~"
+            )
             return ReplyResult(
-                text="",
+                text=tip,
                 metadata={
                     "quota_blocked": True,
-                    "silence": True,
                     "remaining": quota.remaining,
                     "elapsed": round(time.time() - start_time, 3),
                 },
             )
-        reply_turn_trace.record_stage(
-            trace_id=trace_id,
-            key="quota_check",
-            label="额度检查通过",
+        # CD 期内不重复提醒，静默跳过
+        return ReplyResult(
+            text="",
+            metadata={
+                "quota_blocked": True,
+                "silence": True,
+                "remaining": quota.remaining,
+                "elapsed": round(time.time() - start_time, 3),
+            },
         )
 
+    async def _prepare_messages(
+        self, ctx: ReplyContext, trace_id: str,
+    ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+        """解析人格、加载历史、构建提示词与消息列表
+
+        参数:
+            ctx: 回复上下文（persona_name 会被写入）
+            trace_id: 追踪ID
+
+        返回:
+            tuple[history, messages]
+        """
         # 解析用户当前激活的人格名，确保人设间数据隔离
         # get_user_persona_name 内部已捕获异常并回退默认人格，无需外层兜底
         ctx.persona_name = await persona_manager.get_user_persona_name(
@@ -261,8 +251,21 @@ class ReplyProcessor:
         messages = ReplyPipeline.build_messages(
             system_prompt, history, ctx
         )
+        return history, messages
 
-        # 开启会话级 token 用量追踪，统计本轮所有 LLM 调用消耗
+    async def _generate_reply_tracked(
+        self, messages: list[dict[str, str]], ctx: ReplyContext, trace_id: str,
+    ) -> tuple[str, Any, Any]:
+        """生成回复并追踪 token 用量
+
+        参数:
+            messages: 消息列表
+            ctx: 回复上下文
+            trace_id: 追踪ID
+
+        返回:
+            tuple[reply_text, agent_result, usage]
+        """
         track_token = TokenTrackingHelper.start_conversation_tracking()
         try:
             reply_text, agent_result = await self._reply_generator.generate_reply(
@@ -279,8 +282,7 @@ class ReplyProcessor:
             detail=f"长度={len(reply_text)}",
         )
 
-        # 回复文本为空（静默建议/LLM空输出）时记录诊断日志，
-        # 避免"无回复且无报错"现象无法追踪根因
+        # 回复文本为空（静默建议/LLM空输出）时记录诊断日志
         if not reply_text.strip():
             suggest_silence = bool(
                 agent_result
@@ -298,8 +300,21 @@ class ReplyProcessor:
         await token_quota_service.consume_after_conversation(
             ctx.user_id, usage
         )
+        return reply_text, agent_result, usage
 
-        # 响应深度审查：LLM二次审核回复质量与安全
+    async def _review_and_normalize(
+        self, ctx: ReplyContext, reply_text: str, trace_id: str,
+    ) -> str:
+        """响应深度审查 + 文本策略规范化
+
+        参数:
+            ctx: 回复上下文
+            reply_text: 待审查的回复文本
+            trace_id: 追踪ID
+
+        返回:
+            str: 审查并规范化后的回复文本
+        """
         review = await response_reviewer.review(
             user_message=ctx.text,
             reply_text=reply_text,
@@ -318,38 +333,74 @@ class ReplyProcessor:
         )
 
         # 回复文本策略：清理Markdown格式，让回复像真人而非文档
-        reply_text = ReplyTextPolicy.normalize_visible_reply_text(
-            reply_text
+        return ReplyTextPolicy.normalize_visible_reply_text(reply_text)
+
+    def _try_silence(
+        self, ctx: ReplyContext, reply_text: str, agent_result: Any,
+        trace_id: str, start_time: float, usage: Any,
+    ) -> ReplyResult | None:
+        """检测 SILENCE 控制标记，命中则返回静默结果
+
+        参数:
+            ctx: 回复上下文
+            reply_text: 规范化后的回复文本
+            agent_result: Agent执行结果
+            trace_id: 追踪ID
+            start_time: 开始时间
+            usage: token用量
+
+        返回:
+            ReplyResult | None: 命中SILENCE时返回结果，否则None
+        """
+        if not ContextPolicy.has_silence_control_marker(reply_text):
+            return None
+
+        logger.info(
+            f"AI决定SILENCE，跳过回复: user={ctx.user_id} "
+            f"group={ctx.group_id}",
+            command="AI",
+        )
+        # 主动学习：即使SILENCE也异步分析不确定性（fire-and-forget）
+        active_learning.process_reply_async(
+            user_id=ctx.user_id,
+            user_question=ctx.text,
+            ai_reply=reply_text,
+            persona_name=ctx.persona_name,
+        )
+        reply_turn_trace.finish_trace(
+            trace_id=trace_id, outcome="silence"
+        )
+        # 沉默时按概率表情表态（仅群聊，由发送方拿到message_id后执行）
+        react_face_id = ReplyDecisions.decide_silence_reaction(ctx)
+        return ReplyResult(
+            text="",
+            react_face_id=react_face_id,
+            metadata={
+                "silence": True,
+                "elapsed": round(time.time() - start_time, 3),
+                "token_usage": usage,
+            },
         )
 
-        if ContextPolicy.has_silence_control_marker(reply_text):
-            logger.info(
-                f"AI决定SILENCE，跳过回复: user={ctx.user_id} "
-                f"group={ctx.group_id}",
-                command="AI",
-            )
-            # 主动学习：即使SILENCE也异步分析不确定性（fire-and-forget）
-            active_learning.process_reply_async(
-                user_id=ctx.user_id,
-                user_question=ctx.text,
-                ai_reply=reply_text,
-                persona_name=ctx.persona_name,
-            )
-            reply_turn_trace.finish_trace(
-                trace_id=trace_id, outcome="silence"
-            )
-            # 沉默时按概率表情表态（仅群聊，由发送方拿到message_id后执行）
-            react_face_id = ReplyDecisions.decide_silence_reaction(ctx)
-            return ReplyResult(
-                text="",
-                react_face_id=react_face_id,
-                metadata={
-                    "silence": True,
-                    "elapsed": round(time.time() - start_time, 3),
-                    "token_usage": usage,
-                },
-            )
+    async def _finalize_reply(
+        self, ctx: ReplyContext, reply_text: str, agent_result: Any,
+        usage: Any, history: list[dict[str, str]],
+        trace_id: str, start_time: float,
+    ) -> ReplyResult:
+        """拟人化、决策、并行操作与最终结果组装
 
+        参数:
+            ctx: 回复上下文
+            reply_text: 审查规范化后的回复文本
+            agent_result: Agent执行结果
+            usage: token用量
+            history: 历史消息列表
+            trace_id: 追踪ID
+            start_time: 开始时间
+
+        返回:
+            ReplyResult: 最终回复结果
+        """
         # 主动学习：异步分析回复中的不确定性并深度查证（fire-and-forget）
         active_learning.process_reply_async(
             user_id=ctx.user_id,
@@ -461,6 +512,76 @@ class ReplyProcessor:
             should_set_typing=should_set_typing,
             should_quote=should_quote,
             at_user_id=at_user_id,
+        )
+
+    async def handle(self, ctx: ReplyContext) -> ReplyResult:
+        """主入口：处理用户消息并生成回复
+
+        在权限检查通过后，先解析用户当前激活的bot人格名，
+        写入 ctx.persona_name 供后续所有数据操作隔离使用。
+
+        本方法还集成用户对话 token 额度：
+        - 对话前检查额度，不足则阻止对话并（满足 CD 时）
+          返回额度不足提示；
+        - 对话周期内通过会话级用量累加器统计实际 token 消耗；
+        - 对话结束后按实际消耗扣费。
+
+        本方法同时通过 reply_turn_trace 记录各阶段耗时与状态，
+        用于事后诊断回复异常。
+
+        参数:
+            ctx: 回复上下文
+
+        返回:
+            ReplyResult: 回复结果
+        """
+        start_time = time.time()
+        session_type = "private" if ctx.is_private else "group"
+        trace_id = reply_turn_trace.start_trace(
+            session_type=session_type,
+            group_id=ctx.group_id or "",
+            user_id=ctx.user_id,
+        )
+
+        if not await self._check_permission(ctx):
+            reply_turn_trace.finish_trace(
+                trace_id=trace_id,
+                outcome="permission_denied",
+            )
+            return ReplyResult(text="", typing_delay=0.0)
+        reply_turn_trace.record_stage(
+            trace_id=trace_id, key="permission", label="权限检查通过"
+        )
+
+        # 额度检查
+        quota_result = await self._check_quota(ctx, trace_id, start_time)
+        if quota_result is not None:
+            return quota_result
+
+        # 准备消息（人格解析 + 历史 + 提示词）
+        history, messages = await self._prepare_messages(ctx, trace_id)
+
+        # 生成回复（带 token 追踪与扣费）
+        reply_text, agent_result, usage = await self._generate_reply_tracked(
+            messages, ctx, trace_id
+        )
+
+        # 审查与规范化
+        reply_text = await self._review_and_normalize(
+            ctx, reply_text, trace_id
+        )
+
+        # SILENCE 检测
+        silence_result = self._try_silence(
+            ctx, reply_text, agent_result, trace_id, start_time, usage
+        )
+        if silence_result is not None:
+            return silence_result
+
+        # 拟人化、决策、并行操作与结果组装
+        return await self._finalize_reply(
+            ctx, reply_text, agent_result, usage, history,
+            trace_id, start_time,
         )
 
     async def handle_text(

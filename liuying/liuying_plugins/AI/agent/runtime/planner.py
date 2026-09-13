@@ -32,13 +32,6 @@ from .tool_catalog import ToolCatalog, tool_catalog
 
 __all__ = ["TurnPlan", "TurnPlanner"]
 
-_TOOL_META_CACHE: tuple[int, str] | None = None
-"""工具元数据渲染缓存：(registry.revision, 渲染文本)
-
-注册表 revision 未变化时直接复用缓存文本，
-避免每轮LLM规划重复渲染全部工具元数据。
-"""
-
 
 class TurnPlanner:
     """回合规划器
@@ -57,6 +50,7 @@ class TurnPlanner:
         self._llm = llm
         self._catalog = catalog
         self._registry = None
+        self._tool_meta_cache: tuple[int, str] | None = None
 
     def _get_llm(self):
         """获取LLM助手，None时回退到模块单例"""
@@ -344,12 +338,11 @@ class TurnPlanner:
         返回:
             str: 工具元数据文本，无工具时返回"无"
         """
-        global _TOOL_META_CACHE
         if (
-            _TOOL_META_CACHE is not None
-            and _TOOL_META_CACHE[0] == registry.revision
+            self._tool_meta_cache is not None
+            and self._tool_meta_cache[0] == registry.revision
         ):
-            return _TOOL_META_CACHE[1]
+            return self._tool_meta_cache[1]
 
         lines = []
         for tool in registry.active_tools()[:24]:
@@ -374,7 +367,7 @@ class TurnPlanner:
                 req_str = " required=[" + ",".join(req_parts) + "]"
             lines.append(f"- {tool.name}: {desc}{req_str} tags={tags}")
         text = "\n".join(lines) if lines else "无"
-        _TOOL_META_CACHE = (registry.revision, text)
+        self._tool_meta_cache = (registry.revision, text)
         return text
 
     async def _augment_plan_with_semantic_frame(

@@ -16,7 +16,7 @@ from ...agent.intent.memory_consolidate import MemoryConsolidationService
 from ...agent.intent.memory_evolve import MemoryEvolveService
 from ...config import get_config
 from ...models.memory_item import MemoryItem
-from ..knowledge_db import knowledge_base
+from ..knowledge_index import knowledge_base
 from ._common import (
     _DEFAULT_PERSONA,
     _WORKING_EXPIRE_HOURS,

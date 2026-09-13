@@ -1,12 +1,16 @@
-"""知识库包
+"""知识索引基础设施
 
 基于 SQLite 的独立索引系统，提供 FTS5 全文检索、向量检索
 与实体检索能力。完全独立于 liuying_db，使用专属
 SQLite 数据库文件（data/db/knowledge_base.db）。
 
+与 ``core/knowledge/`` 的区别：
+- ``knowledge_index`` = @底层 文档索引/检索基础设施（通用）
+- ``knowledge`` = @上层 插件知识领域应用（复用 help 插件接口）
+
 公共 API 通过 ``knowledge_base`` 单例暴露，AI 插件内部调用：
     ```python
-    from ..knowledge_db import knowledge_base
+    from ..knowledge_index import knowledge_base
 
     # 文档索引（供 AI 记忆系统等使用）
     await knowledge_base.index_document(1, "文本", embedding=[...])

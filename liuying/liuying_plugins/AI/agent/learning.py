@@ -12,11 +12,11 @@ from datetime import datetime, timedelta
 
 from liuying.utils.log import logger
 
-from ...config import get_config
-from ...core.llm import llm_helper
-from ...core.llm.model_router import ROLE_AGENT, ROLE_INTENT, model_router
-from ...core.memory import memory_manager
-from ...core.tools.json_utils import extract_json_payload
+from ..config import get_config
+from ..core.llm import llm_helper
+from ..core.llm.model_router import ROLE_AGENT, ROLE_INTENT, model_router
+from ..core.memory import memory_manager
+from ..core.tools.json_utils import extract_json_payload
 
 _DAILY_QUOTA = 10
 """每日主动学习配额"""

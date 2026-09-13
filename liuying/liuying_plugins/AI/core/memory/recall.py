@@ -14,7 +14,7 @@ from liuying.utils.log import logger
 from ...agent.intent.knowledge_rewrite import rewrite_query
 from ...config import get_config
 from ...models.memory_item import MemoryItem
-from ..knowledge_db import KnowledgeBase
+from ..knowledge_index import KnowledgeBase
 from ._common import (
     _DEFAULT_PERSONA,
     _EPISODIC_EXPIRE_DAYS,

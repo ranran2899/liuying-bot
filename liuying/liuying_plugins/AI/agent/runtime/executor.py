@@ -254,21 +254,21 @@ class ToolExecutor:
         返回:
             bool: 是否符合
         """
-        if expected == "string":
-            return isinstance(value, str)
-        if expected == "integer":
-            return isinstance(value, int) and not isinstance(value, bool)
-        if expected == "number":
-            return isinstance(value, int | float) and not isinstance(
-                value, bool
-            )
-        if expected == "boolean":
-            return isinstance(value, bool)
-        if expected == "array":
-            return isinstance(value, list)
-        if expected == "object":
-            return isinstance(value, dict)
-        return True
+        match expected:
+            case "string":
+                return isinstance(value, str)
+            case "integer":
+                return isinstance(value, int) and not isinstance(value, bool)
+            case "number":
+                return isinstance(value, int | float) and not isinstance(value, bool)
+            case "boolean":
+                return isinstance(value, bool)
+            case "array":
+                return isinstance(value, list)
+            case "object":
+                return isinstance(value, dict)
+            case _:
+                return True
 
     def _filter_args(
         self, tool, args: dict[str, Any]

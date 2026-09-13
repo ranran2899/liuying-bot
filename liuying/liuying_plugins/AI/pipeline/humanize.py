@@ -396,11 +396,13 @@ class HumanizeToolkit:
         if not catchphrases or len(text) > _CATCHPHRASE_MAX_LEN:
             return text
         use_rng = rng or random
-        adjusted = probability
-        if mood == "positive":
-            adjusted = min(1.0, probability * 1.5)
-        elif mood == "negative":
-            adjusted = probability * 0.5
+        match mood:
+            case "positive":
+                adjusted = min(1.0, probability * 1.5)
+            case "negative":
+                adjusted = probability * 0.5
+            case _:
+                adjusted = probability
         if use_rng.random() >= adjusted:
             return text
         phrase = use_rng.choice(catchphrases)
