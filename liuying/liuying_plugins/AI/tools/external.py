@@ -76,13 +76,19 @@ class SmartToolBridge:
                 command="AI",
             )
             return 0
+        merged_metadata = {**tag.metadata, "source": f"plugin:{plugin_name}"}
         tool_registry.register(
             AgentTool(
                 name=tag.name,
                 description=tag.description,
                 parameters=self._convert_parameters(tag.parameters),
                 func=self._wrap_handler(tag.name, tag.func),
-                metadata={"source": f"plugin:{plugin_name}"},
+                intent_tags=tag.intent_tags,
+                latency_class=tag.latency_class,
+                requires_network=tag.requires_network,
+                requires_image=tag.requires_image,
+                evidence_kind=tag.evidence_kind,
+                metadata=merged_metadata,
             )
         )
         logger.debug(

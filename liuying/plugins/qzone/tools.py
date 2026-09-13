@@ -1,52 +1,15 @@
-"""QZone Agent 工具注册
+"""QZone Agent 工具函数
 
-通过流萤AI插件公开API register_external_tool 注册 QZone 工具，
-供 AI Agent 调用发说说/拉取动态/点赞。
-
-依赖：流萤AI插件（liuying_plugins.AI）必须先加载完成。
-本插件优先级=3，晚于AI插件（priority=2），确保 tool_registry 就绪。
+定义供 AI Agent 调用的 QZone 工具函数（发说说/拉取动态/点赞）。
+通过 PluginExtraData.smart_tools 声明，由 AI 插件 SmartToolBridge 自动注册。
+不直接导入 AI 插件的任何模块。
 """
-
-from liuying.liuying_plugins.AI import register_external_tool
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    INTENT_TAG_ADMIN,
-    INTENT_TAG_NETWORK,
-    INTENT_TAG_REALTIME,
-    LATENCY_CLASS_NETWORK,
-)
 
 from .service import qzone_service
 
+__all__ = ["qzone_publish", "qzone_feeds", "qzone_like"]
 
-@register_external_tool(
-    name="qzone_publish",
-    description=(
-        "发布QQ空间说说（需管理员预先配置QZone cookie），"
-        "适用于自己主动发表心情/动态/想法时"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "content": {
-                "type": "string",
-                "description": "说说正文内容",
-            },
-            "visible": {
-                "type": "integer",
-                "description": "可见性：0=公开 1=好友 2=私密",
-                "default": 0,
-            },
-        },
-        "required": ["content"],
-    },
-    intent_tags=[INTENT_TAG_ADMIN, INTENT_TAG_NETWORK],
-    latency_class=LATENCY_CLASS_NETWORK,
-    requires_network=True,
-    metadata={
-        "requires_admin": True,
-        "output_kind": "qzone_publish_result",
-    },
-)
+
 async def qzone_publish(content: str, visible: int = 0) -> str:
     """发布QQ空间说说
 
@@ -65,31 +28,6 @@ async def qzone_publish(content: str, visible: int = 0) -> str:
     return f"发布{'成功' if ok else '失败'}: {msg}"
 
 
-@register_external_tool(
-    name="qzone_feeds",
-    description=(
-        "拉取QQ空间好友动态列表，"
-        "返回结果中每条动态都会标明 feed_id 和 owner_uin，"
-        "供 qzone_like 等工具使用"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "count": {
-                "type": "integer",
-                "description": "拉取数量，默认10，最大20",
-                "default": 10,
-            },
-        },
-    },
-    intent_tags=[INTENT_TAG_NETWORK, INTENT_TAG_REALTIME],
-    latency_class=LATENCY_CLASS_NETWORK,
-    requires_network=True,
-    metadata={
-        "requires_admin": True,
-        "output_kind": "qzone_feeds",
-    },
-)
 async def qzone_feeds(count: int = 10) -> str:
     """拉取QQ空间动态列表
 
@@ -148,38 +86,6 @@ async def qzone_feeds(count: int = 10) -> str:
     return "\n".join(lines)
 
 
-@register_external_tool(
-    name="qzone_like",
-    description=(
-        "对指定QQ空间动态点赞，"
-        "feed_id 和 owner_uin 必须从 qzone_feeds 返回结果中对应字段提取，"
-        "适用于自己表达对好友动态的支持时"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "feed_id": {
-                "type": "string",
-                "description": "动态ID，从 qzone_feeds 结果中的 feed_id 字段获取",
-            },
-            "owner_uin": {
-                "type": "string",
-                "description": (
-                    "动态所有者QQ号，"
-                    "从 qzone_feeds 结果中的 owner_uin 字段获取"
-                ),
-            },
-        },
-        "required": ["feed_id", "owner_uin"],
-    },
-    intent_tags=[INTENT_TAG_NETWORK, INTENT_TAG_ADMIN],
-    latency_class=LATENCY_CLASS_NETWORK,
-    requires_network=True,
-    metadata={
-        "requires_admin": True,
-        "output_kind": "qzone_like_result",
-    },
-)
 async def qzone_like(feed_id: str, owner_uin: str) -> str:
     """点赞QQ空间动态
 

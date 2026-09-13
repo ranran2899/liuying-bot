@@ -160,6 +160,22 @@ class AICallableTag(BaseModel):
     """工具描述"""
     func: Callable | None = None
     """工具函数"""
+    intent_tags: list[str] = Field(default_factory=list)
+    """意图标签列表，帮助Agent决策何时调用该工具。
+    可选值: realtime(实时信息查询), network(网络请求),
+    image(图片相关), admin(管理操作), memory(记忆召回),
+    local(本地操作), plugin(插件调用)"""
+    latency_class: str = "fast"
+    """延迟级别: fast(<1s), network(1-5s), slow(>5s)"""
+    requires_network: bool = False
+    """是否需要网络连接才能执行，Agent可据此在网络不可用时跳过该工具"""
+    requires_image: bool = False
+    """是否需要图片输入，Agent可据此判断当前对话是否有图片可用"""
+    evidence_kind: str = "tool"
+    """证据类型，影响Agent循环中对工具结果的引用方式。
+    可选值: tool(工具证据), context(上下文证据)"""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    """附加元信息"""
 
     def to_dict(self, **kwargs):
         return self.model_dump(exclude={"func"}, **kwargs)
