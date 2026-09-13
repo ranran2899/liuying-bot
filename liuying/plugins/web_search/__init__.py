@@ -12,12 +12,12 @@ from liuying.configs.utils import PluginExtraData
 from liuying.utils.enum import PluginType
 
 # 导入客户端模块，触发 @register_search_client 装饰器注册
-from . import bing_http, duckduckgo, searxng, wikipedia  # noqa: F401
+from . import bing_http  # noqa: F401
 
 __plugin_meta__ = PluginMetadata(
     name="网络搜索免配置客户端",
     description=(
-        "提供 Bing HTTP / Wikipedia / SearXNG / DuckDuckGo 免配置搜索客户端，"
+        "提供 Bing HTTP 免配置搜索客户端，"
         "作为正式搜索 provider 的降级兜底方案"
     ),
     usage="服务型插件，无需手动调用，自动注册到 LLM 网络搜索模块",

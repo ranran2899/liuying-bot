@@ -58,6 +58,10 @@ class WebPageResult:
     crawled_date: datetime | None = None
     language: str | None = None
     display_url: str | None = None
+    is_ad: bool = False
+    """是否为广告结果"""
+    ad_source: str | None = None
+    """广告来源"""
 
     @staticmethod
     def _parse_iso_date(date_str: str | None) -> datetime | None:

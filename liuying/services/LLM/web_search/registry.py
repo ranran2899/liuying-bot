@@ -46,13 +46,21 @@ class SearchClientMeta:
     """
 
     name: str
+    """客户端类型标识符"""
     display_name: str
+    """展示名称"""
     description: str
+    """描述"""
     default_base_url: str = ""
+    """默认基础URL"""
     requires_api_key: bool = True
+    """是否需要API密钥"""
     free: bool = False
+    """是否免配置"""
     keywords: tuple[str, ...] = ()
+    """识别关键词"""
     priority: int = 0
+    """免配置客户端优先级"""
 
 
 _SEARCH_CLIENT_REGISTRY: dict[str, type["BaseSearchClient"]] = {}

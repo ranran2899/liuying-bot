@@ -11,7 +11,6 @@ from liuying.services.LLM.web_search.base_client import BaseSearchClient
 from liuying.services.LLM.web_search.exceptions import (
     NetworkError,
     RequestError,
-    SearchError,
 )
 from liuying.services.LLM.web_search.models import (
     SearchRequest,
@@ -68,25 +67,51 @@ class FreeSearchClientBase(BaseSearchClient):
         返回:
             搜索响应对象
 
-        Raises:
+        抛出:
             RequestError: 搜索请求失败
             NetworkError: 网络连接失败
         """
         request.validate()
         count = min(max(request.count, 1), _MAX_FREE_RESULTS)
+
         try:
             web_pages = await self._execute_search(
                 request.query, count
             )
-        except SearchError:
-            raise
-        except Exception as e:
-            logger.debug(
-                f"免配置搜索 {self._provider_name} 失败: {e}",
-                command="web_search",
-                e=e,
+        except RequestError as e:
+            logger.error(
+                f"[{self._provider_name}] 请求失败: {e}"
             )
-            raise NetworkError(self._provider_name, e) from e
+            return SearchResponse(
+                query=request.query,
+                web_pages=[],
+                total_matches=0,
+                provider=self._provider_name,
+                raw_data={"error": "request_failed", "detail": str(e)},
+            )
+        except NetworkError as e:
+            logger.error(
+                f"[{self._provider_name}] 网络连接失败: {e}"
+            )
+            return SearchResponse(
+                query=request.query,
+                web_pages=[],
+                total_matches=0,
+                provider=self._provider_name,
+                raw_data={"error": "network_error", "detail": str(e)},
+            )
+        except Exception as e:
+            logger.error(
+                f"[{self._provider_name}] 未知错误: {e}",
+                exc_info=True,
+            )
+            return SearchResponse(
+                query=request.query,
+                web_pages=[],
+                total_matches=0,
+                provider=self._provider_name,
+                raw_data={"error": "unknown", "detail": str(e)},
+            )
 
         return SearchResponse(
             query=request.query,
@@ -108,7 +133,7 @@ class FreeSearchClientBase(BaseSearchClient):
         返回:
             网页结果列表
 
-        Raises:
+        抛出:
             RequestError: 搜索请求失败
             NetworkError: 网络连接失败
         """
@@ -121,25 +146,31 @@ class FreeSearchClientBase(BaseSearchClient):
         timeout: float = _REQUEST_TIMEOUT,
         follow_redirects: bool = True,
     ) -> tuple[int, str]:
-        """HTTP GET请求
+        """HTTP GET 请求
 
         参数:
-            url: 请求URL
+            url: 请求 URL
             timeout: 超时秒数
             follow_redirects: 是否跟随重定向
 
         返回:
             tuple[int, str]: (状态码, 响应文本)
 
-        Raises:
+        抛出:
             NetworkError: 网络连接失败
-            RequestError: HTTP错误
+            RequestError: HTTP 错误
         """
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        }
         try:
             response = await AsyncHttpx.get(
                 url,
                 timeout=timeout,
                 follow_redirects=follow_redirects,
+                headers=headers,
             )
             return response.status_code, response.text
         except HTTPStatusError as e:
@@ -158,6 +189,8 @@ class FreeSearchClientBase(BaseSearchClient):
         url: str,
         snippet: str,
         source: str,
+        is_ad: bool = False,
+        ad_source: str | None = None,
     ) -> WebPageResult:
         """构建网页结果对象
 
@@ -166,6 +199,8 @@ class FreeSearchClientBase(BaseSearchClient):
             url: URL
             snippet: 摘要
             source: 来源标识
+            is_ad: 是否为广告结果
+            ad_source: 广告来源
 
         返回:
             WebPageResult 实例
@@ -176,10 +211,6 @@ class FreeSearchClientBase(BaseSearchClient):
             url=url or "",
             snippet=snippet or "",
             site_name=source,
+            is_ad=is_ad,
+            ad_source=ad_source,
         )
-
-
-__all__ = [
-    "FreeSearchClientBase",
-    "strip_html_tags",
-]
