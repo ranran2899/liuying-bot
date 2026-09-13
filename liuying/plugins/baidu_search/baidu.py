@@ -7,22 +7,30 @@
 """
 from typing import Any
 
-from liuying.utils.log import logger
-
-from .base_client import BaseSearchClient
-from .exceptions import RequestError
-from .models import (
-    BaiduSearchMode,
+from liuying.configs.config import Config
+from liuying.services.LLM.web_search.base_client import BaseSearchClient
+from liuying.services.LLM.web_search.exceptions import (
+    APIKeyError,
+    RequestError,
+    SearchError,
+)
+from liuying.services.LLM.web_search.models import (
     FreshnessType,
-    SearchProvider,
     SearchRequest,
     SearchResponse,
     WebPageResult,
 )
-from .registry import SearchClientMeta, register_search_client
-from .tracker import search_tracker
+from liuying.services.LLM.web_search.registry import (
+    SearchClientMeta,
+    register_search_client,
+)
+from liuying.services.LLM.web_search.tracker import search_tracker
+from liuying.utils.log import logger
 
-_BAIDU_DEFAULT_BASE_URL = "https://qianfan.baidubce.com"
+from .models import BaiduSearchMode
+from .tracker import baidu_quota_tracker
+
+_MODULE = "BAIDU_SEARCH"
 
 
 @register_search_client(
@@ -30,7 +38,7 @@ _BAIDU_DEFAULT_BASE_URL = "https://qianfan.baidubce.com"
         name="baidu",
         display_name="百度搜索",
         description="百度千帆 AI 搜索，支持 web_search/chat/web_summary 三种模式",
-        default_base_url=_BAIDU_DEFAULT_BASE_URL,
+        default_base_url="https://qianfan.baidubce.com",
         requires_api_key=True,
         keywords=("baidu", "baidubce", "qianfan"),
     )
@@ -39,30 +47,17 @@ class BaiduClient(BaseSearchClient):
     """百度搜索API客户端"""
 
     def __init__(self, provider_name: str = "baidu"):
-        """初始化百度搜索客户端
-
-        参数:
-            provider_name: 提供商名称，对应 LLM.PROVIDERS 中的 name
-        """
         super().__init__(provider_name)
 
     async def search(self, request: SearchRequest) -> SearchResponse:
-        """执行百度搜索
-
-        根据 request.baidu_mode 选择对应的千帆 AI 搜索端点，
-        统一记录调用次数到 search_tracker。
-
-        Args:
-            request: 搜索请求对象
-
-        Returns:
-            搜索响应对象
-        """
+        """执行百度搜索"""
         request.validate()
 
-        mode = request.baidu_mode
-        endpoint_path = self._get_endpoint_path(mode)
+        mode = self._resolve_mode(request)
+        await self._check_quota(mode)
+
         base_url = self._get_base_url()
+        endpoint_path = self._get_endpoint_path(mode)
         url = f"{base_url.rstrip('/')}{endpoint_path}"
 
         api_key = self._get_api_key()
@@ -72,45 +67,63 @@ class BaiduClient(BaseSearchClient):
         }
 
         data = self._build_request_data(request, mode)
-
         response_data = await self._request(url, headers, data)
         response = self._parse_response(request.query, mode, response_data)
 
         await search_tracker.record("baidu", mode.value)
+        await baidu_quota_tracker.record(mode.value)
         return response
 
+    def _get_api_key(self) -> str:
+        api_key = Config.get_config(_MODULE, "API_KEY", "")
+        if not api_key:
+            raise APIKeyError("baidu")
+        return api_key
+
+    def _get_base_url(self) -> str:
+        return Config.get_config(_MODULE, "BASE_URL", "https://qianfan.baidubce.com")
+
     def _get_endpoint_path(self, mode: BaiduSearchMode) -> str:
-        """获取指定模式对应的端点路径
+        match mode:
+            case BaiduSearchMode.CHAT:
+                return "/v2/ai_search/chat/completions"
+            case BaiduSearchMode.WEB_SUMMARY:
+                return "/v2/ai_search/web_summary"
+            case _:
+                return "/v2/ai_search/web_search"
 
-        Args:
-            mode: 百度搜索模式
+    def _resolve_mode(self, request: SearchRequest) -> BaiduSearchMode:
+        raw = request.extra.get("baidu_mode")
+        if raw is None:
+            default = Config.get_config(_MODULE, "DEFAULT_MODE", "web_search")
+            return BaiduSearchMode(default)
+        if isinstance(raw, BaiduSearchMode):
+            return raw
+        if isinstance(raw, str):
+            try:
+                return BaiduSearchMode(raw)
+            except ValueError:
+                return BaiduSearchMode.WEB_SEARCH
+        return BaiduSearchMode.WEB_SEARCH
 
-        Returns:
-            端点路径字符串
-        """
-        return self._config.baidu_endpoint.get_endpoint(mode.value)
+    async def _check_quota(self, mode: BaiduSearchMode) -> None:
+        if not await baidu_quota_tracker.is_quota_available(mode.value):
+            quota = await baidu_quota_tracker.get_quota()
+            raise SearchError(
+                "百度智能搜索生成每日免费额度已用尽，"
+                f"已用 {quota['used']}/{quota['daily_limit']}，"
+                f"次日零点重置",
+                "baidu",
+            )
 
     def _build_request_data(
         self, request: SearchRequest, mode: BaiduSearchMode
     ) -> dict[str, Any]:
-        """构建请求数据
-
-        不同模式的请求体结构统一采用千帆 v2 接口的 messages 格式，
-        差异在于 chat/web_summary 模式需要传入 model 字段。
-
-        Args:
-            request: 搜索请求对象
-            mode: 百度搜索模式
-
-        Returns:
-            请求数据字典
-        """
-        endpoint_cfg = self._config.baidu_endpoint
         data: dict[str, Any] = {
             "messages": [
                 {"role": "user", "content": request.query},
             ],
-            "search_source": endpoint_cfg.search_source,
+            "search_source": "baidu_search_v2",
             "stream": False,
             "resource_type_filter": [
                 {"type": "web", "top_k": request.count},
@@ -120,16 +133,15 @@ class BaiduClient(BaseSearchClient):
         }
 
         if request.freshness != FreshnessType.NO_LIMIT:
-            data["search_recency_filter"] = self._convert_freshness(
-                request.freshness
-            )
+            data["search_recency_filter"] = self._convert_freshness(request.freshness)
 
         if request.search_filter:
-            filter_params = request.search_filter.to_baidu_params()
-            data.update(filter_params)
+            data.update(self._convert_filter(request.search_filter))
 
         if mode == BaiduSearchMode.CHAT:
-            data["model"] = request.chat_model or endpoint_cfg.chat_model
+            data["model"] = request.chat_model or Config.get_config(
+                _MODULE, "CHAT_MODEL", "ernie-4.5-turbo-32k"
+            )
             if request.instruction:
                 data["instruction"] = request.instruction
         elif mode == BaiduSearchMode.WEB_SUMMARY:
@@ -140,14 +152,6 @@ class BaiduClient(BaseSearchClient):
 
     @staticmethod
     def _convert_freshness(freshness: FreshnessType) -> str:
-        """将内部 FreshnessType 转换为百度 API 时间过滤参数
-
-        Args:
-            freshness: 时间范围类型
-
-        Returns:
-            百度 API 接受的时间过滤字符串
-        """
         match freshness:
             case FreshnessType.ONE_DAY:
                 return "week"
@@ -160,22 +164,21 @@ class BaiduClient(BaseSearchClient):
             case _:
                 return "year"
 
+    @staticmethod
+    def _convert_filter(search_filter: Any) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if search_filter.include_sites:
+            params["match"] = {"site": search_filter.include_sites}
+        if search_filter.city:
+            params["geo"] = {"city": [search_filter.city]}
+        return params
+
     def _parse_response(
         self,
         query: str,
         mode: BaiduSearchMode,
         response_data: dict[str, Any],
     ) -> SearchResponse:
-        """解析响应数据
-
-        Args:
-            query: 搜索关键词
-            mode: 百度搜索模式
-            response_data: 响应数据
-
-        Returns:
-            搜索响应对象
-        """
         if error_msg := response_data.get("message"):
             code = response_data.get("code", -1)
             raise RequestError(
@@ -186,12 +189,10 @@ class BaiduClient(BaseSearchClient):
             )
 
         references = response_data.get("references", []) or []
-        web_pages = [WebPageResult.from_baidu_v2(item) for item in references]
+        web_pages = [self._parse_reference(item) for item in references]
 
         summary_text = self._extract_summary(response_data)
-        request_id = response_data.get("request_id") or response_data.get(
-            "requestId"
-        )
+        request_id = response_data.get("request_id") or response_data.get("requestId")
 
         logger.debug(
             f"[百度搜索] 模式={mode.value}, 查询={query}, "
@@ -202,23 +203,28 @@ class BaiduClient(BaseSearchClient):
             query=query,
             web_pages=web_pages,
             total_matches=len(web_pages),
-            provider=SearchProvider.BAIDU,
+            provider="baidu",
             request_id=request_id,
             raw_data=response_data,
             summary_text=summary_text,
-            baidu_mode=mode,
+        )
+
+    @staticmethod
+    def _parse_reference(data: dict[str, Any]) -> WebPageResult:
+        return WebPageResult(
+            id=str(data.get("id", "")),
+            title=data.get("title", ""),
+            url=data.get("url", ""),
+            snippet=data.get("snippet") or data.get("content", ""),
+            summary=data.get("content"),
+            site_name=data.get("website") or data.get("web_anchor"),
+            site_icon=data.get("icon"),
+            published_date=WebPageResult._parse_iso_date(data.get("date"))
+            or WebPageResult._parse_date(data.get("date")),
         )
 
     @staticmethod
     def _extract_summary(response_data: dict[str, Any]) -> str | None:
-        """从响应中提取大模型总结文本
-
-        Args:
-            response_data: 响应数据
-
-        Returns:
-            总结文本，无总结时返回 None
-        """
         choices = response_data.get("choices") or []
         if not choices:
             return None
@@ -226,3 +232,6 @@ class BaiduClient(BaseSearchClient):
         message = first_choice.get("message") or first_choice.get("delta") or {}
         content = message.get("content")
         return content if content else None
+
+
+__all__ = ["BaiduClient"]

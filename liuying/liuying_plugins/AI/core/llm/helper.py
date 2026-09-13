@@ -409,7 +409,7 @@ class LLMHelper:
             response = await search_cap.search(
                 query,
                 count=count,
-                options={"baidu_mode": "web_search"},
+                options={"extra": {"baidu_mode": "web_search"}},
             )
             results: list[dict[str, str]] = []
             for item in response.web_pages:

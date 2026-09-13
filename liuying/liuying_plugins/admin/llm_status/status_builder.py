@@ -9,33 +9,16 @@ from liuying.services.LLM.tracker import token_tracker
 from liuying.services.LLM.web_search.tracker import search_tracker
 from liuying.ui.services import render
 
-BAIDU_MODE_LABELS = {
-    "web_search": "百度搜索",
-    "chat": "智能搜索生成",
-    "web_summary": "智能搜索生成(高性能版)",
-}
-
 
 def capability_names(provider_name: str) -> list[str]:
-    """获取供应商支持的能力名称列表
-
-    参数:
-        provider_name: 供应商名称
-
-    返回:
-        能力名称列表
-    """
+    """获取供应商支持的能力名称列表"""
     if not (provider := llm_manager.get_provider(provider_name)):
         return []
     return sorted(c.value for c in provider.capabilities())
 
 
 def build_providers() -> list[dict]:
-    """构建供应商配置数据
-
-    返回:
-        供应商信息列表
-    """
+    """构建供应商配置数据"""
     return [
         {
             "name": cfg.name,
@@ -48,14 +31,7 @@ def build_providers() -> list[dict]:
 
 
 def _usage_rows(summary: dict[str, dict]) -> list[dict]:
-    """把 Token 统计字典转换为展示行
-
-    参数:
-        summary: 以名称为键的统计字典
-
-    返回:
-        展示行列表，按总计倒序
-    """
+    """把 Token 统计字典转换为展示行"""
     rows = [
         {
             "name": name,
@@ -69,11 +45,7 @@ def _usage_rows(summary: dict[str, dict]) -> list[dict]:
 
 
 async def build_token_data() -> dict:
-    """构建 Token 消耗统计数据
-
-    返回:
-        Token 统计数据字典
-    """
+    """构建 Token 消耗统计数据"""
     provider_summary = await token_tracker.get_provider_summary()
     model_summary = await token_tracker.get_model_summary()
     daily_total = await token_tracker.get_total()
@@ -109,14 +81,9 @@ async def build_token_data() -> dict:
 
 
 async def build_search_data() -> dict:
-    """构建网络搜索使用统计数据
-
-    返回:
-        搜索统计数据字典
-    """
+    """构建网络搜索使用统计数据"""
     provider_summary = await search_tracker.get_provider_summary()
-    mode_summary = await search_tracker.get_baidu_mode_summary()
-    quota = await search_tracker.get_baidu_quota()
+    mode_summary = await search_tracker.get_mode_summary()
     total = await search_tracker.get_total()
 
     providers = sorted(
@@ -132,34 +99,24 @@ async def build_search_data() -> dict:
         reverse=True,
     )
 
-    modes = [
-        {"label": BAIDU_MODE_LABELS.get(mode, mode), "count": record["count"]}
-        for mode, record in sorted(mode_summary.items())
-    ]
-
-    quota_data = None
-    if (daily_limit := quota["daily_limit"]) > 0:
-        quota_data = {
-            "used": quota["used"],
-            "remaining": quota["remaining"],
-            "dailyLimit": daily_limit,
-            "percent": min(100, int(quota["used"] / daily_limit * 100)),
-        }
+    modes = []
+    for provider_name, provider_modes in mode_summary.items():
+        for mode, record in provider_modes.items():
+            modes.append({
+                "provider": provider_name,
+                "mode": mode,
+                "count": record["count"],
+            })
 
     return {
         "providers": providers,
         "modes": modes,
-        "quota": quota_data,
         "total": total["count"],
     }
 
 
 async def build_status_data() -> dict:
-    """构建 LLM 状态完整数据
-
-    返回:
-        用于模板渲染的数据字典
-    """
+    """构建 LLM 状态完整数据"""
     providers = build_providers()
     return {
         "defaultModel": llm_manager.config.default_model_name or "未配置",
@@ -171,14 +128,7 @@ async def build_status_data() -> dict:
 
 
 async def gen_status_img(user_id: str | None = None) -> bytes:
-    """生成 LLM 状态图片
-
-    参数:
-        user_id: 用户ID，用于选择用户主题
-
-    返回:
-        图片字节数据
-    """
+    """生成 LLM 状态图片"""
     data = await build_status_data()
     weekly = data["token"]["weekly"]
     data["chartLabels"] = json.dumps([row["date"] for row in weekly])

@@ -9,7 +9,6 @@ from liuying.utils.exception import AllURIsFailedError
 from liuying.utils.http.http_utils import AsyncHttpx
 from liuying.utils.log import logger
 
-from .config import get_search_config
 from .exceptions import APIKeyError, NetworkError, RequestError
 from .models import SearchRequest, SearchResponse
 
@@ -22,58 +21,39 @@ class BaseSearchClient(ABC):
 
     子类通过 register_search_client 装饰器注册后，
     client_meta 类属性自动设置为对应的 SearchClientMeta。
+
+    子类需自行实现 _get_api_key() 和 _get_base_url()，
+    从各自的配置系统读取密钥与地址。
     """
 
     client_meta: ClassVar["SearchClientMeta | None"] = None
     """客户端元数据，由 register_search_client 装饰器设置"""
 
     def __init__(self, provider_name: str):
-        """初始化搜索客户端
-
-        Args:
-            provider_name: 提供商名称
-        """
         self._provider_name = provider_name
-        self._config = get_search_config()
 
     @property
     def provider_name(self) -> str:
-        """获取提供商名称"""
         return self._provider_name
 
     @abstractmethod
     async def search(self, request: SearchRequest) -> SearchResponse:
-        """执行搜索
-
-        Args:
-            request: 搜索请求对象
-
-        Returns:
-            搜索响应对象
-        """
+        """执行搜索"""
         ...
 
     def _get_api_key(self) -> str:
-        """获取API密钥
-
-        Returns:
-            API密钥字符串
+        """获取 API 密钥，子类应覆盖此方法从自身配置系统读取
 
         Raises:
             APIKeyError: API密钥未配置
         """
-        api_key = self._config.get_api_key(self._provider_name)
-        if not api_key:
-            raise APIKeyError(self._provider_name)
-        return api_key
+        raise APIKeyError(self._provider_name)
 
     def _get_base_url(self) -> str:
-        """获取API基础URL
-
-        Returns:
-            API基础URL
-        """
-        return self._config.get_base_url(self._provider_name)
+        """获取基础 URL，子类应覆盖此方法从自身配置系统读取"""
+        if self.client_meta:
+            return self.client_meta.default_base_url
+        return ""
 
     async def _request(
         self,
@@ -82,21 +62,7 @@ class BaseSearchClient(ABC):
         data: dict[str, Any],
         timeout: int = 30,
     ) -> dict[str, Any]:
-        """发送搜索请求
-
-        Args:
-            url: 请求URL
-            headers: 请求头
-            data: 请求数据
-            timeout: 超时时间
-
-        Returns:
-            响应数据
-
-        Raises:
-            NetworkError: 网络错误
-            RequestError: 请求错误
-        """
+        """发送搜索请求"""
         try:
             response = await AsyncHttpx.post(
                 url=url,

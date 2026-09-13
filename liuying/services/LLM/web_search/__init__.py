@@ -19,16 +19,8 @@
     class MyClient(BaseSearchClient):
         async def search(self, request: SearchRequest) -> SearchResponse:
             ...
-    """
-from .baidu import BaiduClient
+"""
 from .base_client import BaseSearchClient
-from .bocha import BochaClient
-from .config import (
-    BaiduEndpointConfig,
-    SearchConfig,
-    SearchProviderConfig,
-    get_search_config,
-)
 from .exceptions import (
     APIKeyError,
     NetworkError,
@@ -38,12 +30,10 @@ from .exceptions import (
     ValidationError,
 )
 from .models import (
-    BaiduSearchMode,
     FreshnessType,
     ImageResult,
     ResourceType,
     SearchFilter,
-    SearchProvider,
     SearchRequest,
     SearchResponse,
     WebPageResult,
@@ -61,11 +51,7 @@ from .tracker import SearchUsageTracker, search_tracker
 
 __all__ = [
     "APIKeyError",
-    "BaiduClient",
-    "BaiduEndpointConfig",
-    "BaiduSearchMode",
     "BaseSearchClient",
-    "BochaClient",
     "FreshnessType",
     "ImageResult",
     "NetworkError",
@@ -73,11 +59,8 @@ __all__ = [
     "RequestError",
     "ResourceType",
     "SearchClientMeta",
-    "SearchConfig",
     "SearchError",
     "SearchFilter",
-    "SearchProvider",
-    "SearchProviderConfig",
     "SearchRequest",
     "SearchResponse",
     "SearchUsageTracker",
@@ -88,7 +71,6 @@ __all__ = [
     "get_registered_search_clients",
     "get_search_client_class",
     "get_search_client_meta",
-    "get_search_config",
     "register_search_client",
     "search_tracker",
 ]
