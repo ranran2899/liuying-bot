@@ -102,8 +102,7 @@ class FreeSearchClientBase(BaseSearchClient):
             )
         except Exception as e:
             logger.error(
-                f"[{self._provider_name}] 未知错误: {e}",
-                exc_info=True,
+                f"未知错误: {e}"
             )
             return SearchResponse(
                 query=request.query,
