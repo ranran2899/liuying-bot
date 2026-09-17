@@ -63,6 +63,7 @@ __plugin_meta__ = PluginMetadata(
             RegisterConfig(
                 key="MAX_BOT_COUNT",
                 value=5,
+                module="qqbot_config",
                 help="每个用户最多可配置的机器人数量",
                 default_value=5,
                 type=int,
@@ -70,6 +71,7 @@ __plugin_meta__ = PluginMetadata(
             RegisterConfig(
                 key="BOT_LEVEL",
                 value=7,
+                module="qqbot_config",
                 help="获得当前配置的机器人权限等级",
                 default_value=7,
                 type=int,

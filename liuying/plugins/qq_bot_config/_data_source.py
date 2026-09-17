@@ -23,7 +23,7 @@ from ._intent import (
 from ._monitor import ReconnectMonitor
 from .model import QQBotConfig
 
-_CONFIG_MODULE = "qq_bot_config"
+_CONFIG_MODULE = "qqbot_config"
 """配置模块名"""
 
 _SECRET_MIN_LEN = 10
