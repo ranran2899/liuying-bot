@@ -21,7 +21,7 @@ class AgentTool:
 
     参考参考插件 AgentTool 设计。
 
-    Attributes:
+    参数:
         name: 工具名（唯一键）
         description: 工具描述（供LLM决策使用）
         parameters: JSON Schema参数定义
@@ -36,16 +36,27 @@ class AgentTool:
     """
 
     name: str
+    """工具名（唯一键）"""
     description: str
+    """工具描述（供LLM决策使用）"""
     parameters: dict[str, Any]
+    """JSON Schema参数定义"""
     func: Callable[..., Awaitable[str]]
+    """工具执行函数（异步）"""
     is_disabled: bool = False
+    """是否禁用"""
     intent_tags: list[str] = field(default_factory=list)
+    """意图标签列表"""
     latency_class: str = LATENCY_CLASS_FAST
+    """延迟级别（fast/network/slow）"""
     requires_network: bool = False
+    """是否需要网络"""
     requires_image: bool = False
+    """是否需要图片输入"""
     evidence_kind: str = EVIDENCE_KIND_TOOL
+    """证据类型（tool/context）"""
     metadata: dict[str, Any] = field(default_factory=dict)
+    """附加元信息"""
 
     def to_metadata(self) -> dict[str, Any]:
         """导出元数据字典

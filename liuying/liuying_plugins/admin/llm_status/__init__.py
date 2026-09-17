@@ -39,11 +39,11 @@ __plugin_meta__ = PluginMetadata(
         ],
         configs=[
             RegisterConfig(
-                # module="llm_status",
+                module="llm_status",
                 key="USER_TOKEN_QUOTA_MAX",
-                value=100000,
+                value=1000000,
                 help="每天 0 点重置所有用户 token 额度",
-                default_value=100000,
+                default_value=1000000,
                 type=int,
             ),
             RegisterConfig(
