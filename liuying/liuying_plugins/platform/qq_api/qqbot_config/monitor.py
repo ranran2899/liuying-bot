@@ -23,8 +23,8 @@ CHECK_INTERVAL = 10.0
 MAX_FAILURES = 3
 """连续失败次数上限,超过后自动删除配置"""
 
-DeleteCallback = Callable[[str, str], Awaitable[str]]
-"""自动删除回调签名: (user_id, bot_id) -> 结果消息"""
+DeleteCallback = Callable[[str, str], Awaitable[tuple[bool, str]]]
+"""自动删除回调签名: (user_id, bot_id) -> (是否成功, 结果消息)"""
 
 
 class ReconnectMonitor:
@@ -124,7 +124,7 @@ class ReconnectMonitor:
         if user_id is None:
             return
 
-        msg = await cls._delete_callback(user_id, bot_id)
+        _, msg = await cls._delete_callback(user_id, bot_id)
         logger.warning(f"重连失败保护触发: {msg}", "QQBotConfig")
 
 

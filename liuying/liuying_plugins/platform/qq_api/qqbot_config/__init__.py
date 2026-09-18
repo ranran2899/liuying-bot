@@ -173,7 +173,7 @@ async def _(
     secret: str,
 ) -> None:
     """添加QQ机器人配置"""
-    msg = await QQBotConfigManager.add_config(
+    _, msg = await QQBotConfigManager.add_config(
         user_id=session.user.id,
         bot_id=bot_id,
         secret=secret,
@@ -220,7 +220,7 @@ async def _(
         use_ws = False
 
     if secret.available or use_ws is not None:
-        msg = await QQBotConfigManager.update_config(
+        _, msg = await QQBotConfigManager.update_config(
             user_id=session.user.id,
             bot_id=bot_id,
             secret=secret.result if secret.available else None,
@@ -234,7 +234,7 @@ async def _(
 @_delete_matcher.handle()
 async def _(session: Uninfo, bot_id: str) -> None:
     """删除QQ机器人配置"""
-    msg = await QQBotConfigManager.delete_config(session.user.id, bot_id)
+    _, msg = await QQBotConfigManager.delete_config(session.user.id, bot_id)
     await MessageUtils.build_message(msg).finish(reply_to=True)
 
 
@@ -269,9 +269,9 @@ async def _(
             QQBotConfigManager.get_intent_fields()
         )
     elif arparma.find("reset"):
-        msg = await QQBotConfigManager.reset_intent(user_id, bot_id)
+        _, msg = await QQBotConfigManager.reset_intent(user_id, bot_id)
     elif field.available and value.available:
-        msg = await QQBotConfigManager.update_intent(
+        _, msg = await QQBotConfigManager.update_intent(
             user_id, bot_id, field.result, value.result
         )
     else:
@@ -299,5 +299,5 @@ async def _() -> None:
 @_clear_matcher.handle()
 async def _() -> None:
     """清空全部用户的QQ机器人配置(仅超级用户)"""
-    msg = await QQBotConfigManager.clear_all_configs()
+    _, msg = await QQBotConfigManager.clear_all_configs()
     await MessageUtils.build_message(msg).finish(reply_to=True)

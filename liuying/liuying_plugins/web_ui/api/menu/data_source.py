@@ -23,6 +23,7 @@ default_menus = [
     MenuItem(name="插件列表", module="plugin", router="/plugin", icon="plugin"),
     MenuItem(name="插件商店", module="store", router="/store", icon="store"),
     MenuItem(name="好友/群组", module="manage", router="/manage", icon="user"),
+    MenuItem(name="QQ机器人", module="qqbot", router="/qqbot", icon="robot"),
     MenuItem(
         name="数据库管理",
         module="database",

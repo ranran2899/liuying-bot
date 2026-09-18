@@ -35,7 +35,9 @@ class QQBotConfigManager:
 
     负责配置的增删改查业务逻辑(校验/适配器同步/权限联动),
     数据访问统一由 QQBotConfig 模型方法提供,
-    通过 ReconnectMonitor 注册回调实现自动删除保护
+    通过 ReconnectMonitor 注册回调实现自动删除保护。
+    写操作统一返回 (是否成功, 结果消息) 元组,
+    供聊天指令与 WebUI 共用
     """
 
     @staticmethod
@@ -94,7 +96,7 @@ class QQBotConfigManager:
         bot_id: str,
         secret: str,
         use_websocket: bool = True,
-    ) -> str:
+    ) -> tuple[bool, str]:
         """添加QQ机器人配置
 
         参数:
@@ -104,21 +106,21 @@ class QQBotConfigManager:
             use_websocket: 是否使用WebSocket
 
         返回:
-            str: 结果消息
+            tuple[bool, str]: (是否成功, 结果消息)
         """
         if err := cls._validate_bot_id(bot_id):
-            return err
+            return False, err
         if err := cls._validate_secret(secret):
-            return err
+            return False, err
 
         max_configs = int(
             Config.get_config(_CONFIG_MODULE, "MAX_BOT_COUNT") or 5
         )
         bots = await QQBotConfig.get_user_bots(user_id)
         if len(bots) >= max_configs:
-            return f"已达到最大配置数量限制({max_configs}个)"
+            return False, f"已达到最大配置数量限制({max_configs}个)"
         if await QQBotConfig.bot_id_exists(bot_id):
-            return f"机器人ID {bot_id} 已被其他用户添加,不可重复配置"
+            return False, f"机器人ID {bot_id} 已被其他用户添加,不可重复配置"
 
         bots.append(
             {
@@ -136,7 +138,7 @@ class QQBotConfigManager:
         await UserPermLevel.set_bot_level(bot_id, user_id, bot_level)
 
         logger.info(f"用户 {user_id} 添加QQ机器人配置: {bot_id}")
-        return f"成功添加机器人配置: {bot_id}"
+        return True, f"成功添加机器人配置: {bot_id}"
 
     @classmethod
     async def update_config(
@@ -147,7 +149,7 @@ class QQBotConfigManager:
         secret: str | None = None,
         use_websocket: bool | None = None,
         intent: dict[str, bool] | None = None,
-    ) -> str:
+    ) -> tuple[bool, str]:
         """更新QQ机器人配置(仅更新传入的非None字段)
 
         参数:
@@ -158,19 +160,19 @@ class QQBotConfigManager:
             intent: 完整意图配置
 
         返回:
-            str: 结果消息
+            tuple[bool, str]: (是否成功, 结果消息)
         """
         if secret is not None and (err := cls._validate_secret(secret)):
-            return err
+            return False, err
         if intent is not None:
             invalid = [k for k in intent if k not in VALID_INTENT_FIELDS]
             if invalid:
-                return f"无效的意图字段: {', '.join(invalid)}"
+                return False, f"无效的意图字段: {', '.join(invalid)}"
 
         bots = await QQBotConfig.get_user_bots(user_id)
         bot = next((b for b in bots if b["id"] == bot_id), None)
         if bot is None:
-            return f"机器人配置 {bot_id} 不存在"
+            return False, f"机器人配置 {bot_id} 不存在"
 
         changed = False
         if secret is not None:
@@ -183,17 +185,17 @@ class QQBotConfigManager:
             bot["intent"] = intent
             changed = True
         if not changed:
-            return "没有需要更新的字段"
+            return False, "没有需要更新的字段"
 
         await QQBotConfig.save_user_bots(user_id, bots)
 
         cls._sync_to_adapter(bot)
 
         logger.info(f"用户 {user_id} 更新配置: {bot_id}")
-        return f"成功更新机器人配置: {bot_id}"
+        return True, f"成功更新机器人配置: {bot_id}"
 
     @classmethod
-    async def delete_config(cls, user_id: str, bot_id: str) -> str:
+    async def delete_config(cls, user_id: str, bot_id: str) -> tuple[bool, str]:
         """删除QQ机器人配置
 
         参数:
@@ -201,19 +203,19 @@ class QQBotConfigManager:
             bot_id: 机器人ID
 
         返回:
-            str: 结果消息
+            tuple[bool, str]: (是否成功, 结果消息)
         """
         bots = await QQBotConfig.get_user_bots(user_id)
         remaining = [b for b in bots if b["id"] != bot_id]
         if len(remaining) == len(bots):
-            return f"机器人配置 {bot_id} 不存在"
+            return False, f"机器人配置 {bot_id} 不存在"
 
         await QQBotConfig.save_user_bots(user_id, remaining)
         cls._remove_from_adapter(bot_id)
         await UserPermLevel.delete_bot_level(bot_id, user_id)
         ReconnectMonitor.on_connected(bot_id)
         logger.info(f"用户 {user_id} 删除配置: {bot_id}")
-        return f"成功删除机器人配置: {bot_id}"
+        return True, f"成功删除机器人配置: {bot_id}"
 
     @classmethod
     def _remove_from_adapter(cls, bot_id: str) -> None:
@@ -226,17 +228,17 @@ class QQBotConfigManager:
             )
 
     @classmethod
-    async def clear_all_configs(cls) -> str:
+    async def clear_all_configs(cls) -> tuple[bool, str]:
         """清空全部用户的QQ机器人配置(超级用户指令)
 
         移除适配器中所有机器人连接,清理权限数据后删除全部配置
 
         返回:
-            str: 结果消息
+            tuple[bool, str]: (是否成功, 结果消息)
         """
         all_bots = await QQBotConfig.get_all_bots()
         if not all_bots:
-            return "当前没有任何QQ机器人配置"
+            return False, "当前没有任何QQ机器人配置"
 
         for user_id, bot in all_bots:
             cls._remove_from_adapter(bot["id"])
@@ -246,7 +248,7 @@ class QQBotConfigManager:
         await QQBotConfig.delete_all()
         ReconnectMonitor.reset_failures()
         logger.warning(f"超级用户清空全部QQ机器人配置,共 {len(all_bots)} 个")
-        return f"已清空全部QQ机器人配置,共删除 {len(all_bots)} 个"
+        return True, f"已清空全部QQ机器人配置,共删除 {len(all_bots)} 个"
 
     @staticmethod
     def get_default_intent() -> dict[str, bool]:
@@ -279,7 +281,7 @@ class QQBotConfigManager:
     @classmethod
     async def update_intent(
         cls, user_id: str, bot_id: str, field: str, value: bool
-    ) -> str:
+    ) -> tuple[bool, str]:
         """更新单个意图字段
 
         参数:
@@ -289,25 +291,25 @@ class QQBotConfigManager:
             value: 字段值
 
         返回:
-            str: 结果消息
+            tuple[bool, str]: (是否成功, 结果消息)
         """
         if field not in VALID_INTENT_FIELDS:
             available = ", ".join(VALID_INTENT_FIELDS)
-            return f"无效的意图字段: {field}\n可用字段: {available}"
+            return False, f"无效的意图字段: {field}\n可用字段: {available}"
 
         bot = await QQBotConfig.get_bot(user_id, bot_id)
         if bot is None:
-            return f"机器人配置 {bot_id} 不存在"
+            return False, f"机器人配置 {bot_id} 不存在"
 
         intent = dict(bot.get("intent", {}))
         if intent.get(field) == value:
-            return f"意图字段 {field} 已为{'启用' if value else '禁用'}"
+            return True, f"意图字段 {field} 已为{'启用' if value else '禁用'}"
 
         intent[field] = value
         return await cls.update_config(user_id, bot_id, intent=intent)
 
     @classmethod
-    async def reset_intent(cls, user_id: str, bot_id: str) -> str:
+    async def reset_intent(cls, user_id: str, bot_id: str) -> tuple[bool, str]:
         """重置意图配置为默认值
 
         参数:
@@ -315,7 +317,7 @@ class QQBotConfigManager:
             bot_id: 机器人ID
 
         返回:
-            str: 结果消息
+            tuple[bool, str]: (是否成功, 结果消息)
         """
         return await cls.update_config(
             user_id, bot_id, intent=cls.get_default_intent()

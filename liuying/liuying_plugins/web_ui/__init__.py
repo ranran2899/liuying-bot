@@ -26,6 +26,7 @@ from .api.tabs.manage import router as manage_router
 from .api.tabs.manage.chat import ws_router as chat_routes
 from .api.tabs.plugin_manage import router as plugin_router
 from .api.tabs.plugin_manage.store import router as store_router
+from .api.tabs.qqbot import router as qqbot_router
 from .api.tabs.system import router as system_router
 from .auth import router as auth_router
 from .public import init_public
@@ -88,6 +89,7 @@ BaseApiRouter.include_router(system_router)
 BaseApiRouter.include_router(menu_router)
 BaseApiRouter.include_router(configure_router)
 BaseApiRouter.include_router(ai_router)
+BaseApiRouter.include_router(qqbot_router)
 
 WsApiRouter = APIRouter(prefix="/liuying/socket")
 
