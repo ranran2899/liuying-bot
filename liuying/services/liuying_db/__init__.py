@@ -29,13 +29,13 @@ async def init():
     await LifecycleManager.initialize()
 
 
-@PriorityLifecycle.on_shutdown(priority=10)
+@PriorityLifecycle.on_shutdown(priority=1)
 async def shutdown():
     """数据库关闭入口，由 NoneBot 关闭钩子调用
 
-    先停止同步任务，再停止监控并释放全部数据库连接。
-    priority=1 使其反向排序后在关闭流程最后执行，
-    确保依赖数据库的业务服务先完成清理。
+    关闭钩子按优先级降序执行，priority=1 使数据库在全部业务服务
+    （含聊天记录/统计/行为日志队列的关停刷库）完成清理后最后断开。
+    先停止同步任务，再释放全部数据库连接。
     """
     await sync_manager.stop_sync()
     await session_manager.disconnect()

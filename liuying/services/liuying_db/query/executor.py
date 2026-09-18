@@ -11,7 +11,6 @@ from collections.abc import AsyncGenerator, Callable
 from datetime import datetime
 import hashlib
 import itertools
-import time
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
@@ -29,12 +28,11 @@ from sqlalchemy.sql.selectable import Select
 from liuying.services.cache import Cache
 from liuying.utils.log import logger
 
-from ..config import LOG_COMMAND, SLOW_QUERY_THRESHOLD
+from ..config import LOG_COMMAND
 from ..utils import DbUtils
 from .conditions import (
     _BASE_DELAY,
     _MAX_RETRIES,
-    _QUERY_CACHE,
     _RESULT_HANDLERS,
     _RETRYABLE_ERRORS,
     _build_django_conditions,
@@ -45,10 +43,38 @@ from .conditions import (
 )
 
 if TYPE_CHECKING:
+    from ..base_model import Model
     from . import QueryWrapper
 
 
-class QueryExecutorMixin:
+# 仅实体查询结果可缓存：Row 结果经序列化会退化为字符串，标量聚合收益低
+_CACHEABLE_FETCHES = frozenset({"first", "all", "one", "one_or_none"})
+
+# 查询缓存实例按 (模型类, 是否列表) 隔离注册：result_type 绑定模型类型，
+# 保证实体查询缓存命中时能正确反序列化重建 ORM 实例
+_query_caches: dict[tuple[type, bool], Cache] = {}
+
+
+def _get_query_cache(model_class: type, is_list: bool) -> Cache:
+    """获取模型专属查询缓存
+
+    参数:
+        model_class: 模型类
+        is_list: 结果是否为实体列表（决定 result_type 的泛型形态）
+
+    返回:
+        Cache: 查询缓存实例
+    """
+    cache_key = (model_class, is_list)
+    if cache_key not in _query_caches:
+        result_type = list[model_class] if is_list else model_class
+        _query_caches[cache_key] = Cache(
+            f"LIUYING_DB_QUERY_{model_class.__name__}", result_type=result_type
+        )
+    return _query_caches[cache_key]
+
+
+class QueryExecutorMixin[T: Model]:
     """查询执行与修改操作方法集合
 
     提供查询执行、聚合统计、批量修改操作和内部查询构建辅助方法。
@@ -62,7 +88,7 @@ class QueryExecutorMixin:
         return self._cache_ttl is not None and self._cache_ttl > 0
 
     async def _invalidate_write_cache(self) -> None:
-        """写操作后失效缓存：按模型命名空间清除查询缓存，并清除模型主键缓存"""
+        """写操作提交后失效缓存：按模型命名空间清除查询缓存，并清除模型主键缓存"""
         await self.model_class._invalidate_query_cache()
         cache_type = getattr(self.model_class, "cache_type", None)
         if cache_type:
@@ -193,8 +219,10 @@ class QueryExecutorMixin:
         if fetch_type not in _RESULT_HANDLERS:
             raise ValueError(f"不支持的fetch_type: {fetch_type}")
 
+        cacheable = fetch_type in _CACHEABLE_FETCHES
+        is_list = fetch_type == "all"
         cache_key = self._cache_key
-        if cache_key is None and self._cache_enabled:
+        if cacheable and cache_key is None and self._cache_enabled:
             # 编译产物文本 + 绑定参数共同生成摘要：
             # 仅凭 str(stmt) 不同参数值的语句文本相同，会导致不同查询
             # 互相命中对方缓存结果
@@ -206,9 +234,11 @@ class QueryExecutorMixin:
             )
 
         namespace = query_cache_namespace(self.model_class)
-        if self._cache_enabled and cache_key:
+        if cacheable and self._cache_enabled and cache_key:
             try:
-                cached = await _QUERY_CACHE.get(cache_key, namespace=namespace)
+                cached = await _get_query_cache(self.model_class, is_list).get(
+                    cache_key, namespace=namespace
+                )
                 if cached is not None:
                     return cached
             except Exception as e:
@@ -219,20 +249,17 @@ class QueryExecutorMixin:
                 async with self.model_class.get_session(
                     db_name=self._db_name
                 ) as session:
-                    start = time.perf_counter()
-                    result = await session.execute(stmt)
-                    elapsed = time.perf_counter() - start
-                    if elapsed > SLOW_QUERY_THRESHOLD:
-                        logger.warning(
-                            f"慢查询检测 [{self._db_name}] "
-                            f"{self.model_class.__name__}.{fetch_type} "
-                            f"耗时: {elapsed:.3f}s",
-                            LOG_COMMAND,
-                        )
+                    result = await DbUtils.with_db_timeout(
+                        session.execute(stmt),
+                        operation=(
+                            f"{self._db_name}:"
+                            f"{self.model_class.__name__}.{fetch_type}"
+                        ),
+                    )
                     query_result = _RESULT_HANDLERS[fetch_type](result)
-                    if self._cache_enabled and cache_key:
+                    if cacheable and self._cache_enabled and cache_key:
                         try:
-                            await _QUERY_CACHE.set(
+                            await _get_query_cache(self.model_class, is_list).set(
                                 cache_key,
                                 query_result,
                                 expire=self._cache_ttl,
@@ -485,9 +512,9 @@ class QueryExecutorMixin:
         if max_per_page is not None:
             per_page = min(per_page, max_per_page)
         total = await self.count()
-        self._limit = per_page
-        self._offset = (page - 1) * per_page
-        items = await self.all()
+        # 基于独立副本分页，不修改 wrapper 自身状态；_spawn 保留排序等条件
+        query = self._spawn()
+        items = await query.limit(per_page).offset((page - 1) * per_page).all()
         return {
             "items": items,
             "total": total,
@@ -568,6 +595,10 @@ class QueryExecutorMixin:
         参数:
             analyze: 为True时执行 EXPLAIN ANALYZE，实际运行查询并返回
                      包含执行时间的计划，适合性能调优；默认False仅分析
+
+        警告:
+            literal_binds 编译对 datetime 等无字面量处理器的类型
+            可能抛出 UnsupportedCompilationError，仅建议调试时使用
         """
         stmt = self._build_base_query()
         prefix = "EXPLAIN ANALYZE " if analyze else "EXPLAIN "
@@ -582,6 +613,8 @@ class QueryExecutorMixin:
         警告:
             此方法允许执行任意SQL语句，存在SQL注入风险。
             请确保所有用户输入通过 params 参数传递。
+            返回的是绑定当前会话的 Result，必须在本次调用返回后
+            立即消费（如 fetchall），会话关闭后再迭代会失败。
 
         参数:
             sql: 原始SQL语句，使用 :param 形式的命名参数
@@ -593,14 +626,21 @@ class QueryExecutorMixin:
     def _spawn(self) -> "QueryWrapper":
         """基于当前查询条件创建独立的 wrapper，不共享可变状态
 
-        供 ``find_in_batches`` 等需要重建查询链的方法复用，
-        完整保留 exclude 条件、软删除状态与目标数据库配置。
+        供 ``paginate``/``find_in_batches`` 等需要重建查询链的方法复用，
+        完整保留过滤、排除、排序、分组、连接、关联加载与目标数据库配置。
         """
         spawn = self.model_class.filter(*self.args, **self.kwargs)
         spawn._exclude_args = self._exclude_args
         spawn._exclude_kwargs = dict(self._exclude_kwargs)
         spawn._with_deleted = self._with_deleted
         spawn._db_name = self._db_name
+        spawn._order_by = self._order_by
+        spawn._distinct = self._distinct
+        spawn._join_conditions = list(self._join_conditions)
+        spawn._group_by = self._group_by
+        spawn._having = self._having
+        spawn._deferred_fields = list(self._deferred_fields)
+        spawn._load_relationships = list(self._load_relationships)
         return spawn
 
     async def find_in_batches(
@@ -619,10 +659,13 @@ class QueryExecutorMixin:
         """
         pk_names = DbUtils.get_primary_key_names(self.model_class)
         if not pk_names:
-            # 无主键，回退到 OFFSET 分页
+            # 无主键，回退到 OFFSET 分页；必须配稳定排序，否则批间可能重复或遗漏
+            query = self._spawn()
+            if not query._order_by:
+                query.order_by(next(iter(self.model_class.__table__.columns)))
             offset = 0
             while True:
-                batch = await self._spawn().limit(batch_size).offset(offset).all()
+                batch = await query.limit(batch_size).offset(offset).all()
                 if not batch:
                     break
                 yield batch
@@ -675,22 +718,6 @@ class QueryExecutorMixin:
         col = DbUtils.get_column(self.model_class, field_name)
         records = await self.filter(col.in_(id_list)).all()
         return {getattr(r, field_name): r for r in records}
-
-    async def get_or_create(
-        self, defaults: dict[str, Any] | None = None, **kwargs: Any
-    ) -> tuple[Any, bool]:
-        """获取或创建记录"""
-        return await self.model_class.get_or_create(
-            defaults=defaults, db_name=self._db_name, **kwargs
-        )
-
-    async def update_or_create(
-        self, defaults: dict[str, Any] | None = None, **kwargs: Any
-    ) -> tuple[Any, bool]:
-        """更新或创建记录"""
-        return await self.model_class.update_or_create(
-            defaults=defaults, db_name=self._db_name, **kwargs
-        )
 
     async def _aggregate_column(
         self, column: str | Any, func_type: Any, distinct: bool = False
@@ -747,8 +774,9 @@ class QueryExecutorMixin:
         async with self.model_class.get_session(db_name=self._db_name) as session:
             stmt = self._apply_filters(update(self.model_class)).values(**values)
             result = await session.execute(stmt)
-            await self._invalidate_write_cache()
-            return result.rowcount
+        # 缓存失效放在会话提交之后，避免并发读在失效与提交间隙回填旧数据
+        await self._invalidate_write_cache()
+        return result.rowcount
 
     async def delete(self) -> int:
         """批量删除
@@ -759,8 +787,9 @@ class QueryExecutorMixin:
         async with self.model_class.get_session(db_name=self._db_name) as session:
             stmt = self._apply_filters(delete(self.model_class))
             result = await session.execute(stmt)
-            await self._invalidate_write_cache()
-            return result.rowcount
+        # 缓存失效放在会话提交之后，避免并发读在失效与提交间隙回填旧数据
+        await self._invalidate_write_cache()
+        return result.rowcount
 
     @staticmethod
     def _build_mapping(obj: Any, fields: list[str] | None = None) -> dict:
@@ -824,8 +853,9 @@ class QueryExecutorMixin:
             if refresh:
                 for obj in objects:
                     await session.refresh(obj)
-            await self._invalidate_write_cache()
-            return objects
+        # 缓存失效放在会话提交之后，避免并发读在失效与提交间隙回填旧数据
+        await self._invalidate_write_cache()
+        return objects
 
     async def bulk_update(
         self,
@@ -848,8 +878,9 @@ class QueryExecutorMixin:
                 updated += len(batch)
                 if progress_callback:
                     progress_callback(updated, total)
-            await self._invalidate_write_cache()
-            return updated
+        # 缓存失效放在会话提交之后，避免并发读在失效与提交间隙回填旧数据
+        await self._invalidate_write_cache()
+        return updated
 
     async def bulk_delete(
         self,
@@ -870,8 +901,9 @@ class QueryExecutorMixin:
                 await session.flush()
                 if progress_callback:
                     progress_callback(deleted, total)
-            await self._invalidate_write_cache()
-            return deleted
+        # 缓存失效放在会话提交之后，避免并发读在失效与提交间隙回填旧数据
+        await self._invalidate_write_cache()
+        return deleted
 
     async def _atomic_update(self, column: str | Any, amount: int) -> int:
         """原子性更新字段值（增减）"""
@@ -880,8 +912,9 @@ class QueryExecutorMixin:
             stmt = self._apply_filters(update(self.model_class))
             stmt = stmt.values({col: col + amount})
             result = await session.execute(stmt)
-            await self._invalidate_write_cache()
-            return result.rowcount
+        # 缓存失效放在会话提交之后，避免并发读在失效与提交间隙回填旧数据
+        await self._invalidate_write_cache()
+        return result.rowcount
 
     async def increment(self, column: str | Any, amount: int = 1) -> int:
         """原子性增加字段值"""
@@ -901,8 +934,9 @@ class QueryExecutorMixin:
             stmt = self._apply_filters(update(self.model_class))
             stmt = stmt.values(deleted_at=datetime.now())
             result = await session.execute(stmt)
-            await self._invalidate_write_cache()
-            return result.rowcount
+        # 缓存失效放在会话提交之后，避免并发读在失效与提交间隙回填旧数据
+        await self._invalidate_write_cache()
+        return result.rowcount
 
     async def restore(self) -> int:
         """恢复软删除的记录，将 deleted_at 设为 None"""

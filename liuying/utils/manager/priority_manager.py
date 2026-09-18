@@ -49,6 +49,9 @@ class PriorityLifecycle:
 async def _execute_priority_hooks(hook_type: PriorityLifecycleType, type_name: str):
     """按优先级执行生命周期钩子
 
+    启动钩子按优先级升序执行；关闭钩子反向按降序执行，
+    使最先启动的服务最后关闭，确保业务清理先于底层资源释放。
+
     参数:
         hook_type: 生命周期类型
         type_name: 类型名称（用于日志）
@@ -56,7 +59,8 @@ async def _execute_priority_hooks(hook_type: PriorityLifecycleType, type_name: s
     priority_data = PriorityLifecycle._data.get(hook_type)
     if not priority_data:
         return
-    priority_list = sorted(priority_data.keys())
+    reverse = hook_type == PriorityLifecycleType.SHUTDOWN
+    priority_list = sorted(priority_data.keys(), reverse=reverse)
     priority = 0
     try:
         for priority in priority_list:

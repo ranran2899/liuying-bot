@@ -47,6 +47,10 @@ class LifecycleManager:
 
         支持模型在 `_run_script(cls, db_name="default")` 中根据目标库返回 SQL，
         未声明 `db_name` 参数的脚本仅会在默认数据库执行，保持向后兼容。
+
+        注意: 脚本先于 ``create_all`` 执行。全新安装时引用新表的脚本会因
+        表不存在而失败，属预期行为（create_all 随后会带上新字段建表，
+        结果自愈）；已安装库上的重复迁移失败同样被容忍并跳过。
         """
         if not db_model.script_methods:
             return
@@ -80,16 +84,17 @@ class LifecycleManager:
                             [sql] if isinstance(sql, str) else sql
                         )
                 except Exception as e:
-                    logger.debug(
-                        f"{module} 在数据库 {db_name} 执行脚本方法出错...",
+                    logger.warning(
+                        f"{module} 在数据库 {db_name} 执行脚本方法出错",
                         LOG_COMMAND,
                         e=e,
                     )
 
         for db_name, sql_list in scripts_by_db.items():
+            failed_sqls: list[str] = []
             async with session_manager.get_session(db_name) as session:
                 for sql in sql_list:
-                    logger.debug(f"执行SQL: {sql}")
+                    logger.debug(f"执行SQL: {sql}", LOG_COMMAND)
                     try:
                         await DbUtils.with_db_timeout(
                             session.execute(text(sql)),
@@ -97,8 +102,16 @@ class LifecycleManager:
                         )
                         await session.commit()
                     except Exception as e:
-                        logger.debug(f"执行SQL: {sql} 错误...", e=e)
-                        await session.rollback()
+                        # 幂等迁移重复执行时的常规失败（如列已存在）记 debug，
+                        # 汇总失败数在下方以 warning 呈现，避免每次启动刷屏
+                        logger.debug(f"执行SQL: {sql} 错误...", LOG_COMMAND, e=e)
+                        failed_sqls.append(sql)
+            if failed_sqls:
+                logger.warning(
+                    f"数据库 {db_name} 有 {len(failed_sqls)} 条脚本 SQL 执行失败"
+                    f"（可能为已应用过的迁移），已跳过",
+                    LOG_COMMAND,
+                )
 
         if scripts_by_db:
             logger.debug("脚本方法执行完毕!")

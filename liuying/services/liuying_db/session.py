@@ -293,16 +293,15 @@ class DatabaseSessionManager:
         避免调用方误认为写操作成功。
         """
         try:
-            match exc_type:
-                case None:
-                    await self.session.commit()
-                case _:
-                    await self.session.rollback()
-                    logger.debug(
-                        f"数据库会话回滚: {self.db_name}, "
-                        f"原因: {exc_type.__name__}: {exc_val}",
-                        LOG_COMMAND,
-                    )
+            if exc_type is None:
+                await self.session.commit()
+            else:
+                await self.session.rollback()
+                logger.debug(
+                    f"数据库会话回滚: {self.db_name}, "
+                    f"原因: {exc_type.__name__}: {exc_val}",
+                    LOG_COMMAND,
+                )
         except asyncio.CancelledError:
             raise
         except Exception as e:

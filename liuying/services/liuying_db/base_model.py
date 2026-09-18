@@ -43,14 +43,18 @@ class Model(Base):
     __abstract__ = True
 
     _locks: ClassVar[dict[str, asyncio.Lock]] = {}
-    _current_locks: ClassVar[dict[int, DbLockType]] = {}
+    _held_locks: ClassVar[dict[int, set[tuple[type, DbLockType]]]] = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         # 仅在定义了 _run_script 的类上注册，子类继承同名方法不重复注册。
         # 注意 __dict__ 中存的是 classmethod 描述符对象（不可直接调用），
         # 必须经 cls 属性访问走描述符协议取绑定的方法
-        if "_run_script" in cls.__dict__:
+        if "_run_script" in cls.__dict__ and not any(
+            m == cls.__module__ and f.__name__ == cls._run_script.__name__
+            for m, f in db_model.script_methods
+        ):
+            # 按 (模块, 方法名) 去重，防止模块重载导致重复累积
             db_model.script_methods.append((cls.__module__, cls._run_script))
         cls._register_cache_type()
 
@@ -129,7 +133,7 @@ class Model(Base):
                     str(v) if (v := getattr(instance, f, None)) is not None else ""
                     for f in fields
                 ]
-                return COMPOSITE_KEY_SEPARATOR.join(parts) if parts else None
+                return COMPOSITE_KEY_SEPARATOR.join(parts)
             case _:
                 value = getattr(instance, key_field, None)
                 return str(value) if value is not None else None
@@ -154,36 +158,39 @@ class Model(Base):
 
     @classmethod
     def _require_lock(cls, lock_type: DbLockType) -> bool:
-        """检查当前协程是否需要加锁"""
+        """检查当前协程是否需要加锁（未持有本类同型锁时返回 True）"""
         task = asyncio.current_task()
         if task is None:
             return True
-        return cls._current_locks.get(id(task)) != lock_type
+        return (cls, lock_type) not in cls._held_locks.get(id(task), set())
 
     @classmethod
-    def _cleanup_lock_record(cls, task_id: int):
+    def _cleanup_lock_record(cls, task_id: int) -> None:
         """清理锁记录，防止内存泄漏"""
-        cls._current_locks.pop(task_id, None)
+        cls._held_locks.pop(task_id, None)
 
     @classmethod
     @contextlib.asynccontextmanager
     async def _lock_context(cls, lock_type: DbLockType):
-        """带重入检查的锁上下文，使用 asyncio.Lock 替代 Semaphore"""
+        """带重入检查的锁上下文，使用 asyncio.Lock 替代 Semaphore
+
+        锁持有标记按 (模型类, 锁类型) 记录，避免跨类同名锁被误判为
+        重入而跳过加锁；本类同型锁的嵌套调用视为重入直接放行，
+        防止自等待死锁。
+        """
         task = asyncio.current_task()
         task_id = id(task) if task else 0
         need_lock = cls._require_lock(lock_type)
         if need_lock and (lock := cls._get_lock(lock_type)):
-            # 保存外层锁记录，避免内层锁退出时误清外层的重入标记导致死锁
-            prev_lock_type = cls._current_locks.get(task_id)
-            cls._current_locks[task_id] = lock_type
+            cls._held_locks.setdefault(task_id, set()).add((cls, lock_type))
             try:
                 async with lock:
                     yield
             finally:
-                if prev_lock_type is None:
-                    cls._cleanup_lock_record(task_id)
-                else:
-                    cls._current_locks[task_id] = prev_lock_type
+                if held := cls._held_locks.get(task_id):
+                    held.discard((cls, lock_type))
+                    if not held:
+                        cls._cleanup_lock_record(task_id)
         else:
             yield
 
@@ -265,6 +272,7 @@ class Model(Base):
 
         模型实例写操作与 ``QueryWrapper`` 批量写操作的共用失效入口，
         避免 namespace 计算与异常处理逻辑重复。
+        必须在会话提交之后调用，避免并发读在失效与提交间隙回填旧数据。
         """
         try:
             await CacheRoot.invalidate_namespace(query_cache_namespace(cls))
@@ -275,7 +283,7 @@ class Model(Base):
     async def _invalidate_cache(cls, instance):
         """使缓存失效
 
-        统一的缓存失效入口，写操作（create/update/delete）后调用。
+        统一的缓存失效入口，写操作提交后调用。
         当模型声明了 ``cache_type`` 时，按 ``cache_key_field`` 删除对应缓存键；
         同时按模型命名空间失效该模型的查询结果缓存（``QueryWrapper`` 查询缓存）。
 
@@ -316,8 +324,9 @@ class Model(Base):
                 sess.add(instance)
                 await sess.flush()
                 await sess.refresh(instance)
-                await cls._invalidate_cache(instance)
-                return instance
+        # 缓存失效放在会话提交之后，避免并发读在失效与提交间隙回填旧数据
+        await cls._invalidate_cache(instance)
+        return instance
 
     @classmethod
     async def get_or_create(
@@ -341,19 +350,19 @@ class Model(Base):
         async with cls._managed_session(session, db_name) as sess:
             stmt = build_filter_statement(cls, **kwargs).limit(1)
             result = await sess.execute(stmt)
-            instance = result.scalars().first()
-            if instance:
+            if instance := result.scalars().first():
                 return instance, False
             try:
                 instance = await cls._create_in_nested(sess, kwargs, defaults)
-                await cls._invalidate_cache(instance)
-                return instance, True
+                created = True
             except IntegrityError:
                 instance = await cls._handle_integrity_error(sess, kwargs)
                 if instance is None:
                     # 冲突非唯一约束引起（如非空约束），重抛原异常避免静默返回 None
                     raise
-                return instance, False
+                created = False
+        await cls._invalidate_cache(instance)
+        return instance, created
 
     @classmethod
     async def update_or_create(
@@ -388,14 +397,14 @@ class Model(Base):
                     else:
                         instance = await cls._create_in_nested(sess, kwargs, defaults)
                         created = True
-                    await cls._invalidate_cache(instance)
-                    return instance, created
                 except IntegrityError:
                     instance = await cls._handle_integrity_error(sess, kwargs)
                     if instance is None:
                         # 冲突非唯一约束引起（如非空约束），重抛原异常避免静默返回 None
                         raise
-                    return instance, False
+                    created = False
+        await cls._invalidate_cache(instance)
+        return instance, created
 
     async def save(
         self,
@@ -448,8 +457,8 @@ class Model(Base):
                     merged = await sess.merge(self)
                     await sess.flush()
                     await sess.refresh(merged)
-
-                await self.__class__._invalidate_cache(self)
+        # 缓存失效放在会话提交之后，避免并发读在失效与提交间隙回填旧数据
+        await self.__class__._invalidate_cache(self)
 
     async def delete(
         self, session: AsyncSession | None = None, db_name: str = "default"
@@ -463,7 +472,7 @@ class Model(Base):
         async with self._managed_session(session, db_name) as sess:
             await sess.delete(self)
             await sess.flush()
-            await self.__class__._invalidate_cache(self)
+        await self.__class__._invalidate_cache(self)
 
     @classmethod
     async def safe_get_or_none(
@@ -490,6 +499,7 @@ class Model(Base):
         异常:
             TimeoutError: 数据库操作超时（与其他方法一致向上传播，不静默返回 None）
         """
+        cleaned = False
         async with cls._managed_session(session, db_name) as sess:
             base_stmt = build_filter_statement(cls, *args, **kwargs)
             result = await DbUtils.with_db_timeout(
@@ -502,7 +512,9 @@ class Model(Base):
                     return None
                 case [single]:
                     return single
-                case _ if hasattr(cls, "id"):
+                case _ if not hasattr(cls, "id"):
+                    return records[0]
+                case _:
                     records.sort(key=lambda x: getattr(x, "id", 0), reverse=True)
                     logger.warning(
                         f"{cls.__name__} 发现 {len(records)} 条重复记录，"
@@ -519,8 +531,9 @@ class Model(Base):
                                     f"id={getattr(record, 'id', None)}",
                                     LOG_COMMAND,
                                 )
-                        # 删除操作影响查询结果，需失效该模型查询缓存
-                        await cls._invalidate_query_cache()
-                    return records[0]
-                case _:
-                    return records[0]
+                        cleaned = True
+                    instance = records[0]
+        if cleaned:
+            # 删除操作影响查询结果，需在提交后失效该模型查询缓存
+            await cls._invalidate_query_cache()
+        return instance

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from ..base_model import Model
 
 
-class QueryWrapper[T: Model](QueryBuilderMixin, QueryExecutorMixin):
+class QueryWrapper[T: Model](QueryBuilderMixin[T], QueryExecutorMixin[T]):
     """链式查询构建器
 
     提供完整的查询构建、执行、聚合与批量修改能力。

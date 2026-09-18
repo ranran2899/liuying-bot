@@ -13,7 +13,7 @@
 
 from collections.abc import Callable
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import Any
 
 from sqlalchemy import (
     ColumnElement,
@@ -26,26 +26,13 @@ from sqlalchemy import (
     or_,
     select,
 )
-from sqlalchemy.exc import (
-    DBAPIError,
-    DisconnectionError,
-    InterfaceError,
-    OperationalError,
-)
+from sqlalchemy.exc import DisconnectionError, InterfaceError, OperationalError
 from sqlalchemy.sql.selectable import Select
-
-from liuying.services.cache import Cache
 
 from ..config import RETRY_CONFIG
 
-if TYPE_CHECKING:
-    from ..base_model import Model
-
-T = TypeVar("T", bound="Model")
-
 _MAX_RETRIES = RETRY_CONFIG.max_retries
 _BASE_DELAY = RETRY_CONFIG.base_delay
-_QUERY_CACHE = Cache("LIUYING_DB_QUERY", result_type=object)
 
 
 def query_cache_namespace(model_class: type) -> str:
@@ -60,7 +47,7 @@ def query_cache_namespace(model_class: type) -> str:
     return f"dbq_{model_class.__name__}"
 
 
-_RETRYABLE_ERRORS = (OperationalError, DisconnectionError, InterfaceError, DBAPIError)
+_RETRYABLE_ERRORS = (OperationalError, DisconnectionError, InterfaceError)
 _NON_RETRYABLE_KEYWORDS = (
     "syntax error",
     "constraint",

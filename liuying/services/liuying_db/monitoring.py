@@ -83,10 +83,15 @@ async def _run_monitor_loop(interval: float, callback) -> None:
     """
     while True:
         await asyncio.sleep(interval)
-        if inspect.iscoroutinefunction(callback):
-            await callback()
-        else:
-            callback()
+        try:
+            if inspect.iscoroutinefunction(callback):
+                await callback()
+            else:
+                callback()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"监控循环执行异常: {type(e).__name__}: {e}", LOG_COMMAND)
 
 
 async def _safe_call_callback(callback, *args) -> None:

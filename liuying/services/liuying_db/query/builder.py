@@ -16,11 +16,11 @@ from ..utils import DbUtils
 from .conditions import _COMPARISON_OPS, _escape_like
 
 if TYPE_CHECKING:
+    from ..base_model import Model
     from . import QueryWrapper
-    from .conditions import T
 
 
-class QueryBuilderMixin:
+class QueryBuilderMixin[T: Model]:
     """查询构建方法集合
 
     提供链式查询构建能力和 where_* 条件查询方法族。
@@ -105,6 +105,9 @@ class QueryBuilderMixin:
 
     def in_random_order(self) -> "QueryWrapper[T]":
         """随机排序查询结果
+
+        注意: 使用 SQL ``random()`` 函数，MySQL 方言为 ``rand()``，
+        跨数据库使用时需注意兼容性。
 
         返回:
             QueryWrapper[T]: 返回自身以支持链式调用
@@ -286,6 +289,11 @@ class QueryBuilderMixin:
 
     def cache(self, key: str | None = None, ttl: int = 300) -> "QueryWrapper[T]":
         """设置查询结果缓存
+
+        仅对返回模型实体的查询生效（``first``/``all``/``one``/``one_or_none``），
+        返回行或标量的方法（``values``/``aggregate``/``count``/``exists`` 等）
+        不会应用缓存。缓存命中时返回反序列化重建的脱离会话实例，
+        不支持懒加载关系属性。
 
         参数:
             key: 缓存键，默认为None自动生成

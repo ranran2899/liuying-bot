@@ -176,13 +176,11 @@ async def _(session: Uninfo, arparma: Arparma, state: T_State):
 async def _(session: Uninfo, arparma: Arparma, state: T_State):
     gid = state["group_id"]
     is_delete = arparma.find("delete")
-    await (
-        GroupConsole.filter()
-        .where_null("channel_id")
-        .update_or_create(
-            group_id=gid,
-            defaults={"group_flag": 0 if is_delete else 1},
-        )
+    # 原链式 filter().where_null("channel_id") 在 wrapper 级 update_or_create
+    # 中本就被忽略，改为直接调用类方法，运行行为保持不变
+    await GroupConsole.update_or_create(
+        group_id=gid,
+        defaults={"group_flag": 0 if is_delete else 1},
     )
     s = "删除" if is_delete else "添加"
     await MessageUtils.build_message(f"{s}群认证成功!").send(reply_to=True)
