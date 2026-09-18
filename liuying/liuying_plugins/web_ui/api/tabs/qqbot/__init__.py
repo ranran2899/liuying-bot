@@ -6,6 +6,7 @@
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+import nonebot
 
 from liuying.liuying_plugins.platform.qq_api.qqbot_config.adapter import (
     QQAdapterManager,
@@ -17,6 +18,7 @@ from liuying.liuying_plugins.platform.qq_api.qqbot_config.model import (
     QQBotConfig,
 )
 from liuying.utils.log import logger
+from liuying.utils.platform import PlatformUtils
 
 from ....base_model import Result
 from ....utils import authentication
@@ -34,6 +36,15 @@ def _get_online_ids() -> set[str]:
         return set()
 
 
+async def _get_bot_info(bot_id: str) -> tuple[str, str]:
+    """获取机器人昵称与头像(离线返回空串,由前端兜底)"""
+    try:
+        return await PlatformUtils.get_bot_info(nonebot.get_bot(bot_id))
+    except Exception as e:
+        logger.warning(f"获取机器人 {bot_id} 信息失败: {e}", "WebUI")
+        return "", ""
+
+
 @router.get(
     "/list",
     dependencies=[authentication()],
@@ -43,17 +54,22 @@ def _get_online_ids() -> set[str]:
 )
 async def get_bot_list() -> Result:
     online_ids = _get_online_ids()
-    data = [
-        {
-            "user_id": user_id,
-            "bot_id": bot["id"],
-            "secret_masked": f"{bot['secret'][:4]}****",
-            "use_websocket": bot.get("use_websocket", True),
-            "intent": bot.get("intent", {}),
-            "online": bot["id"] in online_ids,
-        }
-        for user_id, bot in await QQBotConfig.get_all_bots()
-    ]
+    data = []
+    for user_id, bot in await QQBotConfig.get_all_bots():
+        bot_id = bot["id"]
+        name, avatar = await _get_bot_info(bot_id)
+        data.append(
+            {
+                "user_id": user_id,
+                "bot_id": bot_id,
+                "name": name,
+                "avatar": avatar,
+                "secret_masked": f"{bot['secret'][:4]}****",
+                "use_websocket": bot.get("use_websocket", True),
+                "intent": bot.get("intent", {}),
+                "online": bot_id in online_ids,
+            }
+        )
     return Result.ok(data)
 
 
