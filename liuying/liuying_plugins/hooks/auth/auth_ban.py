@@ -225,12 +225,15 @@ async def user_handle(
             return
         time_str = format_time(time_val)
 
+        flmt = _get_flmt()
         if (
             plugin
             and time_val != -1
             and ban_result
-            and _get_flmt().check(user_id)
+            and flmt.check(user_id)
         ):
+            # 检查通过立即占用冷却，即使发送失败或超时也不会重试刷屏
+            flmt.start_cd(user_id)
             try:
                 await asyncio.wait_for(
                     send_message(
@@ -243,7 +246,6 @@ async def user_handle(
                     ),
                     timeout=DB_TIMEOUT,
                 )
-                _get_flmt().start_cd(user_id)
             except TimeoutError:
                 logger.error(f"发送消息超时: {user_id}", LOGGER_COMMAND)
         raise SkipPluginException("用户处于黑名单中...")
