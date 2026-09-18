@@ -1,6 +1,6 @@
 """QQ适配器同步管理
 
-负责QQ机器人配置与QQ适配器实例的同步操作:
+QQ适配器实例的同步操作:
 - 构建 BotInfo 并同步到适配器配置列表
 - 启动/断开WebSocket连接
 - 查询适配器状态
@@ -18,9 +18,8 @@ from liuying.utils.log import logger
 def build_bot_info(bot: dict[str, Any]) -> BotInfo:
     """从QQ_BOTS格式的配置字典构建BotInfo对象
 
-    新版适配器鉴权仅使用 id + secret,BotInfo.token 字段虽为模型必填
-    但适配器内部从未读取,传空字符串即可(新版适配器已移除该字段,
-    构建时多余字段会被忽略)
+    配置字典字段与新版适配器 BotInfo 模型完全一致,
+    直接关键字传参,意图字典由 pydantic 校验为 Intents 模型
 
     参数:
         bot: QQ_BOTS格式的单个机器人配置字典
@@ -28,7 +27,7 @@ def build_bot_info(bot: dict[str, Any]) -> BotInfo:
     返回:
         BotInfo: QQ适配器BotInfo对象
     """
-    return BotInfo(token="", **bot)
+    return BotInfo(**bot)
 
 
 class QQAdapterManager:
@@ -51,7 +50,8 @@ class QQAdapterManager:
     def add_bot_to_config(cls, bot_info: BotInfo) -> None:
         """将机器人配置添加到QQ适配器配置列表(不启动连接)
 
-        用于启动阶段,由适配器startup自动遍历qq_bots启动连接
+        用于启动阶段,由适配器startup自动遍历qq_bots启动连接;
+        Webhook机器人无需任务,适配器HTTP回调会按需创建Bot实例
 
         参数:
             bot_info: BotInfo对象
@@ -74,8 +74,9 @@ class QQAdapterManager:
     def _disconnect_bot(cls, bot_id: str) -> None:
         """断开机器人连接并取消所有相关任务
 
-        遍历适配器任务,通过协程帧定位目标机器人的WebSocket转发任务
-        并取消,以停止其无限重试
+        适配器未提供按机器人定位任务的公开接口,
+        通过协程帧查找目标机器人的WebSocket转发任务并取消,
+        以停止其内部无限重连
 
         参数:
             bot_id: 机器人ID
