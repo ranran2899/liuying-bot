@@ -1,9 +1,9 @@
 """QQ机器人配置业务逻辑
 
 依赖单向:
-- _adapter (适配器同步)
-- _monitor (重连监控,通过注册回调避免循环依赖)
-- _intent (意图字段)
+- adapter (适配器同步)
+- monitor (重连监控,通过注册回调避免循环依赖)
+- intent (意图字段)
 - Config (项目配置访问)
 数据访问统一由 model.QQBotConfig 提供
 """
@@ -14,14 +14,14 @@ from liuying.configs.config import Config
 from liuying.models._user import UserPermLevel
 from liuying.utils.log import logger
 
-from ._adapter import QQAdapterManager, build_bot_info
-from ._intent import (
+from .adapter import QQAdapterManager, build_bot_info
+from .intent import (
     DEFAULT_INTENT,
     INTENT_DESCRIPTIONS,
     VALID_INTENT_FIELDS,
 )
-from ._monitor import ReconnectMonitor
 from .model import QQBotConfig
+from .monitor import ReconnectMonitor
 
 _CONFIG_MODULE = "qqbot_config"
 """配置模块名"""
@@ -71,6 +71,23 @@ class QQBotConfigManager:
         return None
 
     @classmethod
+    def setup(cls) -> None:
+        """初始化业务层与监控层的关联(启动钩子中调用)"""
+        ReconnectMonitor.register_delete_callback(cls.delete_config)
+
+    @classmethod
+    def _sync_to_adapter(cls, bot: dict) -> None:
+        """同步单个配置到适配器(允许失败,不影响配置存储)
+
+        参数:
+            bot: QQ_BOTS格式的单个机器人配置
+        """
+        try:
+            QQAdapterManager.sync_to_adapter(build_bot_info(bot))
+        except Exception as e:
+            logger.error(f"同步到适配器失败: {e}", "QQBotConfig", e=e)
+
+    @classmethod
     async def add_config(
         cls,
         user_id: str,
@@ -113,10 +130,7 @@ class QQBotConfigManager:
         )
         await QQBotConfig.save_user_bots(user_id, bots)
 
-        try:
-            QQAdapterManager.sync_to_adapter(build_bot_info(bots[-1]))
-        except Exception as e:
-            logger.error(f"同步到适配器失败: {e}", "QQBotConfig", e=e)
+        cls._sync_to_adapter(bots[-1])
 
         bot_level = int(Config.get_config(_CONFIG_MODULE, "BOT_LEVEL") or 7)
         await UserPermLevel.set_bot_level(bot_id, user_id, bot_level)
@@ -173,10 +187,7 @@ class QQBotConfigManager:
 
         await QQBotConfig.save_user_bots(user_id, bots)
 
-        try:
-            QQAdapterManager.sync_to_adapter(build_bot_info(bot))
-        except Exception as e:
-            logger.error(f"同步适配器状态失败: {e}", "QQBotConfig", e=e)
+        cls._sync_to_adapter(bot)
 
         logger.info(f"用户 {user_id} 更新配置: {bot_id}")
         return f"成功更新机器人配置: {bot_id}"
@@ -198,17 +209,21 @@ class QQBotConfigManager:
             return f"机器人配置 {bot_id} 不存在"
 
         await QQBotConfig.save_user_bots(user_id, remaining)
+        cls._remove_from_adapter(bot_id)
+        await UserPermLevel.delete_bot_level(bot_id, user_id)
+        ReconnectMonitor.on_connected(bot_id)
+        logger.info(f"用户 {user_id} 删除配置: {bot_id}")
+        return f"成功删除机器人配置: {bot_id}"
 
+    @classmethod
+    def _remove_from_adapter(cls, bot_id: str) -> None:
+        """从适配器移除机器人(允许失败,仅记录日志)"""
         try:
             QQAdapterManager.remove_from_adapter(bot_id)
         except Exception as e:
             logger.warning(
                 f"移除适配器中的机器人 {bot_id} 失败: {e}", "QQBotConfig"
             )
-        await UserPermLevel.delete_bot_level(bot_id, user_id)
-        ReconnectMonitor.on_connected(bot_id)
-        logger.info(f"用户 {user_id} 删除配置: {bot_id}")
-        return f"成功删除机器人配置: {bot_id}"
 
     @classmethod
     async def clear_all_configs(cls) -> str:
@@ -224,18 +239,12 @@ class QQBotConfigManager:
             return "当前没有任何QQ机器人配置"
 
         for user_id, bot in all_bots:
-            try:
-                QQAdapterManager.remove_from_adapter(bot["id"])
-            except Exception as e:
-                logger.warning(
-                    f"移除适配器中的机器人 {bot['id']} 失败: {e}",
-                    "QQBotConfig",
-                )
+            cls._remove_from_adapter(bot["id"])
             await UserPermLevel.delete_bot_level(bot["id"], user_id)
             ReconnectMonitor.on_connected(bot["id"])
 
         await QQBotConfig.delete_all()
-        ReconnectMonitor._failures.clear()
+        ReconnectMonitor.reset_failures()
         logger.warning(f"超级用户清空全部QQ机器人配置,共 {len(all_bots)} 个")
         return f"已清空全部QQ机器人配置,共删除 {len(all_bots)} 个"
 
@@ -333,6 +342,7 @@ class QQBotConfigManager:
 
         仅将配置添加到适配器的qq_bots列表,不主动启动WebSocket连接。
         适配器startup会遍历qq_bots自动启动连接,避免重复启动。
+        add_bot_to_config 内部已做去重,无需重复检查。
 
         返回:
             tuple[int, int]: (成功数量, 失败数量)
@@ -341,15 +351,8 @@ class QQBotConfigManager:
         if not all_bots:
             return 0, 0
 
-        existing_ids = {
-            b.id for b in QQAdapterManager._get_adapter().qq_config.qq_bots
-        }
         success = fail = 0
-
         for _, bot in all_bots:
-            if bot["id"] in existing_ids:
-                success += 1
-                continue
             try:
                 QQAdapterManager.add_bot_to_config(build_bot_info(bot))
                 success += 1
@@ -357,7 +360,3 @@ class QQBotConfigManager:
                 fail += 1
 
         return success, fail
-
-
-# 注册自动删除回调,消除循环依赖
-ReconnectMonitor.register_delete_callback(QQBotConfigManager.delete_config)

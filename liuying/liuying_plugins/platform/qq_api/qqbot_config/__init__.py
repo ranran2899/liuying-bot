@@ -1,7 +1,5 @@
 """QQ机器人配置管理插件"""
 
-from typing import Any
-
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import (
@@ -21,10 +19,11 @@ from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.message import MessageUtils
 from liuying.utils.rules import ensure_private
 
-from ._adapter import QQAdapterManager
-from ._data_source import QQBotConfigManager
-from ._monitor import ReconnectMonitor
+from .adapter import QQAdapterManager
+from .formatter import ConfigFormatter
+from .manager import QQBotConfigManager
 from .model import QQBotConfig
+from .monitor import ReconnectMonitor
 
 __plugin_meta__ = PluginMetadata(
     name="QQ机器人配置管理",
@@ -81,107 +80,10 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-class _ConfigFormatter:
-    """QQ机器人配置信息格式化器"""
-
-    @staticmethod
-    def format_single(bot: dict[str, Any], online: bool) -> str:
-        """格式化单个配置信息
-
-        参数:
-            bot: QQ_BOTS格式的单个机器人配置
-            online: 是否在线
-
-        返回:
-            str: 格式化后的配置信息字符串
-        """
-        lines = [
-            f"机器人ID: {bot['id']}",
-            f"连接状态: {'在线' if online else '离线'}",
-            f"Secret: {bot['secret'][:10]}...",
-            f"WebSocket: {'启用' if bot['use_websocket'] else '禁用'}",
-        ]
-        enabled = [k for k, v in bot.get("intent", {}).items() if v]
-        if enabled:
-            lines.append(f"启用意图: {', '.join(enabled)}")
-        return "\n".join(lines)
-
-    @staticmethod
-    def format_list(
-        bots: list[dict[str, Any]], online_ids: set[str]
-    ) -> str:
-        """格式化配置列表信息
-
-        参数:
-            bots: QQ_BOTS格式的配置列表
-            online_ids: 在线机器人ID集合
-
-        返回:
-            str: 格式化后的配置列表字符串
-        """
-        parts = [f"共有 {len(bots)} 个QQ机器人配置:\n"]
-        for i, b in enumerate(bots, 1):
-            online_icon = "O" if b["id"] in online_ids else "X"
-            parts.append(f"{i}. [{online_icon}] {b['id']}")
-        return "\n".join(parts)
-
-    @staticmethod
-    def format_intent(
-        intent: dict[str, bool], descriptions: dict[str, str]
-    ) -> str:
-        """格式化意图配置列表
-
-        参数:
-            intent: 意图配置字典
-            descriptions: 字段描述映射
-
-        返回:
-            str: 格式化后的意图配置字符串
-        """
-        lines = ["意图配置:"]
-        for field, value in intent.items():
-            desc = descriptions.get(field, "")
-            status = "启用" if value else "禁用"
-            lines.append(f"  {field} ({desc}): {status}")
-        return "\n".join(lines)
-
-    @staticmethod
-    def format_status(status: dict) -> str:
-        """格式化适配器状态信息
-
-        参数:
-            status: 适配器状态字典
-
-        返回:
-            str: 格式化后的状态字符串
-        """
-        parts = ["QQ适配器状态:\n"]
-
-        connected = status["connected_bots"]
-        if connected:
-            parts.append(f"已连接机器人 ({len(connected)}个):")
-            parts.extend(
-                f"  - {bot['id']} ({bot['adapter']})" for bot in connected
-            )
-        else:
-            parts.append("已连接机器人: 无")
-
-        configured = status["configured_bots"]
-        if configured:
-            parts.append(f"\n已配置机器人 ({len(configured)}个):")
-            parts.extend(
-                f"  - {bot['id']} [{'WS' if bot['use_websocket'] else 'Webhook'}]"
-                for bot in configured
-            )
-        else:
-            parts.append("\n已配置机器人: 无")
-
-        return "\n".join(parts)
-
-
 @PriorityLifecycle.on_startup(priority=10)
 async def _() -> None:
-    """启动时从数据库加载配置到适配器并启动重连监控"""
+    """启动时初始化业务关联、加载配置到适配器并启动重连监控"""
+    QQBotConfigManager.setup()
     success, fail = await QQBotConfigManager.load_configs_to_adapter()
     if success > 0 or fail > 0:
         logger.info(
@@ -292,18 +194,15 @@ async def _(session: Uninfo, bot_id: Match[str]) -> None:
             await MessageUtils.build_message(
                 f"未找到机器人配置: {bot_id.result}"
             ).finish(reply_to=True)
-        await MessageUtils.build_message(
-            _ConfigFormatter.format_single(bot, bot_id.result in online_ids)
-        ).finish(reply_to=True)
+        msg = ConfigFormatter.format_single(bot, bot_id.result in online_ids)
     else:
         bots = await QQBotConfig.get_user_bots(user_id)
         if not bots:
             await MessageUtils.build_message(
                 "暂无QQ机器人配置\n使用 'qq配置添加' 命令添加配置"
             ).finish(reply_to=True)
-        await MessageUtils.build_message(
-            _ConfigFormatter.format_list(bots, online_ids)
-        ).finish(reply_to=True)
+        msg = ConfigFormatter.format_list(bots, online_ids)
+    await MessageUtils.build_message(msg).finish(reply_to=True)
 
 
 @_update_matcher.handle()
@@ -327,11 +226,9 @@ async def _(
             secret=secret.result if secret.available else None,
             use_websocket=use_ws,
         )
-        await MessageUtils.build_message(msg).finish(reply_to=True)
-
-    await MessageUtils.build_message(
-        "请指定要修改的字段\n可用选项: --secret, --ws/--no-ws"
-    ).finish(reply_to=True)
+    else:
+        msg = "请指定要修改的字段\n可用选项: --secret, --ws/--no-ws"
+    await MessageUtils.build_message(msg).finish(reply_to=True)
 
 
 @_delete_matcher.handle()
@@ -368,33 +265,26 @@ async def _(
     user_id = session.user.id
 
     if arparma.find("list_fields"):
-        descriptions = QQBotConfigManager.get_intent_fields()
-        lines = ["可用意图字段:"]
-        lines.extend(f"  {f}: {desc}" for f, desc in descriptions.items())
-        await MessageUtils.build_message("\n".join(lines)).finish(
-            reply_to=True
+        msg = ConfigFormatter.format_intent_fields(
+            QQBotConfigManager.get_intent_fields()
         )
-
-    if arparma.find("reset"):
+    elif arparma.find("reset"):
         msg = await QQBotConfigManager.reset_intent(user_id, bot_id)
-        await MessageUtils.build_message(msg).finish(reply_to=True)
-
-    if field.available and value.available:
+    elif field.available and value.available:
         msg = await QQBotConfigManager.update_intent(
             user_id, bot_id, field.result, value.result
         )
-        await MessageUtils.build_message(msg).finish(reply_to=True)
-
-    intent = await QQBotConfigManager.get_intent(user_id, bot_id)
-    if intent is None:
-        await MessageUtils.build_message(
-            f"未找到机器人配置: {bot_id}"
-        ).finish(reply_to=True)
-
-    descriptions = QQBotConfigManager.get_intent_fields()
-    await MessageUtils.build_message(
-        f"机器人 {bot_id} {_ConfigFormatter.format_intent(intent, descriptions)}"
-    ).finish(reply_to=True)
+    else:
+        intent = await QQBotConfigManager.get_intent(user_id, bot_id)
+        if intent is None:
+            msg = f"未找到机器人配置: {bot_id}"
+        else:
+            descriptions = QQBotConfigManager.get_intent_fields()
+            msg = (
+                f"机器人 {bot_id} "
+                f"{ConfigFormatter.format_intent(intent, descriptions)}"
+            )
+    await MessageUtils.build_message(msg).finish(reply_to=True)
 
 
 @_status_matcher.handle()
@@ -402,7 +292,7 @@ async def _() -> None:
     """查询QQ适配器状态"""
     status = QQAdapterManager.get_adapter_status()
     await MessageUtils.build_message(
-        _ConfigFormatter.format_status(status)
+        ConfigFormatter.format_status(status)
     ).finish(reply_to=True)
 
 

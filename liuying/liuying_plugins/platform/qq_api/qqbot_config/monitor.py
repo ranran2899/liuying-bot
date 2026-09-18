@@ -1,8 +1,8 @@
 """QQ机器人重连监控模块
 
 通过回调注入机制与业务层解耦,避免循环依赖:
-- ReconnectMonitor 仅依赖 _adapter 查询连接状态
-- 业务层(_data_source)在模块加载时通过 register_delete_callback 注入删除回调
+- ReconnectMonitor 仅依赖 adapter 查询连接状态
+- 业务层(manager)在启动钩子中通过 register_delete_callback 注入删除回调
 """
 
 import asyncio
@@ -14,7 +14,7 @@ from nonebot.adapters import Bot
 
 from liuying.utils.log import logger
 
-from ._adapter import QQAdapterManager
+from .adapter import QQAdapterManager
 from .model import QQBotConfig
 
 CHECK_INTERVAL = 10.0
@@ -68,6 +68,11 @@ class ReconnectMonitor:
             bot_id: 机器人ID
         """
         cls._failures.pop(bot_id, None)
+
+    @classmethod
+    def reset_failures(cls) -> None:
+        """清空全部失败计数"""
+        cls._failures.clear()
 
     @classmethod
     async def _loop(cls) -> None:

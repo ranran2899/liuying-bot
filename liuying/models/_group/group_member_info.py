@@ -28,16 +28,15 @@ class GroupInfoUser(Model):
     )
     """用户id"""
     user_name: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="用户昵称"
+        String(255), nullable=True, default="", comment="用户昵称"
     )
     """用户昵称"""
     user_nickname: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="自定义用户名称，一般为用户在群内的备注"
+        String(255), nullable=True, default="", comment="自定义用户名称，一般为用户在群内的备注"
     )
     """户在群内的备注"""
     user_role: Mapped[str | None] = mapped_column(
-        String(255), nullable=True,
-        comment="群成员角色 member-普通成员，owner-群主，admin-管理员",
+        String(255), nullable=True, default="", comment="群成员角色 member-普通成员，owner-群主，admin-管理员",
     )
     """群成员角色 member-普通成员，owner-群主，admin-管理员"""
     user_bot: Mapped[bool | None] = mapped_column(
@@ -45,7 +44,7 @@ class GroupInfoUser(Model):
     )
     """用户是否为机器人"""
     user_identifier: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="用户统一标识（如有）"
+        String(255), nullable=True, default="", comment="用户统一标识（如有）"
     )
     """用户统一标识（如有）"""
     group_id: Mapped[str] = mapped_column(
@@ -61,7 +60,7 @@ class GroupInfoUser(Model):
     )
     """用户入群时间"""
     platform: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="平台"
+        String(255), nullable=True, default="", comment="平台"
     )
     """平台"""
 
