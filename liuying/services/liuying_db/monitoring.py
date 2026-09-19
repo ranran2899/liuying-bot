@@ -174,11 +174,15 @@ class PoolMonitor:
         self._engines.pop(db_name, None)
         self._metrics_history.pop(db_name, None)
 
-    def collect_metrics(self, db_name: str) -> PoolMetrics | None:
+    def collect_metrics(
+        self, db_name: str, *, record: bool = True
+    ) -> PoolMetrics | None:
         """收集连接池指标
 
         参数:
             db_name: 数据库名称
+            record: 是否写入采样历史；前端实时轮询时传 False，
+                    避免高频采样污染监控循环（30s 间隔）的历史序列
 
         返回:
             PoolMetrics | None: 连接池指标
@@ -198,7 +202,8 @@ class PoolMonitor:
             usage_rate=usage_rate,
             is_healthy=usage_rate < self.critical_threshold,
         )
-        self._metrics_history[db_name].append(metrics)
+        if record:
+            self._metrics_history[db_name].append(metrics)
         return metrics
 
     def check_alerts(self, metrics: PoolMetrics) -> PoolAlert | None:

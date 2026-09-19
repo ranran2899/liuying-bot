@@ -41,9 +41,8 @@
     monitor = CacheRoot.monitor
 """
 
-import nonebot
-
 from liuying.utils.log import logger
+from liuying.utils.manager.priority_manager import PriorityLifecycle
 
 from .cache_class import Cache
 from .config import LOG_COMMAND, CacheException, cache_config
@@ -70,10 +69,9 @@ __all__ = [
     "cached",
 ]
 
-driver = nonebot.get_driver()
 
 
-@driver.on_startup
+@PriorityLifecycle.on_startup(priority=1)
 async def _on_startup():
     """缓存系统启动"""
     CacheRoot.enabled = True
@@ -81,7 +79,7 @@ async def _on_startup():
     logger.info("缓存系统已启用", LOG_COMMAND)
 
 
-@driver.on_shutdown
+@PriorityLifecycle.on_shutdown(priority=1)
 async def _on_shutdown():
     """缓存系统关闭"""
     await CacheRoot.close()

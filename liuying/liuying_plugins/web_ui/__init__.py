@@ -20,6 +20,7 @@ from .api.menu import router as menu_router
 from .api.tabs.ai import router as ai_router
 from .api.tabs.dashboard import router as dashboard_router
 from .api.tabs.database import router as database_router
+from .api.tabs.database.monitor import ws_router as db_monitor_ws_routes
 from .api.tabs.main import router as main_router
 from .api.tabs.main import ws_router as status_routes
 from .api.tabs.manage import router as manage_router
@@ -95,6 +96,7 @@ WsApiRouter = APIRouter(prefix="/liuying/socket")
 
 WsApiRouter.include_router(ws_log_routes)
 WsApiRouter.include_router(status_routes)
+WsApiRouter.include_router(db_monitor_ws_routes)
 WsApiRouter.include_router(chat_routes)
 
 

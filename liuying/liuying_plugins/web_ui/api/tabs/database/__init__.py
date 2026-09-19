@@ -15,8 +15,10 @@ from ....utils import authentication
 from .data_source import ApiDataSource, _normalize_sql_type, type2sql
 from .models.model import Column, SqlLogInfo, SqlModel, SqlText
 from .models.sql_log import SqlLog
+from .monitor import router as monitor_router
 
 router = APIRouter(prefix="/database")
+router.include_router(monitor_router)
 
 
 driver: Driver = nonebot.get_driver()
