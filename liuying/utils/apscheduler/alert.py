@@ -2,12 +2,10 @@
 定时任务告警系统
 
 提供任务失败率、连续失败、超时等场景的告警功能，
-通过事件总线发布告警事件，支持注册自定义处理器。
+通过事件总线发布 ALERT_TRIGGERED 事件，由外部订阅者消费。
 """
 
 import asyncio
-from collections import deque
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -21,7 +19,6 @@ from .constants import (
     DEFAULT_ALERT_CONSECUTIVE_FAILURES,
     DEFAULT_ALERT_COOLDOWN,
     DEFAULT_ALERT_FAILURE_RATE_THRESHOLD,
-    DEFAULT_ALERT_HISTORY_MAX,
     DEFAULT_ALERT_LONG_RUNNING_THRESHOLD,
     DEFAULT_ALERT_MIN_TOTAL_EXECUTIONS,
     DEFAULT_ALERT_QUEUE_THRESHOLD,
@@ -80,7 +77,7 @@ class AlertConfig:
 
 @dataclass(slots=True)
 class Alert:
-    """告警"""
+    """告警（作为 ALERT_TRIGGERED 事件的 data 载荷）"""
 
     alert_id: str
     """告警ID"""
@@ -98,28 +95,6 @@ class Alert:
     """告警时间"""
     data: dict[str, Any] = field(default_factory=dict)
     """附加数据"""
-    acknowledged: bool = False
-    """是否已确认"""
-    acknowledged_at: datetime | None = None
-    """确认时间"""
-
-    def to_dict(self) -> dict[str, Any]:
-        """转换为字典"""
-        return {
-            "alert_id": self.alert_id,
-            "alert_type": self.alert_type.name,
-            "task_id": self.task_id,
-            "task_name": self.task_name,
-            "group": self.group,
-            "message": self.message,
-            "timestamp": self.timestamp.isoformat(),
-            "data": self.data,
-            "acknowledged": self.acknowledged,
-            "acknowledged_at": (
-                self.acknowledged_at.isoformat()
-                if self.acknowledged_at else None
-            ),
-        }
 
 
 class AlertManager:
@@ -132,30 +107,9 @@ class AlertManager:
     ) -> None:
         self.config = config or AlertConfig()
         self.metrics = metrics or metrics_collector
-        self._alerts: deque[Alert] = deque(maxlen=DEFAULT_ALERT_HISTORY_MAX)
         self._last_alert_time: dict[str, datetime] = {}
-        self._alert_handlers: list[Callable[[Alert], Any]] = []
         self._check_task: asyncio.Task | None = None
         self._running = False
-
-    def add_alert_handler(self, handler: Callable[[Alert], Any]) -> None:
-        """
-        添加告警处理器
-
-        参数:
-            handler: 告警处理函数
-        """
-        self._alert_handlers.append(handler)
-
-    def remove_alert_handler(self, handler: Callable[[Alert], Any]) -> None:
-        """
-        移除告警处理器
-
-        参数:
-            handler: 告警处理函数
-        """
-        if handler in self._alert_handlers:
-            self._alert_handlers.remove(handler)
 
     async def start(self) -> None:
         """启动告警检查"""
@@ -392,7 +346,7 @@ class AlertManager:
         data: dict[str, Any] | None = None,
     ) -> None:
         """
-        触发告警
+        触发告警（冷却期内静默，发布 ALERT_TRIGGERED 事件）
 
         参数:
             alert_type: 告警类型
@@ -421,12 +375,8 @@ class AlertManager:
             message=message,
             data=data or {},
         )
-
-        # deque(maxlen=N) 自动淘汰旧记录
-        self._alerts.append(alert)
         self._last_alert_time[alert_key] = now
 
-        # 发布告警事件
         await event_bus.emit(
             TaskEvent(
                 event_type=TaskEventType.ALERT_TRIGGERED,
@@ -437,74 +387,10 @@ class AlertManager:
             )
         )
 
-        # 调用告警处理器
-        for handler in self._alert_handlers:
-            try:
-                if asyncio.iscoroutinefunction(handler):
-                    await handler(alert)
-                else:
-                    handler(alert)
-            except Exception as e:
-                logger.error(
-                    f"告警处理器执行失败: {handler.__name__}",
-                    _LOG_COMMAND,
-                    e=e,
-                )
-
         logger.warning(
             f"告警触发: {alert_type.name} - {message}",
             _LOG_COMMAND,
         )
-
-    def get_alerts(
-        self,
-        alert_type: AlertType | None = None,
-        acknowledged: bool | None = None,
-        limit: int = 100,
-    ) -> list[Alert]:
-        """
-        获取告警列表
-
-        参数:
-            alert_type: 告警类型过滤
-            acknowledged: 确认状态过滤
-            limit: 返回数量限制
-
-        返回:
-            告警列表
-        """
-        alerts = list(self._alerts)
-        if alert_type:
-            alerts = [a for a in alerts if a.alert_type == alert_type]
-        if acknowledged is not None:
-            alerts = [a for a in alerts if a.acknowledged == acknowledged]
-        return alerts[-limit:]
-
-    async def acknowledge_alert(self, alert_id: str) -> bool:
-        """
-        确认告警
-
-        参数:
-            alert_id: 告警ID
-
-        返回:
-            是否成功
-        """
-        for alert in self._alerts:
-            if alert.alert_id == alert_id:
-                alert.acknowledged = True
-                alert.acknowledged_at = datetime.now()
-                return True
-        return False
-
-    def get_unacknowledged_count(self) -> int:
-        """
-        获取未确认告警数量
-
-        返回:
-            未确认告警数量
-        """
-        return sum(1 for a in self._alerts if not a.acknowledged)
 
 
 # 全局告警管理器实例

@@ -4,10 +4,9 @@
 提供任务执行的统计和监控功能，单线程 asyncio 模型无需加锁。
 """
 
-from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -26,8 +25,6 @@ class TaskMetrics:
     """成功次数"""
     fail_count: int = 0
     """失败次数"""
-    timeout_count: int = 0
-    """超时次数"""
     total_duration: float = 0.0
     """总执行耗时"""
     min_duration: float = float("inf")
@@ -42,59 +39,6 @@ class TaskMetrics:
     """最后失败时间"""
     consecutive_failures: int = 0
     """连续失败次数"""
-    _executions_by_minute: OrderedDict[str, int] = field(
-        default_factory=OrderedDict
-    )
-    """每分钟执行次数（使用 OrderedDict 维护时间顺序）"""
-    retry_count: int = 0
-    """总重试次数"""
-
-    _MAX_MINUTE_RECORDS: ClassVar[int] = 60
-    """最大保留分钟记录数"""
-
-    @property
-    def executions_by_minute(self) -> dict[str, int]:
-        """
-        获取每分钟执行次数（兼容旧接口）
-
-        返回:
-            时间字符串到执行次数的映射
-        """
-        return dict(self._executions_by_minute)
-
-    def get_recent_executions(self, minutes: int = 10) -> dict[str, int]:
-        """
-        获取最近 N 分钟的执行次数
-
-        参数:
-            minutes: 要获取的分钟数
-
-        返回:
-            时间字符串到执行次数的映射（按时间倒序）
-        """
-        items = list(self._executions_by_minute.items())[-minutes:]
-        return dict(reversed(items))
-
-    def get_executions_in_range(
-        self, start: datetime, end: datetime
-    ) -> dict[str, int]:
-        """
-        获取指定时间范围内的执行次数
-
-        参数:
-            start: 开始时间
-            end: 结束时间
-
-        返回:
-            时间字符串到执行次数的映射
-        """
-        result: dict[str, int] = {}
-        for key, count in self._executions_by_minute.items():
-            # key 由 record_execution 通过 strftime 生成，格式必然合法
-            key_time = datetime.strptime(key, "%Y-%m-%d %H:%M")
-            if start <= key_time <= end:
-                result[key] = count
-        return result
 
     @property
     def success_rate(self) -> float:
@@ -110,21 +54,13 @@ class TaskMetrics:
             return 0.0
         return self.total_duration / self.total_executions
 
-    def record_execution(
-        self,
-        success: bool,
-        duration: float,
-        timeout: bool = False,
-        retry: bool = False,
-    ) -> None:
+    def record_execution(self, success: bool, duration: float) -> None:
         """
         记录执行结果
 
         参数:
             success: 是否成功
             duration: 执行耗时(秒)
-            timeout: 是否超时
-            retry: 是否为重试
         """
         now = datetime.now()
 
@@ -137,13 +73,6 @@ class TaskMetrics:
         if duration > self.max_duration:
             self.max_duration = duration
 
-        minute_key = now.strftime("%Y-%m-%d %H:%M")
-        self._executions_by_minute[minute_key] = (
-            self._executions_by_minute.get(minute_key, 0) + 1
-        )
-        while len(self._executions_by_minute) > self._MAX_MINUTE_RECORDS:
-            self._executions_by_minute.popitem(last=False)
-
         if success:
             self.success_count += 1
             self.last_success_time = now
@@ -152,11 +81,6 @@ class TaskMetrics:
             self.fail_count += 1
             self.last_fail_time = now
             self.consecutive_failures += 1
-
-        if timeout:
-            self.timeout_count += 1
-        if retry:
-            self.retry_count += 1
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
@@ -167,7 +91,6 @@ class TaskMetrics:
             "total_executions": self.total_executions,
             "success_count": self.success_count,
             "fail_count": self.fail_count,
-            "timeout_count": self.timeout_count,
             "success_rate": self.success_rate,
             "avg_duration": self.avg_duration,
             "min_duration": (
@@ -187,7 +110,6 @@ class TaskMetrics:
                 if self.last_fail_time else None
             ),
             "consecutive_failures": self.consecutive_failures,
-            "retry_count": self.retry_count,
         }
 
 
@@ -236,18 +158,6 @@ class MetricsCollector:
         self._scheduler_metrics = SchedulerMetrics()
         self._group_metrics: dict[str, TaskMetrics] = {}
 
-    def get_task_metrics(self, task_id: str) -> TaskMetrics | None:
-        """
-        获取任务指标
-
-        参数:
-            task_id: 任务ID
-
-        返回:
-            任务指标对象
-        """
-        return self._task_metrics.get(task_id)
-
     def get_or_create_task_metrics(
         self,
         task_id: str,
@@ -280,11 +190,9 @@ class MetricsCollector:
         group: str,
         success: bool,
         duration: float,
-        timeout: bool = False,
-        retry: bool = False,
     ) -> None:
         """
-        记录任务执行（单线程 asyncio 模型安全）
+        记录任务执行（任务与分组双维度累计）
 
         参数:
             task_id: 任务ID
@@ -292,11 +200,9 @@ class MetricsCollector:
             group: 分组名称
             success: 是否成功
             duration: 执行耗时
-            timeout: 是否超时
-            retry: 是否为重试
         """
-        metrics = self.get_or_create_task_metrics(task_id, task_name, group)
-        metrics.record_execution(success, duration, timeout, retry)
+        task_metrics = self.get_or_create_task_metrics(task_id, task_name, group)
+        task_metrics.record_execution(success, duration)
 
         group_metrics = self._group_metrics.get(group)
         if group_metrics is None:
@@ -306,7 +212,7 @@ class MetricsCollector:
                 group=group,
             )
             self._group_metrics[group] = group_metrics
-        group_metrics.record_execution(success, duration, timeout, retry)
+        group_metrics.record_execution(success, duration)
 
     def update_scheduler_metrics(
         self,
@@ -346,27 +252,6 @@ class MetricsCollector:
         """
         return list(self._task_metrics.values())
 
-    def get_group_metrics(self, group: str) -> TaskMetrics | None:
-        """
-        获取分组指标
-
-        参数:
-            group: 分组名称
-
-        返回:
-            分组指标对象
-        """
-        return self._group_metrics.get(group)
-
-    def get_all_group_metrics(self) -> list[TaskMetrics]:
-        """
-        获取所有分组指标
-
-        返回:
-            分组指标列表
-        """
-        return list(self._group_metrics.values())
-
     def get_scheduler_metrics(self) -> SchedulerMetrics:
         """
         获取调度器指标
@@ -388,21 +273,6 @@ class MetricsCollector:
             "tasks": [m.to_dict() for m in self._task_metrics.values()],
             "groups": [m.to_dict() for m in self._group_metrics.values()],
         }
-
-    def remove_task_metrics(self, task_id: str) -> None:
-        """
-        移除任务指标
-
-        参数:
-            task_id: 任务ID
-        """
-        self._task_metrics.pop(task_id, None)
-
-    def clear_all(self) -> None:
-        """清空所有指标"""
-        self._task_metrics.clear()
-        self._group_metrics.clear()
-        self._scheduler_metrics = SchedulerMetrics()
 
 
 # 全局指标收集器实例

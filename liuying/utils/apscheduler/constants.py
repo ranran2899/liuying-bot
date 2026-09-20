@@ -28,8 +28,6 @@ DEFAULT_ALERT_CHECK_INTERVAL = 60.0
 """默认告警检查间隔(秒)"""
 DEFAULT_ALERT_COOLDOWN = 300.0
 """默认告警冷却时间(秒)"""
-DEFAULT_ALERT_HISTORY_MAX = 1000
-"""默认告警历史保留条数"""
 DEFAULT_ALERT_MIN_TOTAL_EXECUTIONS = 10
 """默认失败率告警的最小执行次数门槛"""
 
@@ -52,12 +50,10 @@ CRON_DAY_OF_WEEK_MAX = 6
 # 调度器配置
 SCHEDULER_MAX_CRON_ITERATIONS = 1000
 """Cron 触发器最大迭代次数"""
-SCHEDULER_MAX_DAYS_CHECK = 366
-"""Cron 触发器最大天数检查次数"""
+SCHEDULER_MAX_TIME_ITERATIONS = 1440
+"""Cron 时间级推进最大迭代次数（时*分上界）"""
 SCHEDULER_SHUTDOWN_WAIT = 5.0
 """调度器关闭等待时间(秒)"""
-SCHEDULER_EVENT_HISTORY_MAX = 1000
-"""事件历史最大保留条数"""
 SCHEDULER_EXECUTOR_SHUTDOWN_WAIT = 30.0
 """执行器关闭等待时间(秒)"""
 SCHEDULER_DEPENDENCY_RETRY_DELAY = 1.0

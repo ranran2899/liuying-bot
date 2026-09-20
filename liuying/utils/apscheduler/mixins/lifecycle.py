@@ -2,12 +2,14 @@
 任务生命周期管理 Mixin
 
 负责任务的移除、暂停、恢复、修改和立即执行。
+调度器的 TaskEntry 是运行时状态的唯一数据源，
+本 Mixin 仅负责入口校验、数据库联动与日志。
 """
 
 from typing import Any
 
 from liuying.models.scheduler_job import SchedulerJob
-from liuying.utils.enum import TaskStatus, TriggerType
+from liuying.utils.enum import TriggerType
 from liuying.utils.log import logger
 
 from ..models import TaskInfo
@@ -60,12 +62,12 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
 
         group = task_info.group
 
+        # 共享任务仓库：调度器移除后管理器侧同步失效
         self._scheduler.remove_task(task_id)
-        del self._tasks[task_id]
 
-        if group in self._groups and task_id in self._groups[group]:
-            self._groups[group].remove(task_id)
-            if not self._groups[group]:
+        if (group_tasks := self._groups.get(group)) and task_id in group_tasks:
+            group_tasks.remove(task_id)
+            if not group_tasks:
                 del self._groups[group]
 
         if delete_from_db:
@@ -93,8 +95,8 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
         if task_info is None:
             return False
 
+        # 调度器与任务信息共享同一 TaskEntry，状态变更天然同步
         self._scheduler.pause_task(task_id)
-        task_info.status = TaskStatus.PAUSED
 
         if update_db:
             await SchedulerJob.update_job_status(task_id, paused=True)
@@ -122,7 +124,6 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
             return False
 
         self._scheduler.resume_task(task_id)
-        task_info.status = TaskStatus.RUNNING
 
         if update_db:
             await SchedulerJob.update_job_status(task_id, paused=False)
@@ -144,9 +145,9 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
         priority: int | None = None,
         max_instances: int | None = None,
         description: str | None = None,
-        misfire_grace_time: int | None | bool = None,
+        misfire_grace_time: int | None = None,
     ) -> bool:
-        """修改任务配置(显式签名,与 scheduler.py 统一)
+        """修改任务配置(显式签名,直接变更共享的 TaskEntry)
 
         参数:
             task_id: 任务唯一标识
@@ -167,16 +168,16 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
             return False
 
         new_trigger = None
-        new_trigger_type_enum: TriggerType | None = None
+        new_trigger_type: TriggerType | None = None
 
         if trigger_type and trigger_config:
-            new_trigger_type_enum = TriggerType(trigger_type)
+            new_trigger_type = TriggerType(trigger_type)
             new_trigger = trigger_factory.create(trigger_type, trigger_config)
 
         self._scheduler.modify_task(
             task_id,
             trigger=new_trigger,
-            trigger_type=new_trigger_type_enum,
+            trigger_type=new_trigger_type,
             trigger_config=trigger_config,
             name=name,
             group=group,
@@ -185,24 +186,6 @@ class TaskLifecycleMixin(TaskManagerBaseMixin):
             description=description,
             misfire_grace_time=misfire_grace_time,
         )
-
-        if new_trigger_type_enum:
-            task_info.trigger_type = new_trigger_type_enum
-        if trigger_config:
-            task_info.trigger_config.update(trigger_config)
-
-        for field_name, value in [
-            ("name", name),
-            ("group", group),
-            ("priority", priority),
-            ("max_instances", max_instances),
-            ("description", description),
-        ]:
-            if value is not None:
-                setattr(task_info, field_name, value)
-
-        if misfire_grace_time is not None and misfire_grace_time is not False:
-            task_info.misfire_grace_time = misfire_grace_time
 
         logger.info(
             f"修改定时任务: {task_info.name}({task_id})",

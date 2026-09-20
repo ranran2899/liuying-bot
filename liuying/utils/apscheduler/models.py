@@ -7,7 +7,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, TypeAlias
+from typing import Any
 
 from liuying.utils.enum import TaskStatus, TriggerType
 
@@ -17,13 +17,10 @@ from .constants import (
     DEFAULT_PRIORITY,
 )
 
-# 类型别名
-TriggerConfig: TypeAlias = dict[str, Any]
+type TriggerConfig = dict[str, Any]
 """触发器配置字典"""
-TaskFunc: TypeAlias = Callable[..., Any]
+type TaskFunc = Callable[..., Any]
 """任务函数类型"""
-TaskId: TypeAlias = str
-"""任务ID类型"""
 
 
 @dataclass(slots=True)
@@ -32,7 +29,8 @@ class TaskInfo:
     任务信息数据类（统一任务模型）
 
     存储任务的完整信息，包括触发器配置、执行参数、状态等。
-    作为 TaskEntry 和 Manager 层的统一数据结构。
+    TaskEntry 继承本类并添加调度器运行时属性，
+    管理器与调度器共享同一个 TaskEntry 实例（单一数据源）。
     """
 
     id: str
@@ -102,7 +100,7 @@ class TaskConfig:
     """
     任务配置（统一配置对象）
 
-    封装任务注册所需的全部参数，作为 _add_task 的统一入口。
+    封装任务注册所需的全部参数，作为 add 任务的统一入口。
     add_cron/add_interval/add_date 与对应装饰器
     构造此对象后委托 _add_task，消除参数列表重复。
     """

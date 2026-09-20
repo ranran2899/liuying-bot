@@ -7,11 +7,7 @@ from datetime import datetime, timedelta
 import random
 from typing import Any, Self
 
-from .base import (
-    BaseTrigger,
-    TriggerResult,
-    register_trigger,
-)
+from .base import BaseTrigger, register_trigger
 
 
 @register_trigger("interval")
@@ -32,10 +28,9 @@ class IntervalTrigger(BaseTrigger):
         seconds: int = 0,
         start_date: datetime | str | None = None,
         end_date: datetime | str | None = None,
-        timezone: str | None = None,
         jitter: int | None = None,
     ) -> None:
-        super().__init__(start_date, end_date, timezone)
+        super().__init__(start_date, end_date)
 
         self._interval = timedelta(
             weeks=weeks, days=days, hours=hours,
@@ -57,16 +52,16 @@ class IntervalTrigger(BaseTrigger):
         """获取时间间隔（秒）"""
         return self._interval.total_seconds()
 
-    def get_next_run_time(self, previous_time: datetime | None = None) -> TriggerResult:
-        """获取下次运行时间"""
+    def get_next_run_time(
+        self, previous_time: datetime | None = None
+    ) -> datetime | None:
+        """获取下次运行时间，无下次执行时返回 None"""
         now = datetime.now()
 
         if previous_time is None:
-            # 新任务：从下一个间隔开始，避免启动时立即执行
             if self._start_date and now < self._start_date:
                 next_time = self._start_date
             else:
-                # 返回下一个间隔时间，而不是当前时间
                 next_time = now + self._interval
         else:
             if previous_time.tzinfo is not None:
@@ -74,13 +69,14 @@ class IntervalTrigger(BaseTrigger):
             next_time = previous_time + self._interval
 
         if self._end_date and next_time > self._end_date:
-            return TriggerResult(next_run_time=None, should_run=False)
+            return None
 
         if self._jitter:
-            jitter_seconds = random.uniform(-self._jitter, self._jitter)
-            next_time = next_time + timedelta(seconds=jitter_seconds)
+            next_time = next_time + timedelta(
+                seconds=random.uniform(-self._jitter, self._jitter)
+            )
 
-        return TriggerResult(next_run_time=next_time, should_run=False)
+        return next_time
 
     def to_config(self) -> dict[str, Any]:
         """转换为配置字典"""
@@ -112,6 +108,5 @@ class IntervalTrigger(BaseTrigger):
             seconds=config.get("seconds", 0),
             start_date=config.get("start_date"),
             end_date=config.get("end_date"),
-            timezone=config.get("timezone"),
             jitter=config.get("jitter"),
         )

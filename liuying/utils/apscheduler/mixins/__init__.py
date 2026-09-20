@@ -5,19 +5,15 @@
 """
 
 from .base import TaskManagerBaseMixin
-from .decorator import TaskDecoratorMixin
 from .group import TaskGroupMixin
 from .lifecycle import TaskLifecycleMixin
 from .persistence import TaskPersistenceMixin
-from .query import TaskQueryMixin
 from .registration import TaskRegistrationMixin
 
 __all__ = [
-    "TaskDecoratorMixin",
     "TaskGroupMixin",
     "TaskLifecycleMixin",
     "TaskManagerBaseMixin",
     "TaskPersistenceMixin",
-    "TaskQueryMixin",
     "TaskRegistrationMixin",
 ]

@@ -5,10 +5,11 @@
 - 任务注册、调度执行、周期管理、异常处理等核心功能
 - 支持 cron、interval、date 三种触发器
 - 支持装饰器和类接口两种使用方式
-- 支持任务优先级、依赖关系和失败重试机制
+- 支持任务优先级、依赖关系机制
 - 支持数据库持久化存储，项目重启后自动恢复任务
 
-采用单例模式设计，确保全局唯一的任务管理器实例。
+调度器创建的 TaskEntry 同时作为管理器层的任务信息，
+避免双仓库状态同步。采用单例模式设计，确保全局唯一的任务管理器实例。
 """
 
 from liuying.utils.log import logger
@@ -16,14 +17,13 @@ from liuying.utils.manager.priority_manager import PriorityLifecycle
 
 from .alert import alert_manager
 from .mixins import (
-    TaskDecoratorMixin,
     TaskGroupMixin,
     TaskLifecycleMixin,
     TaskPersistenceMixin,
-    TaskQueryMixin,
     TaskRegistrationMixin,
 )
-from .mixins.decorator import _pending_tasks
+from .mixins.base import TaskManagerBaseMixin
+from .mixins.registration import _pending_tasks
 from .models import TaskInfo
 from .scheduler import Scheduler
 
@@ -34,25 +34,24 @@ class TaskManager(
     TaskRegistrationMixin,
     TaskLifecycleMixin,
     TaskGroupMixin,
-    TaskQueryMixin,
-    TaskDecoratorMixin,
     TaskPersistenceMixin,
+    TaskManagerBaseMixin,
 ):
     """
     高级定时任务管理器
 
     通过 Mixin 组合实现职责分离，各模块功能:
-    - TaskRegistrationMixin: 任务注册与触发器创建
+    - TaskRegistrationMixin: 任务注册(类接口与装饰器)与触发器创建
     - TaskLifecycleMixin: 任务生命周期管理(暂停/恢复/移除/修改)
     - TaskGroupMixin: 分组管理
-    - TaskQueryMixin: 任务查询
-    - TaskDecoratorMixin: 装饰器接口
     - TaskPersistenceMixin: 数据库持久化与恢复
+    本类直接提供: 启停控制与任务查询
     """
 
     def __init__(self) -> None:
         self._scheduler = Scheduler()
-        self._tasks: dict[str, TaskInfo] = {}
+        self._tasks = self._scheduler._tasks
+        """与调度器共享同一任务仓库（TaskEntry 单一数据源）"""
         self._groups: dict[str, list[str]] = {}
         self._started = False
 
@@ -74,6 +73,36 @@ class TaskManager(
         await self._scheduler.stop()
         logger.info("定时任务管理器已停止", _LOG_COMMAND)
 
+    def get_task(self, task_id: str) -> TaskInfo | None:
+        """获取指定任务信息
+
+        参数:
+            task_id: 任务唯一标识
+
+        返回:
+            任务信息对象，不存在返回None
+        """
+        return self._tasks.get(task_id)
+
+    def get_all_tasks(self) -> list[TaskInfo]:
+        """获取所有任务信息
+
+        返回:
+            任务信息列表
+        """
+        return list(self._tasks.values())
+
+    def task_exists(self, task_id: str) -> bool:
+        """检查任务是否存在
+
+        参数:
+            task_id: 任务唯一标识
+
+        返回:
+            任务是否存在
+        """
+        return task_id in self._tasks
+
 
 async def register_pending_tasks(task_manager: TaskManager) -> int:
     """注册所有待处理的装饰器任务
@@ -85,7 +114,7 @@ async def register_pending_tasks(task_manager: TaskManager) -> int:
         成功注册的任务数量
     """
     count = 0
-    for _, _, config in _pending_tasks:
+    for config in _pending_tasks:
         try:
             existing_task = task_manager.get_task(config.task_id)
 

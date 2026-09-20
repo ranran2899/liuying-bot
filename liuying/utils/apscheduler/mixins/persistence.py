@@ -8,14 +8,12 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime
 from importlib import import_module
-from typing import Any
 
 from liuying.models.scheduler_job import SchedulerJob
-from liuying.utils.enum import TaskStatus, TriggerType
+from liuying.utils.enum import TriggerType
 from liuying.utils.log import logger
 
 from ..models import TaskConfig
-from ..triggers import trigger_factory
 from ..triggers.base import BaseTrigger
 from .base import TaskManagerBaseMixin
 
@@ -33,66 +31,44 @@ class TaskPersistenceMixin(TaskManagerBaseMixin):
     - 过期一次性任务处理
     """
 
-    async def _save_to_db(
-        self,
-        task_id: str,
-        name: str,
-        trigger_type: TriggerType,
-        trigger_config: dict[str, Any],
-        group: str = "default",
-        description: str = "",
-        max_instances: int = 1,
-        args: tuple | None = None,
-        kwargs: dict[str, Any] | None = None,
-        func: Callable | None = None,
-        priority: int = 10,
-    ) -> None:
+    async def _save_to_db(self, config: TaskConfig) -> None:
         """保存任务到数据库
 
         参数:
-            task_id: 任务唯一标识
-            name: 任务名称
-            trigger_type: 触发器类型
-            trigger_config: 触发器配置
-            group: 任务分组
-            description: 任务描述
-            max_instances: 最大并发实例数
-            args: 任务位置参数
-            kwargs: 任务关键字参数
-            func: 任务执行函数
-            priority: 任务优先级
+            config: 任务配置对象
         """
+        func = config.func
         func_module = func.__module__ if func else None
         func_name = func.__name__ if func else None
 
-        existing = await SchedulerJob.get_by_job_id(task_id)
+        existing = await SchedulerJob.get_by_job_id(config.task_id)
         if existing:
-            existing.name = name
-            existing.trigger_type = trigger_type.value
-            existing.trigger_args_dict = trigger_config
-            existing.group = group
-            existing.description = description
-            existing.max_instances = max_instances
-            existing.priority = priority
+            existing.name = config.name
+            existing.trigger_type = config.trigger_type.value
+            existing.trigger_args_dict = config.trigger_config
+            existing.group = config.group
+            existing.description = config.description
+            existing.max_instances = config.max_instances
+            existing.priority = config.priority
             existing.func_module = func_module
             existing.func_name = func_name
-            existing.args_list = list(args or [])
-            existing.kwargs_dict = kwargs or {}
+            existing.args_list = list(config.args)
+            existing.kwargs_dict = config.kwargs
             await existing.save()
         else:
             await SchedulerJob.create_job(
-                job_id=task_id,
-                name=name,
-                trigger_type=trigger_type.value,
-                trigger_args=trigger_config,
-                group=group,
-                description=description,
-                max_instances=max_instances,
+                job_id=config.task_id,
+                name=config.name,
+                trigger_type=config.trigger_type.value,
+                trigger_args=config.trigger_config,
+                group=config.group,
+                description=config.description,
+                max_instances=config.max_instances,
                 func_module=func_module,
                 func_name=func_name,
-                args=list(args or []),
-                kwargs=kwargs or {},
-                priority=priority,
+                args=list(config.args),
+                kwargs=config.kwargs,
+                priority=config.priority,
             )
 
     def _get_func(
@@ -185,8 +161,7 @@ class TaskPersistenceMixin(TaskManagerBaseMixin):
 
             try:
                 if job.trigger_type == TriggerType.DATE.value:
-                    executed = await self._handle_expired_date_task(job, func)
-                    if executed:
+                    if await self._handle_expired_date_task(job, func):
                         executed_count += 1
                         continue
 
@@ -207,34 +182,13 @@ class TaskPersistenceMixin(TaskManagerBaseMixin):
                     save_to_db=True,
                 )
 
-                task_info = self._register_task(config)
-                trigger = trigger_factory.create(
-                    job.trigger_type, job.trigger_args_dict
-                )
-
-                self._scheduler.add_task(
-                    task_id=config.task_id,
-                    name=config.name,
-                    trigger=trigger,
-                    func=func,
-                    trigger_type=config.trigger_type,
-                    trigger_config=config.trigger_config,
-                    args=config.args,
-                    kwargs=config.kwargs,
-                    group=config.group,
-                    priority=config.priority,
-                    description=config.description,
-                    max_instances=config.max_instances,
-                    misfire_grace_time=config.misfire_grace_time,
-                    replace_existing=True,
-                    save_to_db=True,
-                )
+                # 恢复时跳过持久化，避免启动阶段重复写库
+                task_info = await self._add_task(config, save_to_db=False)
 
                 if job.paused:
                     self._scheduler.pause_task(job.job_id)
-                    task_info.status = TaskStatus.PAUSED
 
-                task_info.created_at = job.created_at
+                task_info.created_at = job.created_at or task_info.created_at
                 task_info.last_run_time = job.previous_run_time
                 task_info.run_count = job.run_count
 

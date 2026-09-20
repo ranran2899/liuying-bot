@@ -127,18 +127,6 @@ class SchedulerMonitor:
         )
 
     @classmethod
-    async def on_task_timeout(cls, event: TaskEvent):
-        """任务执行超时
-
-        参数:
-            event: 任务事件
-        """
-        logger.warning(
-            f"任务执行超时: {event.task_name}({event.task_id})",
-            LOG_COMMAND,
-        )
-
-    @classmethod
     async def on_alert_triggered(cls, event: TaskEvent):
         """告警触发
 
@@ -214,7 +202,6 @@ def setup_scheduler_hooks():
     event_bus.subscribe(TaskEventType.TASK_FINISHED, SchedulerMonitor.on_task_finished)
     event_bus.subscribe(TaskEventType.TASK_FAILED, SchedulerMonitor.on_task_failed)
     event_bus.subscribe(TaskEventType.TASK_MISSED, SchedulerMonitor.on_task_missed)
-    event_bus.subscribe(TaskEventType.TASK_TIMEOUT, SchedulerMonitor.on_task_timeout)
     event_bus.subscribe(
         TaskEventType.ALERT_TRIGGERED,
         SchedulerMonitor.on_alert_triggered
