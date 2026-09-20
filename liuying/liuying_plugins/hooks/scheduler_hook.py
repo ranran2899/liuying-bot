@@ -6,7 +6,7 @@ import uuid
 
 from liuying.configs.config import Config
 from liuying.models._log.scheduler_log import SchedulerLog
-from liuying.utils.apscheduler import (
+from liuying.services.apscheduler import (
     TaskEvent,
     TaskEventType,
     event_bus,

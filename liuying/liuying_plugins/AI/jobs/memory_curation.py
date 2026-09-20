@@ -4,7 +4,7 @@
 基于 task_manager 注册定时任务。
 """
 
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.log import logger
 
 from ..config import get_config

@@ -7,7 +7,7 @@
 """
 from datetime import datetime, timedelta
 
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.enum import StorageType
 from liuying.utils.log import logger
 

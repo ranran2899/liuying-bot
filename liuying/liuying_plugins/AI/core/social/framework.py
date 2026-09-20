@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.log import logger
 
 __all__ = [

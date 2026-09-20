@@ -9,7 +9,7 @@ from nonebot.plugin import PluginMetadata
 
 from liuying.configs.utils.models import Command, PluginExtraData
 from liuying.models._bot import BotConsole
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils

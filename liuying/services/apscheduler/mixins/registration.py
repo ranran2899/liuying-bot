@@ -53,7 +53,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
         """添加任务的内部实现(注册 + 调度 + 可选持久化)
 
         调度器创建的 TaskEntry 同时作为管理器层的任务信息，
-        避免双仓库状态同步。
+        避免双仓库状态同步；task_id/name 为空时由调度器自动补全。
 
         参数:
             config: 任务配置对象
@@ -85,7 +85,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
 
     async def add_cron(
         self,
-        task_id: str,
+        task_id: str | None,
         func: Callable,
         year: int | str | None = None,
         month: int | str | None = None,
@@ -111,7 +111,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
         """添加 cron 表达式定时任务
 
         参数:
-            task_id: 任务唯一标识
+            task_id: 任务唯一标识，传 None 时自动生成
             func: 任务执行函数
             year: 年份
             month: 月份
@@ -156,7 +156,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
 
     async def add_interval(
         self,
-        task_id: str,
+        task_id: str | None,
         func: Callable,
         weeks: int = 0,
         days: int = 0,
@@ -181,7 +181,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
         """添加固定时间间隔定时任务
 
         参数:
-            task_id: 任务唯一标识
+            task_id: 任务唯一标识，传 None 时自动生成
             func: 任务执行函数
             weeks: 周数
             days: 天数
@@ -225,7 +225,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
 
     async def add_date(
         self,
-        task_id: str,
+        task_id: str | None,
         func: Callable,
         run_date: datetime | str,
         name: str | None = None,
@@ -242,7 +242,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
         """添加一次性定时任务
 
         参数:
-            task_id: 任务唯一标识
+            task_id: 任务唯一标识，传 None 时自动生成
             func: 任务执行函数
             run_date: 执行时间
             name: 任务名称
@@ -274,7 +274,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
 
     def cron(
         self,
-        task_id: str,
+        task_id: str | None = None,
         year: int | str | None = None,
         month: int | str | None = None,
         day: int | str | None = None,
@@ -323,7 +323,7 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
 
     def interval(
         self,
-        task_id: str,
+        task_id: str | None = None,
         weeks: int = 0,
         days: int = 0,
         hours: int = 0,
@@ -371,8 +371,8 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
 
     def date(
         self,
-        task_id: str,
-        run_date: datetime | str,
+        task_id: str | None = None,
+        run_date: datetime | str | None = None,
         name: str | None = None,
         group: str = "default",
         description: str = "",
@@ -387,6 +387,10 @@ class TaskRegistrationMixin(TaskManagerBaseMixin):
         """装饰器方式添加一次性定时任务(参数同 add_date)"""
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            if not run_date:
+                raise ValueError(
+                    f"一次性任务 '{task_id or func.__name__}' 必须提供 run_date"
+                )
             _pending_tasks.append(
                 TaskConfig(
                     task_id=task_id, name=name or task_id,

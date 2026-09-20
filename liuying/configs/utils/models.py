@@ -182,20 +182,24 @@ class AICallableTag(BaseModel):
 
 
 class SchedulerModel(BaseModel):
+    id: str | None = None
+    """任务ID"""
     trigger: Literal["date", "interval", "cron"]
     """trigger"""
-    day: int | None = None
-    """日期"""
-    hour: int | None = None
+    month: int | str | None = None
+    """月份(cron, 支持 1-12 或 "*/3" 表达式)"""
+    day: int | str | None = None
+    """日期(cron, 支持 1-31 或 "*/2" 表达式)"""
+    day_of_week: int | str | None = None
+    """星期几(cron, 0=周一, 支持 "0,3" 表达式)"""
+    hour: int | str | None = None
     """小时"""
-    minute: int | None = None
+    minute: int | str | None = None
     """分钟"""
-    second: int | None = None
+    second: int | str | None = None
     """秒"""
     run_date: datetime | None = None
     """运行时间"""
-    id: str | None = None
-    """任务ID"""
     max_instances: int | None = None
     """最大实例数"""
     args: list | None = None

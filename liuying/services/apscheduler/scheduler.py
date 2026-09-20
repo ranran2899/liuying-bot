@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import heapq
 import time
 from typing import Any
+from uuid import uuid4
 
 from liuying.models.scheduler_job import SchedulerJob
 from liuying.utils.enum import TaskStatus, TriggerType
@@ -149,11 +150,24 @@ class Scheduler:
         await self._executor.shutdown()
         logger.info("定时任务调度器已停止", _LOG_COMMAND)
 
+    @staticmethod
+    def _generate_task_id(config: TaskConfig) -> str:
+        """为未指定 task_id 的任务生成唯一标识
+
+        参数:
+            config: 任务配置
+
+        返回:
+            形如 "{函数名}_{短uuid}" 的任务ID
+        """
+        base = getattr(config.func, "__name__", "") or config.trigger_type.value
+        return f"{base}_{uuid4().hex[:8]}"
+
     def add_task(self, config: TaskConfig, trigger: BaseTrigger) -> TaskEntry:
         """添加任务（TaskEntry 作为运行时状态的单一数据源）
 
         参数:
-            config: 任务配置
+            config: 任务配置（task_id/name 为空时自动补全）
             trigger: 触发器实例
 
         返回:
@@ -162,6 +176,14 @@ class Scheduler:
         异常:
             ValueError: 任务已存在且不允许替换，或存在循环依赖
         """
+        # 未指定任务ID时自动生成，并确保与现有任务不冲突
+        if not config.task_id:
+            config.task_id = self._generate_task_id(config)
+            while config.task_id in self._tasks:
+                config.task_id = self._generate_task_id(config)
+        if not config.name:
+            config.name = config.task_id
+
         task_id = config.task_id
         if task_id in self._tasks and not config.replace_existing:
             raise ValueError(

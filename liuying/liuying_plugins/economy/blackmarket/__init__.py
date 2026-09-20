@@ -10,7 +10,7 @@ from nonebot_plugin_alconna import Alconna, Args, Match, on_alconna
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.utils import Command, PluginExtraData
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 

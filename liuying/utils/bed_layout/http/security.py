@@ -13,8 +13,8 @@ import time
 
 from fastapi import HTTPException, Request
 
+from liuying.services.apscheduler import task_manager
 from liuying.services.cache import Cache
-from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 
 from ..config import get_config

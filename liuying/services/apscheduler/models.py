@@ -95,7 +95,7 @@ class TaskInfo:
         }
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, kw_only=True)
 class TaskConfig:
     """
     任务配置（统一配置对象）
@@ -103,12 +103,14 @@ class TaskConfig:
     封装任务注册所需的全部参数，作为 add 任务的统一入口。
     add_cron/add_interval/add_date 与对应装饰器
     构造此对象后委托 _add_task，消除参数列表重复。
+    全部字段关键字构造，task_id/name 允许为空并在
+    _add_task 中自动补全。
     """
 
-    task_id: str
-    """任务ID"""
-    name: str
-    """任务名称"""
+    task_id: str | None = None
+    """任务ID，传 None 或空字符串时自动生成"""
+    name: str | None = None
+    """任务名称，为空时自动取 task_id"""
     trigger_type: TriggerType
     """触发器类型"""
     func: TaskFunc

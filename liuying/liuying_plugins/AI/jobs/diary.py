@@ -8,7 +8,7 @@
 from datetime import datetime
 import random
 
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.log import logger
 
 from ..config import get_config

@@ -9,7 +9,7 @@ from nonebot.utils import is_coroutine_callable
 from liuying.configs.utils import PluginExtraData, Task
 from liuying.models._group import GroupConsole
 from liuying.models.task_info import TaskInfo
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.common_utils import CommonUtils
 from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
@@ -139,7 +139,7 @@ async def _check_task_condition(task: Task) -> bool:
     return not await CommonUtils.task_is_block(bot, task.module, group_id)
 
 
-def _build_trigger_config(scheduler_model) -> dict[str, int]:
+def _build_trigger_config(scheduler_model) -> dict[str, int | str]:
     """构建触发器配置
 
     参数:
@@ -150,9 +150,30 @@ def _build_trigger_config(scheduler_model) -> dict[str, int]:
     """
     return {
         key: value
-        for key in ("hour", "minute", "second")
+        for key in ("month", "day", "day_of_week", "hour", "minute", "second")
         if (value := getattr(scheduler_model, key)) is not None
     }
+
+
+def _build_base_kwargs(scheduler_model, task: Task) -> dict:
+    """构建任务通用参数
+
+    参数:
+        scheduler_model: 调度器模型
+        task: 被动技能实例
+
+    返回:
+        过滤 None 后的任务参数字典
+    """
+    kwargs = {
+        "task_id": scheduler_model.id,
+        "func": get_run_task,
+        "name": task.name,
+        "args": scheduler_model.args,
+        "kwargs": scheduler_model.kwargs,
+        "max_instances": scheduler_model.max_instances,
+    }
+    return {key: value for key, value in kwargs.items() if value is not None}
 
 
 async def create_schedule(task: Task) -> None:
@@ -166,24 +187,17 @@ async def create_schedule(task: Task) -> None:
         return
 
     try:
-        trigger = scheduler_model.trigger
-        base_kwargs = {
-            "task_id": scheduler_model.id,
-            "func": get_run_task,
-            "name": task.name,
-            "args": scheduler_model.args,
-            "kwargs": scheduler_model.kwargs,
-            "max_instances": scheduler_model.max_instances,
-        }
+        base_kwargs = _build_base_kwargs(scheduler_model, task)
 
-        match trigger:
+        match scheduler_model.trigger:
             case "cron":
-                trigger_config = _build_trigger_config(scheduler_model)
-                await task_manager.add_cron(**base_kwargs, **trigger_config)
+                await task_manager.add_cron(
+                    **base_kwargs, **_build_trigger_config(scheduler_model)
+                )
             case "interval":
-                trigger_config = _build_trigger_config(scheduler_model)
-                interval_config = {f"{k}s": v for k, v in trigger_config.items()}
-                await task_manager.add_interval(**base_kwargs, **interval_config)
+                await task_manager.add_interval(
+                    **base_kwargs, **_build_trigger_config(scheduler_model)
+                )
             case "date":
                 run_date = scheduler_model.run_date
                 if not run_date:
@@ -196,10 +210,7 @@ async def create_schedule(task: Task) -> None:
                     )
                     return
 
-                await task_manager.add_date(
-                    **base_kwargs,
-                    run_date=run_date,
-                )
+                await task_manager.add_date(**base_kwargs, run_date=run_date)
 
         logger.debug(f"成功动态创建定时任务: {task.name}({task.module})")
     except Exception as e:

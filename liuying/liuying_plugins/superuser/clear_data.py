@@ -10,7 +10,7 @@ from nonebot_plugin_uninfo import Uninfo
 
 from liuying.configs.path_config import TEMP_PATH
 from liuying.configs.utils import PluginExtraData
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.enum import PluginType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils

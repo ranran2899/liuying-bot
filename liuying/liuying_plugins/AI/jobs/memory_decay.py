@@ -7,7 +7,7 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.log import logger
 
 from ..config import get_config

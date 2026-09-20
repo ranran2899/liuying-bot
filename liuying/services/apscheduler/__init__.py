@@ -7,7 +7,7 @@
 使用示例:
 
     # 装饰器方式(推荐)
-    from liuying.utils.apscheduler import task_manager
+    from liuying.services.apscheduler import task_manager
 
     @task_manager.cron("daily_task", hour=0, minute=0)
     async def daily_cleanup():
@@ -30,6 +30,13 @@
     await task_manager.resume_task("task_id")     # 恢复
     await task_manager.remove_task("task_id")     # 移除
     task_manager.run_task_now("task_id")          # 立即执行
+
+    # 任务ID可以为空(传 None 或省略), 自动生成 "{函数名}_{短uuid}" 标识
+    @task_manager.interval(seconds=10)
+    async def heartbeat():
+        print("心跳检测")
+
+    await task_manager.add_cron(None, my_task, hour=8)
 
     # 分组管理
     await task_manager.pause_group("cleanup")

@@ -13,8 +13,8 @@ from nonebot import get_bot
 from nonebot_plugin_alconna import Target
 
 from liuying.models._user.user_info import UserInfo
+from liuying.services.apscheduler import task_manager
 from liuying.services.liuying_db import Q
-from liuying.utils.apscheduler import task_manager
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 

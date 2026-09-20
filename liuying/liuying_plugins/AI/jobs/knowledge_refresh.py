@@ -5,7 +5,7 @@
 无需扫描入库，故不再需要刷新任务。
 """
 
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.log import logger
 
 from ..core.knowledge import knowledge_store

@@ -6,7 +6,7 @@ import random
 from nonebot_plugin_alconna import Button
 from nonebot_plugin_uninfo import Uninfo
 
-from liuying.utils.apscheduler import task_manager
+from liuying.services.apscheduler import task_manager
 from liuying.utils.bed_layout import BedLayout
 from liuying.utils.enum import StorageType
 from liuying.utils.log import logger
