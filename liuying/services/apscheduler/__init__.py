@@ -53,6 +53,7 @@
     )
 """
 
+from .alert import alert_manager
 from .events import TaskEvent, TaskEventType, event_bus
 from .manager import task_manager
 from .metrics import metrics_collector
@@ -63,6 +64,7 @@ __all__ = [
     "TaskEvent",
     "TaskEventType",
     "TaskInfo",
+    "alert_manager",
     "event_bus",
     "metrics_collector",
     "task_manager",

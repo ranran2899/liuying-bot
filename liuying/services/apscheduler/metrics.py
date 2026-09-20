@@ -158,6 +158,10 @@ class MetricsCollector:
         self._scheduler_metrics = SchedulerMetrics()
         self._group_metrics: dict[str, TaskMetrics] = {}
 
+    def get_task_metrics(self, task_id: str) -> TaskMetrics | None:
+        """只读获取任务指标，不存在返回 None（不创建）"""
+        return self._task_metrics.get(task_id)
+
     def get_or_create_task_metrics(
         self,
         task_id: str,
