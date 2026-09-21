@@ -182,6 +182,7 @@ class AICallableTag(BaseModel):
 
 
 class SchedulerModel(BaseModel):
+    """定时任务配置"""
     id: str | None = None
     """任务ID"""
     trigger: Literal["date", "interval", "cron"]
@@ -209,6 +210,8 @@ class SchedulerModel(BaseModel):
 
 
 class Task(BaseBlock):
+    """技能被动任务"""
+
     module: str
     """被动技能模块名"""
     name: str

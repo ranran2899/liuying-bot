@@ -11,7 +11,7 @@ from pathlib import Path
 
 from nonebot_plugin_alconna import Image
 
-from liuying.utils.bed_layout import BedLayout
+from liuying.services.bed_layout import BedLayout
 from liuying.utils.log import logger
 
 from ..core.sticker import sticker_curation, sticker_importer

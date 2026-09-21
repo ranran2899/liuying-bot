@@ -19,8 +19,8 @@ from liuying.models._user.user_info import UserInfo
 from liuying.models._user.user_intro import UserIntroInfo
 from liuying.models._user.user_sign import UserSignInfo
 from liuying.models._user.user_sign_log import UserSignLog
+from liuying.services.bed_layout import BedLayout
 from liuying.ui.services import render
-from liuying.utils.bed_layout import BedLayout
 from liuying.utils.calendar import Greeting, TimeSeason
 from liuying.utils.log import logger
 from liuying.utils.utils import format_image_url

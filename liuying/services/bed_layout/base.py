@@ -6,7 +6,7 @@
 
 扩展自定义存储提供者：
 
-    from liuying.utils.bed_layout.base import (
+    from liuying.services.bed_layout.base import (
         ProviderRegistry,
         StorageProvider,
     )

@@ -11,8 +11,8 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.configs.path_config import TEMP_PATH
 from liuying.liuying_plugins.user_info.utils import QQMsgBuilder
 from liuying.models._user import UserPermLevel
+from liuying.services.bed_layout import BedLayout
 from liuying.ui.services import render
-from liuying.utils.bed_layout import BedLayout
 from liuying.utils.bot.version import BotVersionInfo
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils

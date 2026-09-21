@@ -8,7 +8,7 @@ from liuying.models.bottle import (
     BottleLike,
     BottleRecord,
 )
-from liuying.utils.bed_layout import BedLayout
+from liuying.services.bed_layout import BedLayout
 from liuying.utils.enum import StorageType
 from liuying.utils.log import logger
 

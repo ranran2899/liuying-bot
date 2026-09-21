@@ -3,8 +3,8 @@
 from datetime import date
 
 from liuying.configs.config import Config
-from liuying.utils.bed_layout import BedLayout
-from liuying.utils.bed_layout.providers.local import LocalStorageProvider
+from liuying.services.bed_layout import BedLayout
+from liuying.services.bed_layout.providers.local import LocalStorageProvider
 from liuying.utils.enum import StorageType
 from liuying.utils.log import logger
 from liuying.utils.user.gold import UserGold

@@ -9,7 +9,7 @@ from asyncio import to_thread
 import hashlib
 from pathlib import Path
 
-from liuying.utils.bed_layout import BedLayout
+from liuying.services.bed_layout import BedLayout
 from liuying.utils.log import logger
 
 from ...agent.sticker.semantics import sticker_semantics_analyzer

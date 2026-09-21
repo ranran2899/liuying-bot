@@ -15,7 +15,7 @@ from PIL import Image as PILImage
 from liuying.configs.config import Config
 from liuying.models._user.user_info import UserInfo
 from liuying.models.bottle import BottleComment, BottleImage, BottleRecord
-from liuying.utils.bed_layout import BedLayout
+from liuying.services.bed_layout import BedLayout
 from liuying.utils.enum import StorageType
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
