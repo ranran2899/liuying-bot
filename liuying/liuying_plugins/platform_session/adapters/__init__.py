@@ -7,6 +7,7 @@ from nonebot import get_adapters
 
 from liuying.utils.log import logger
 
+from ..action import ActionExecutor
 from ..fetch import InfoFetcher
 from ..loader import BaseLoader
 
@@ -25,6 +26,7 @@ for _path in root.iterdir():
         logger.warning(f"加载平台会话适配器模块失败: {_path.stem}", e=e)
 
 INFO_FETCHER_MAPPING: dict[str, InfoFetcher] = {}
+ACTION_EXECUTOR_MAPPING: dict[str, ActionExecutor] = {}
 try:
     _adapters = get_adapters()
 except Exception as e:
@@ -40,6 +42,13 @@ for _adapter_name in _adapters:
         INFO_FETCHER_MAPPING[_adapter_name] = _loader.get_fetcher()
     except Exception as e:
         logger.warning(f"加载适配器 {_adapter_name} 的会话抓取器失败", e=e)
+    try:
+        _executor = _loader.get_executor()
+    except Exception as e:
+        logger.warning(f"加载适配器 {_adapter_name} 的动作执行器失败", e=e)
+    else:
+        if _executor is not None:
+            ACTION_EXECUTOR_MAPPING[_adapter_name] = _executor
 
 
 _unsupported: set[str] = set()
@@ -63,3 +72,23 @@ def alter_get_fetcher(adapter_name: str) -> InfoFetcher | None:
         return None
     INFO_FETCHER_MAPPING[adapter_name] = fetcher
     return fetcher
+
+
+def get_executor(adapter_name: str) -> ActionExecutor | None:
+    """获取指定适配器已注册的动作执行器，未注册时尝试延迟加载"""
+    executor = ACTION_EXECUTOR_MAPPING.get(adapter_name)
+    if executor is not None:
+        return executor
+    if adapter_name not in INFO_FETCHER_MAPPING:
+        return None
+    loader = loaders.get(adapter_name)
+    if loader is None:
+        return None
+    try:
+        executor = loader.get_executor()
+    except Exception as e:
+        logger.warning(f"加载适配器 {adapter_name} 的动作执行器失败", e=e)
+        return None
+    if executor is not None:
+        ACTION_EXECUTOR_MAPPING[adapter_name] = executor
+    return executor
