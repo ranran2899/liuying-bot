@@ -1174,7 +1174,7 @@ requires-dist = [
     { name = "nonebot-plugin-htmlrender", specifier = ">=0.6.7,<0.7.0" },
     { name = "nonebot-plugin-localstore", specifier = ">=0.7.4,<0.8.0" },
     { name = "nonebot-plugin-session", specifier = ">=0.3.2,<0.4.0" },
-    { name = "nonebot-plugin-uninfo", specifier = "==0.11.1" },
+    { name = "nonebot-plugin-uninfo", specifier = "==0.11.2" },
     { name = "nonebot-plugin-waiter", specifier = ">=0.8.1,<0.9.0" },
     { name = "nonebot2", extras = ["fastapi"], specifier = ">=2.5.0,<2.6.0" },
     { name = "numpy", specifier = "==2.5.1" },
@@ -1524,16 +1524,15 @@ wheels = [
 
 [[package]]
 name = "nonebot-plugin-uninfo"
-version = "0.11.1"
+version = "0.11.2"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
 dependencies = [
     { name = "importlib-metadata" },
-    { name = "nonebot-adapter-qq" },
     { name = "nonebot2" },
 ]
-sdist = { url = "https://mirrors.aliyun.com/pypi/packages/29/02/7a6b5a35014b408d599b2e2904932fe7c10b56c15c7c5d32f6b84ad0c9bd/nonebot_plugin_uninfo-0.11.1.tar.gz", hash = "sha256:fe421ad3aebaf2138ec3922cbb2da1cb0f4fb4c98fe63016d0355a5a8c5041b0" }
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/33/bd/e3ff9a211f3bc9d9e48a4b2ae5b45fbb55fdc5a1edb0307e04aa8af35101/nonebot_plugin_uninfo-0.11.2.tar.gz", hash = "sha256:fd649a293f7a6b727e5ee31af0984285fc4af0cea876a60006c393908b1cf918" }
 wheels = [
-    { url = "https://mirrors.aliyun.com/pypi/packages/45/fc/12b8968b9d780fa09c1c9771aa674336ce94fda6501922b3e4821fa62cf5/nonebot_plugin_uninfo-0.11.1-py3-none-any.whl", hash = "sha256:73c915d74a91ac13fe75a9fe048722622a8219c3aece35e974564d9ff77a0b3c" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/4f/f2/37f1c7620d20891c652102bdd52681f2e6a2a079d2478aff4d0e59317c53/nonebot_plugin_uninfo-0.11.2-py3-none-any.whl", hash = "sha256:47a42e16247649986affedc9c649d57a12d026b19f4d9c0c22829b4a585411a4" },
 ]
 
 [[package]]

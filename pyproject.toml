@@ -19,7 +19,7 @@ dependencies = [
     "websockets",
     "sqlalchemy[asyncio]>=2.0.51,<3.0.0",
     "pymysql>=1.2.0,<2.0", # 用于MySQL支持
-    "nonebot-plugin-uninfo==0.11.1",
+    "nonebot-plugin-uninfo==0.11.2",
     "nonebot-plugin-waiter>=0.8.1,<0.9.0",
     "nonebot-plugin-alconna==0.62.1",
     "nonebot-plugin-session>=0.3.2,<0.4.0",

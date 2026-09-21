@@ -4,6 +4,12 @@ import nonebot
 
 from liuying.services.log import logger
 
+
+
+# 加载平台插件
+nonebot.load_plugins(str(Path(__file__).parent.resolve()))
+
+
 path = Path(__file__).parent
 
 
