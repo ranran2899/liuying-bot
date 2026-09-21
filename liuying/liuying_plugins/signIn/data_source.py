@@ -6,8 +6,8 @@ import json
 import random
 
 from nonebot_plugin_alconna import Button
-from nonebot_plugin_uninfo import Uninfo
 
+from liuying.liuying_plugins.platform_session import Uninfo
 from liuying.configs.config import Config
 from liuying.configs.path_config import TEMP_PATH
 from liuying.liuying_plugins.economy.shop import register_items

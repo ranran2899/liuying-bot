@@ -4,7 +4,8 @@
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import Alconna, on_alconna
-from nonebot_plugin_uninfo import Uninfo
+
+from liuying.liuying_plugins.platform_session import Uninfo
 
 from liuying.configs.utils import Command, PluginExtraData, RegisterConfig
 from liuying.models._user.user_sign import UserSignInfo
