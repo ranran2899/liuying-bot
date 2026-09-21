@@ -92,19 +92,68 @@ class ActionExecutor(ABC):
     async def recall(
         self, bot: Bot, target: Scene | Session, message_id: str
     ) -> bool:
-        """撤回指定消息，不支持时抛 NotImplementedError"""
+        """撤回指定会话或场景中的消息
+
+        参数:
+            bot: 发起动作的机器人实例
+            target: 消息所在的目标场景或完整会话
+            message_id: 待撤回的消息id
+
+        返回:
+            bool: 撤回是否成功
+
+        异常:
+            NotImplementedError: 当前适配器不支持撤回时抛出
+        """
         raise NotImplementedError
 
     async def mute(
         self, bot: Bot, member: Member, scene: Scene, duration: timedelta
     ) -> bool:
-        """禁言指定成员，不支持时抛 NotImplementedError"""
+        """禁言指定场景中的成员
+
+        参数:
+            bot: 发起动作的机器人实例
+            member: 待禁言的目标成员
+            scene: 成员所属的场景
+            duration: 禁言时长
+
+        返回:
+            bool: 禁言是否成功
+
+        异常:
+            NotImplementedError: 当前适配器不支持禁言时抛出
+        """
         raise NotImplementedError
 
     async def unmute(self, bot: Bot, member: Member, scene: Scene) -> bool:
-        """取消指定成员禁言，不支持时抛 NotImplementedError"""
+        """取消指定场景中成员的禁言
+
+        参数:
+            bot: 发起动作的机器人实例
+            member: 待解禁的目标成员
+            scene: 成员所属的场景
+
+        返回:
+            bool: 解禁是否成功
+
+        异常:
+            NotImplementedError: 当前适配器不支持解禁时抛出
+        """
         raise NotImplementedError
 
     async def kick(self, bot: Bot, member: Member, scene: Scene) -> bool:
-        """将指定成员移出场景，不支持时抛 NotImplementedError"""
+        """将指定成员移出场景
+
+        参数:
+            bot: 发起动作的机器人实例
+            member: 待移出的目标成员
+            scene: 成员所属的场景
+
+        返回:
+            bool: 移出是否成功
+
+        异常:
+            NotImplementedError: 当前适配器不支持踢出时抛出
+        """
         raise NotImplementedError
