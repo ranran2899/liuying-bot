@@ -14,7 +14,7 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
-from ..agent.runtime.session_context import bind_session
+from ..agent.runtime.session_context import bind_session_scope
 from ..config import get_config
 from ..core.group import group_social
 from ..core.peer_awareness import peer_awareness
@@ -100,96 +100,95 @@ class ChatCommands:
         if not get_config("ENABLE_AI", False):
             return
 
-        # 绑定 uninfo 注入的真实会话，供本轮 Agent 工具链统一读取
-        bind_session(session)
+        # 以作用域绑定 uninfo 真实会话，退出时自动 reset，避免跨消息泄漏
+        with bind_session_scope(session):
+            user_id = session.user.id
 
-        user_id = session.user.id
-
-        group_id = (
-            session.scene.id if session.scene.is_group else None
-        )
-
-        # 运行时开关检查
-        if not runtime_switch.is_enabled(
-            "ai", user_id=user_id, group_id=group_id
-        ):
-            return
-
-        is_private = not session.scene.is_group
-
-        # alconna统一消息：文本/图片直接从注入的UniMsg解析
-        text = message.extract_plain_text().strip()
-
-        # 群聊目标推断：当消息明确@他人或回复他人时跳过，避免误回复
-        if (
-            not is_private
-            and get_config("TARGET_INFERENCE_ENABLED", True)
-        ):
-            target = target_inference.infer_message_target(
-                event, bot_self_id=session.self_id
+            group_id = (
+                session.scene.id if session.scene.is_group else None
             )
-            if target == MessageTarget.OTHERS:
-                logger.debug(
-                    f"群消息目标为他人，跳过回复: "
-                    f"group={group_id} user={user_id}",
-                    command="AI",
-                )
+
+            # 运行时开关检查
+            if not runtime_switch.is_enabled(
+                "ai", user_id=user_id, group_id=group_id
+            ):
                 return
 
-        image_descs: list[str] = []
-        if get_config("VISION", {}).get("enabled", True):
-            image_descs = (
-                await ChatMatchersHelper.extract_image_descriptions(
-                    message
+            is_private = not session.scene.is_group
+
+            # alconna统一消息：文本/图片直接从注入的UniMsg解析
+            text = message.extract_plain_text().strip()
+
+            # 群聊目标推断：消息明确@他人或回复他人时跳过，避免误回复
+            if (
+                not is_private
+                and get_config("TARGET_INFERENCE_ENABLED", True)
+            ):
+                target = target_inference.infer_message_target(
+                    event, bot_self_id=session.self_id
                 )
-            )
+                if target == MessageTarget.OTHERS:
+                    logger.debug(
+                        f"群消息目标为他人，跳过回复: "
+                        f"group={group_id} user={user_id}",
+                        command="AI",
+                    )
+                    return
 
-        if image_descs:
-            desc_text = "\n".join(
-                f"[图片{i + 1}] {d}"
-                for i, d in enumerate(image_descs)
-            )
-            text = (
-                f"{text}\n{desc_text}".strip()
-                if text
-                else desc_text
-            )
+            image_descs: list[str] = []
+            if get_config("VISION", {}).get("enabled", True):
+                image_descs = (
+                    await ChatMatchersHelper.extract_image_descriptions(
+                        message
+                    )
+                )
 
-        if not text:
-            return
+            if image_descs:
+                desc_text = "\n".join(
+                    f"[图片{i + 1}] {d}"
+                    for i, d in enumerate(image_descs)
+                )
+                text = (
+                    f"{text}\n{desc_text}".strip()
+                    if text
+                    else desc_text
+                )
 
-        label = "AI私聊消息" if is_private else "AI@消息"
-        logger.info(
-            f"{label}: {text[:50]}",
-            command="AI",
-            session=session,
-        )
-
-        # 消息批量缓冲：合并短时间内的多条消息
-        if get_config("REPLY_BUFFER", {}).get("enabled", True):
-            session_key = (
-                f"private:{user_id}"
-                if is_private
-                else f"group:{group_id}:{user_id}"
-            )
-            combined = await reply_buffer.submit(
-                session_key=session_key,
-                text=text,
-                is_private=is_private,
-            )
-            if combined is None:
-                # 已被合并到前一条消息，跳过处理
+            if not text:
                 return
-            text = combined
 
-        await ChatCommands.handle_reply(
-            session,
-            user_id,
-            text,
-            group_id,
-            is_private,
-            message_id=getattr(event, "message_id", None),
-        )
+            label = "AI私聊消息" if is_private else "AI@消息"
+            logger.info(
+                f"{label}: {text[:50]}",
+                command="AI",
+                session=session,
+            )
+
+            # 消息批量缓冲：合并短时间内的多条消息
+            if get_config("REPLY_BUFFER", {}).get("enabled", True):
+                session_key = (
+                    f"private:{user_id}"
+                    if is_private
+                    else f"group:{group_id}:{user_id}"
+                )
+                combined = await reply_buffer.submit(
+                    session_key=session_key,
+                    text=text,
+                    is_private=is_private,
+                )
+                if combined is None:
+                    # 已被合并到前一条消息，跳过处理
+                    return
+                text = combined
+
+            await ChatCommands.handle_reply(
+                session,
+                user_id,
+                text,
+                group_id,
+                is_private,
+                message_id=getattr(event, "message_id", None),
+            )
 
     @staticmethod
     async def handle_reply(
@@ -321,7 +320,6 @@ class ChatCommands:
             return
         if not session.scene.is_group:
             return
-        bind_session(session)
         group_id = session.scene.id
         user_id = session.user.id
         if user_id == session.self_id:

@@ -68,6 +68,53 @@ class ZhipuChatCapability:
         )
         return result
 
+    async def chat_with_tools(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """原生 function-calling 对话（智谱 OpenAI 兼容端点）
+
+        将 ``tools`` 注入请求体，返回含 ``tool_calls`` 的完整
+        assistant 消息，供上层 ReAct 循环消费。
+
+        参数:
+            model: 模型名称
+            messages: 对话消息列表（可含 tool_calls / role=tool 消息）
+            tools: OpenAI 格式工具定义列表
+            options: 额外选项（含 tool_choice 等），与 tools 合并后透传
+
+        返回:
+            dict[str, Any]: 完整 assistant 消息字典
+        """
+        model_cfg_result = get_model_config(model)
+        actual_model = model_cfg_result[1].model_name if model_cfg_result else model
+
+        merged: dict[str, Any] = {**(options or {}), "tools": tools}
+
+        defaults = get_llm_config().request_defaults
+        request_data: dict[str, Any] = {
+            "model": actual_model,
+            "messages": messages,
+            **defaults.to_dict(),
+        }
+        request_data.update(merged)
+
+        logger.info(f"智谱AI工具对话: {actual_model}")
+        response = await self._client.post(
+            "chat/completions", request_data, model=actual_model
+        )
+        result = ResponseParser.parse_chat_message(response, "zhipu")
+        provider_cfg = self._client.get_provider_config(model=actual_model)
+        await token_tracker.record(
+            provider=provider_cfg.name if provider_cfg else "zhipu",
+            model=actual_model,
+            **ResponseParser.extract_usage(response),
+        )
+        return result
+
     async def chat_stream(
         self,
         model: str,

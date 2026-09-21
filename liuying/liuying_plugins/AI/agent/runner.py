@@ -1,39 +1,16 @@
-"""Agent核心循环（三层架构）
+"""Agent 核心循环入口
 
-规划-执行-响应三层分离：
-1. TurnPlanner 决策回合行为（动作/输出模式/工具意图）
-2. ToolExecutor 按规划调用工具，合成为证据
-3. PersonaResponder 整合证据与人格，生成最终回复
-
-对外保留 run_agent 接口，内部改用新架构。
+对外保留 run_agent / AgentResult 接口，内部改为驱动统一 ReAct 循环
+（agent.runtime.loop.AgentLoop）。静默/澄清/直达必答等回合级裁决集中
+在本模块单点完成，消除旧架构中规划器与响应器双份维护。
 """
 
 from dataclasses import dataclass, field
-import time
 from typing import Any
 
 from liuying.utils.log import logger
 
-from ..config import get_config
-from ..core.llm import LLMHelper
-from ..tools import ToolRegistry, tool_registry
-from .runtime.constants import (
-    OUTPUT_MODE_CHAT_SHORT,
-    TURN_ACTION_REPLY,
-)
-from .runtime.executor import ToolExecutor
-from .runtime.plan_types import TurnPlan
-from .runtime.planner import TurnPlanner
-from .runtime.query_rewriter import contextual_query_rewriter
-from .runtime.responder import PersonaResponder, PersonaResponse
-from .runtime.session_context import bind_session_context
-
-
-from ..pipeline.style_policy import (
-    CROSSTALK_GUARD_PROMPT,
-    CROSSTALK_MARKER,
-    TOOL_GUIDANCE_PROMPT,
-)
+from .runtime.loop import AgentLoop, PersonaResponse
 
 
 @dataclass(slots=True)
@@ -45,7 +22,6 @@ class AgentResult:
         tool_calls: 工具调用记录列表
         steps: 实际执行的步数
         elapsed: 总耗时（秒）
-        plan: 回合规划
         response: 角色化响应
         metrics: 执行指标
         image_url: 生成的图片URL，None表示无图片
@@ -55,7 +31,6 @@ class AgentResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     steps: int = 0
     elapsed: float = 0.0
-    plan: TurnPlan | None = None
     response: PersonaResponse | None = None
     metrics: dict[str, Any] = field(default_factory=dict)
     image_url: str | None = None
@@ -64,7 +39,6 @@ class AgentResult:
     def metadata(self) -> dict[str, Any]:
         """元信息字典"""
         return {
-            "plan": self.plan.to_dict() if self.plan else {},
             "response": (
                 self.response.to_dict() if self.response else {}
             ),
@@ -84,18 +58,25 @@ class AgentResult:
         }
 
 
+_CLARIFY_TEMPLATES = (
+    "嗯……能再说得详细一点吗？",
+    "我没有完全理解，可以再解释一下吗？",
+    "你是想问……吗？还是别的呢？",
+)
+
+
 class AgentRunner:
     """Agent核心循环执行器
 
-    封装三层架构（规划-执行-响应）的入口与辅助方法，
+    封装统一 ReAct 循环的入口与回合级裁决辅助方法，
     所有方法均为静态方法，可通过类名直接调用。
     """
 
     @staticmethod
     async def run_agent(
-        messages: list[dict[str, str]],
-        llm_helper: LLMHelper,
-        registry: ToolRegistry | None = None,
+        messages: list[dict[str, Any]],
+        llm_helper: Any,
+        registry: Any = None,
         max_steps: int | None = None,
         time_budget: float | None = None,
         user_id: str = "",
@@ -105,381 +86,79 @@ class AgentRunner:
         persona_name: str = "default",
         is_at_bot: bool = False,
     ) -> AgentResult:
-        """执行Agent循环（三层架构）
+        """执行统一 ReAct 循环
 
         参数:
             messages: 对话消息列表（最后一条为用户消息）
             llm_helper: LLM助手实例
             registry: 工具注册表，None时用单例
-            max_steps: 最大步数（保留兼容，实际由规划决定）
+            max_steps: 最大步数，None时用配置默认
             time_budget: 时间预算（秒），None时用配置默认
             user_id: 用户ID（用于人格与记忆）
             group_id: 群组ID
             has_image: 是否包含图片
-            use_llm_planning: 是否启用LLM精细规划，False时用规则快速决策
+            use_llm_planning: 兼容旧参数，False时走无工具快速直答
             persona_name: 当前bot人格名（用于记忆/情绪隔离）
-            is_at_bot: 是否@bot或直呼bot（用于群聊防误插话规划）
+            is_at_bot: 是否@bot或直呼bot（用于直达必答裁决）
 
         返回:
             AgentResult: 执行结果
         """
-        start_time = time.time()
-        use_registry = registry or tool_registry
-        use_budget = time_budget if time_budget is not None else float(
-            get_config("AGENT", {}).get("response_timeout", 180)
-        )
-
         if not messages:
             return AgentResult(text="", elapsed=0.0)
 
-        user_message = ""
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = AgentRunner._extract_text(
-                    msg.get("content", "")
-                )
-                break
-
-        context_summary = AgentRunner._build_context_summary(messages)
-
-        # ===== 第1层：规划 =====
-        # 规则快速路径：极短消息（≤10字符）且无图片时跳过LLM规划，
-        # 直接用规则决策，省去规划层LLM调用的token消耗
-        use_llm_for_plan = use_llm_planning
-        if use_llm_for_plan and not has_image:
-            stripped = user_message.strip()
-            if len(stripped) <= 10 and "?" not in stripped and "？" not in stripped:
-                use_llm_for_plan = False
-
-        planner = TurnPlanner(llm=llm_helper)
-        try:
-            plan = await planner.plan(
-                user_message=user_message,
-                context_summary=context_summary,
-                has_image=has_image,
-                use_llm=use_llm_for_plan,
-                is_group=bool(group_id),
-                is_at_bot=is_at_bot,
-            )
-        except Exception as e:
-            logger.warning(
-                f"规划失败，降级到快速规则: {e}",
-                command="AI",
-                e=e,
-            )
-            plan = planner.plan_fast(user_message, has_image)
-
-        if not plan.user_message:
-            plan.user_message = user_message
-
-        # 应用 max_steps 上限（兼容旧参数）
-        if max_steps and max_steps < plan.max_steps:
-            plan.max_steps = max_steps
-
-        logger.debug(
-            f"回合规划: action={plan.action} mode={plan.output_mode} "
-            f"need_tool={plan.need_tool} reason={plan.reason}",
-            command="AI",
+        loop = AgentLoop(llm=llm_helper, registry=registry)
+        outcome = await loop.run(
+            messages,
+            user_id=user_id,
+            group_id=group_id,
+            persona_name=persona_name,
+            is_at_bot=is_at_bot,
+            max_steps=max_steps,
+            time_budget=time_budget,
         )
 
-        # 直达消息（私聊/@bot）禁止静默：规划器误判silence时
-        # 在执行前强转为短回复，保住工具调用与证据链，
-        # 避免用户明确提问却被无视
-        if plan.is_silence and (not group_id or is_at_bot):
-            plan.action = TURN_ACTION_REPLY
-            plan.output_mode = OUTPUT_MODE_CHAT_SHORT
-            plan.reason = f"{plan.reason or '规划静默'}（直达消息已转为回复）"
-            logger.debug(
-                "直达消息静默规划已转为回复", command="AI"
-            )
-
-        # 静默场景直接返回（置于改写与注入之前，避免白耗调用）
-        if plan.is_silence:
-            elapsed = time.time() - start_time
-            return AgentResult(
-                text="",
-                elapsed=elapsed,
-                plan=plan,
-                response=PersonaResponse(
-                    reply_text="",
-                    recommend_silence=True,
-                    elapsed=elapsed,
-                ),
-                metrics={"silence": True},
-            )
-
-        # 注入多话题防串扰硬约束 + 语义工具指导到 system 消息，
-        # 供响应器消费（返回副本，不污染调用方消息列表）
-        guided_messages = AgentRunner._inject_guidance_to_messages(messages)
-
-        # 需要工具时调用查询改写器，生成高质量检索计划，
-        # 避免 LLM 规划器直接拿用户口语当 query（参考参考插件核心创新）
-        if plan.need_tool:
-            await AgentRunner._apply_query_rewrite(
-                plan, user_message, context_summary, llm_helper, has_image
-            )
-            # LLM规划可能遗漏必填query参数（如web_search），用用户
-            # 消息兜底，避免工具因参数校验失败而空转浪费回合
-            if not str(plan.tool_args.get("query") or "").strip():
-                plan.tool_args["query"] = user_message.strip()[:200]
-
-        # ===== 第2层：执行 =====
-        with bind_session_context(user_id, group_id, persona_name):
-            executor = ToolExecutor(registry=use_registry)
-            if plan.need_tool:
-                try:
-                    records = await executor.execute_chain(
-                        plan, time_budget=use_budget
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"工具链执行失败: {e}",
-                        command="AI",
-                        e=e,
-                    )
-                    records = []
-            else:
-                records = []
-
-            # 检查时间预算
-            elapsed = time.time() - start_time
-            if elapsed > use_budget:
-                logger.warning(
-                    f"Agent循环超时({elapsed:.1f}s)，跳过响应生成",
-                    command="AI",
-                )
-                return AgentRunner._build_timeout_result(
-                    records, plan, executor, start_time
-                )
-
-            # ===== 第3层：响应 =====
-            responder = PersonaResponder(
-                llm=llm_helper,
-            )
-            try:
-                response = await responder.respond(
-                    plan=plan,
-                    evidence=executor.evidence,
-                    user_message=user_message,
-                    messages=guided_messages,
-                    user_id=user_id,
-                    group_id=group_id,
-                    is_at_bot=is_at_bot,
-                )
-            except Exception as e:
-                logger.error(
-                    f"响应生成失败: {e}",
-                    command="AI",
-                    e=e,
-                )
-                response = PersonaResponse(
-                    reply_text="出了点小问题，待会再试试~",
-                    elapsed=time.time() - start_time,
-                )
-
-            elapsed = time.time() - start_time
-            tool_calls = [r.to_dict() for r in records]
-            image_url = AgentRunner._extract_image_url(records)
-
-            return AgentResult(
-                text=response.reply_text,
-                tool_calls=tool_calls,
-                steps=len(records),
-                elapsed=elapsed,
-                plan=plan,
-                response=response,
-                metrics={
-                    "execution": executor.metrics.to_dict(),
-                    "tool_count": len(records),
-                },
-                image_url=image_url,
-            )
-
-    @staticmethod
-    def _extract_text(content: Any) -> str:
-        """提取消息文本内容（兼容多模态 list 结构）
-
-        多模态消息 content 为 list 时，提取文本段拼接，
-        避免对 list 调用字符串方法报错。
-
-        参数:
-            content: 消息内容（str 或 list[dict]）
-
-        返回:
-            str: 文本内容
-        """
-        if isinstance(content, list):
-            return "".join(
-                part.get("text", "")
-                for part in content
-                if isinstance(part, dict) and part.get("type") == "text"
-            )
-        return str(content or "")
-
-    @staticmethod
-    def _inject_guidance_to_messages(
-        messages: list[dict[str, str]],
-    ) -> list[dict[str, str]]:
-        """注入多话题防串扰和语义工具指导到 system 消息
-
-        将防串扰硬约束和语义工具指导追加到首个 system 消息内容
-        末尾。无 system 消息时新建一条。已注入过（包含防串扰尾部
-        特征子串）时直接返回，保证幂等。不修改调用方原列表。
-
-        参数:
-            messages: 消息列表
-
-        返回:
-            list[dict[str, str]]: 注入后的消息副本
-        """
-        extra = f"{TOOL_GUIDANCE_PROMPT}\n\n{CROSSTALK_GUARD_PROMPT}\n\n"
-        copied = [dict(m) for m in messages]
-        for msg in copied:
-            if msg.get("role") == "system" and msg.get("content"):
-                if CROSSTALK_MARKER in msg["content"]:
-                    return copied
-                msg["content"] = f"{msg['content']}{extra}"
-                return copied
-        copied.insert(0, {"role": "system", "content": extra.strip()})
-        return copied
-
-    @staticmethod
-    async def _apply_query_rewrite(
-        plan: TurnPlan,
-        user_message: str,
-        context_summary: str,
-        llm: LLMHelper,
-        has_image: bool,
-    ) -> None:
-        """调用查询改写器，将改写结果注入 plan
-
-        需要工具调用时，先用查询改写器生成高质量检索计划，
-        将 primary_query 注入 plan.tool_args 的 query 字段（如果存在），
-        将 query_candidates 存入 plan.query_candidates 供执行器变体重试。
-
-        参数:
-            plan: 回合规划（原地修改）
-            user_message: 用户消息
-            context_summary: 上下文摘要
-            llm: LLM助手
-            has_image: 是否有图片
-        """
-        try:
-            rewrite = await contextual_query_rewriter(
-                llm=llm,
-                history_new=context_summary,
-                history_last=user_message,
-                images=["image"] if has_image else None,
-                quoted_message="",
-                topic_hint="",
-            )
-        except Exception as e:
-            logger.debug(
-                f"查询改写失败，用原始消息: {e}", command="AI"
-            )
-            return
-
-        if rewrite.primary_query and "query" in plan.tool_args:
-            plan.tool_args["query"] = rewrite.primary_query
-        if rewrite.query_candidates:
-            plan.query_candidates = list(rewrite.query_candidates)
-        logger.debug(
-            f"查询改写: primary={rewrite.primary_query[:60]} "
-            f"candidates={len(rewrite.query_candidates)}",
-            command="AI",
+        return AgentRunner._to_result(
+            outcome, group_id=group_id, is_at_bot=is_at_bot
         )
 
     @staticmethod
-    def _build_context_summary(messages: list[dict[str, str]]) -> str:
-        """构建上下文摘要
-
-        从对话历史中提取最近几条消息作为上下文摘要。
-        多模态消息（content为list）提取文本段拼接。
-
-        参数:
-            messages: 对话消息列表
-
-        返回:
-            str: 上下文摘要文本
-        """
-        if not messages:
-            return ""
-        recent = messages[-6:]
-        parts: list[str] = []
-        for msg in recent:
-            role = msg.get("role", "user")
-            content = AgentRunner._extract_text(msg.get("content", ""))
-            content = content[:100]
-            if not content:
-                continue
-            role_label = {"user": "用户", "assistant": "AI", "system": "系统"}
-            parts.append(f"{role_label.get(role, role)}: {content}")
-        return "\n".join(parts)
-
-    @staticmethod
-    def _build_timeout_result(
-        records: list,
-        plan: TurnPlan,
-        executor: ToolExecutor,
-        start_time: float,
+    def _to_result(
+        outcome: Any, group_id: str | None, is_at_bot: bool
     ) -> AgentResult:
-        """构建超时降级结果
+        """把循环产出转成 AgentResult，并做回合级静默/澄清裁决
 
         参数:
-            records: 已完成的工具调用记录
-            plan: 回合规划
-            executor: 工具执行器
-            start_time: 开始时间
+            outcome: AgentOutcome
+            group_id: 群组ID，None为私聊
+            is_at_bot: 消息是否直达bot
 
         返回:
-            AgentResult: 降级结果
+            AgentResult: 最终结果
         """
-        tool_calls = [r.to_dict() for r in records]
-        fallback_text = "我查到了一些信息，但响应生成超时了，请稍后再试~"
-        if records:
-            last_success = next(
-                (r for r in reversed(records) if r.success), None
-            )
-            if last_success and last_success.result:
-                fallback_text = last_success.result[:200]
+        response = outcome.response
+        direct = group_id is None or is_at_bot
 
-        elapsed = time.time() - start_time
+        # 直达消息（私聊/@bot/回复bot）禁止静默：等同无视用户
+        if direct and response.recommend_silence:
+            response.recommend_silence = False
+            logger.debug("直达消息已取消静默建议", command="AI")
+
+        # 澄清但正文为空时补一句模板澄清
+        if response.ask_clarify and not response.reply_text.strip():
+            response.reply_text = _CLARIFY_TEMPLATES[0]
+            response.recommend_silence = False
+
+        tool_calls = [r.to_dict() for r in outcome.tool_calls]
         return AgentResult(
-            text=fallback_text,
+            text=response.reply_text,
             tool_calls=tool_calls,
-            steps=len(records),
-            elapsed=elapsed,
-            plan=plan,
-            response=PersonaResponse(
-                reply_text=fallback_text,
-                elapsed=elapsed,
-            ),
-            metrics={
-                "execution": executor.metrics.to_dict(),
-                "timeout": True,
-                "tool_count": len(records),
-            },
-            image_url=AgentRunner._extract_image_url(records),
+            steps=outcome.steps,
+            elapsed=outcome.elapsed,
+            response=response,
+            metrics=outcome.metrics,
+            image_url=outcome.image_url,
         )
 
-    @staticmethod
-    def _extract_image_url(records: list) -> str | None:
-        """从工具调用记录中提取生成的图片URL
 
-        仅识别 output_kind 为 image_url 且调用成功的首个结果。
-
-        参数:
-            records: 工具调用记录列表
-
-        返回:
-            str | None: 图片URL或None
-        """
-        for record in records:
-            if not record.success:
-                continue
-            if record.metadata.get("output_kind") != "image_url":
-                continue
-            url = record.result.strip()
-            if url and not url.startswith("图片生成失败"):
-                return url
-        return None
+__all__ = ["AgentResult", "AgentRunner"]

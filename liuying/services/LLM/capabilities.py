@@ -84,6 +84,26 @@ class ChatCapability(Protocol):
         """
         ...
 
+    async def chat_with_tools(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """原生 function-calling 对话
+
+        参数:
+            model: 模型名称
+            messages: 对话消息列表（可含 tool_calls / role=tool 消息）
+            tools: OpenAI 格式工具定义列表
+            options: 额外选项（含 tool_choice 等）
+
+        返回:
+            dict[str, Any]: 含 tool_calls 的完整 assistant 消息字典
+        """
+        ...
+
 
 @runtime_checkable
 class ImageCapability(Protocol):

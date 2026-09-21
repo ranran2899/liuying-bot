@@ -6,7 +6,7 @@
 角色定义：
 - intent:  意图推断（低温度，需要确定性）
 - review:  响应审查（低温度，需要严谨判断）
-- agent:   Agent工具调用（中温度，平衡创造与准确）
+- agent:   统一 ReAct 循环模型（工具编排与最终回复一体，中温度）
 - sticker: 贴纸选择（中温度，需要语义理解）
 - warmup:  预热任务（高温度，用于主动发言等创意场景）
 - chat:    常规对话（默认角色，回退到 CHAT_MODEL）
@@ -38,7 +38,7 @@ ROLE_REVIEW = "review"
 """响应审查角色"""
 
 ROLE_AGENT = "agent"
-"""Agent工具调用角色"""
+"""统一 ReAct 循环模型角色（规划+工具+回复一体）"""
 
 ROLE_STICKER = "sticker"
 """贴纸选择角色"""

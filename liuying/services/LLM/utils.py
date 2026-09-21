@@ -70,6 +70,57 @@ class ResponseParser:
         return reasoning, content
 
     @staticmethod
+    def parse_chat_message(
+        response: dict[str, Any], provider: str = "openai"
+    ) -> dict[str, Any]:
+        """解析对话响应为完整 assistant 消息（含原生工具调用）
+
+        供 function-calling 循环消费：除正文外，保留模型返回的
+        ``tool_calls`` 与 ``finish_reason``，以便上层判断本轮是继续
+        调用工具还是产出最终回复。不改动 ``parse_chat_response`` 的
+        元组契约，二者并存、各取所需。
+
+        参数:
+            response: API 响应数据
+            provider: 提供商名称
+
+        返回:
+            dict[str, Any]: 形如
+                ``{"role", "content", "reasoning_content",
+                "tool_calls", "finish_reason"}``，
+                其中 ``tool_calls`` 缺失时为 ``[]``。
+
+        异常:
+            APIError: 响应内容为空
+        """
+        choices = response.get("choices", [])
+        if not choices:
+            raise APIError("API返回内容为空", "EMPTY_RESPONSE", provider)
+
+        choice = choices[0] if isinstance(choices[0], dict) else {}
+        message = choice.get("message", {})
+        if not isinstance(message, dict):
+            message = {"content": str(message)}
+
+        content = message.get("content", "")
+        content = content if isinstance(content, str) else str(content)
+
+        reasoning = message.get("reasoning_content", "")
+        reasoning = reasoning if isinstance(reasoning, str) else str(reasoning)
+
+        tool_calls = message.get("tool_calls")
+        if not isinstance(tool_calls, list):
+            tool_calls = []
+
+        return {
+            "role": "assistant",
+            "content": content,
+            "reasoning_content": reasoning,
+            "tool_calls": tool_calls,
+            "finish_reason": choice.get("finish_reason", ""),
+        }
+
+    @staticmethod
     def extract_usage(response: dict[str, Any]) -> dict[str, int]:
         """从响应中提取 token 消耗
 

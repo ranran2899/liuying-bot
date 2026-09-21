@@ -70,7 +70,7 @@ LLM_CONFIGS: list[RegisterConfig] = [
         "跨供应商使用模型时必须配置provider\n"
         " - intent: 意图推断（低温度0.1）\n"
         " - review: 响应审查（低温度0.1）\n"
-        " - agent: Agent工具调用（中温度0.3）\n"
+        " - agent: 统一 ReAct 循环模型（需支持 function-calling，中温度0.3）\n"
         " - sticker: 贴纸选择（中温度0.4）\n"
         " - warmup: 预热任务（高温度0.7）",
         dict,

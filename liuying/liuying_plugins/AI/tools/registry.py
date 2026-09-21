@@ -1,7 +1,8 @@
 """工具注册中心
 
 定义 AgentTool 数据结构和 ToolRegistry 注册中心。
-注册时自动归类到 tool_catalog。
+AgentTool 承载 JSON Schema 参数与异步执行函数，并可导出为
+OpenAI function-calling 格式，供统一 ReAct 循环调用。
 """
 
 from collections.abc import Awaitable, Callable
@@ -12,16 +13,13 @@ from ..agent.runtime.constants import (
     EVIDENCE_KIND_TOOL,
     LATENCY_CLASS_FAST,
 )
-from ..agent.runtime.tool_catalog import tool_catalog
 
 
 @dataclass(slots=True)
 class AgentTool:
     """工具定义
 
-    参考参考插件 AgentTool 设计。
-
-    参数:
+    Attributes:
         name: 工具名（唯一键）
         description: 工具描述（供LLM决策使用）
         parameters: JSON Schema参数定义
@@ -31,7 +29,6 @@ class AgentTool:
         latency_class: 延迟级别（fast/network/slow）
         requires_network: 是否需要网络
         requires_image: 是否需要图片输入
-        evidence_kind: 证据类型（tool/context）
         metadata: 附加元信息
     """
 
@@ -54,55 +51,45 @@ class AgentTool:
     requires_image: bool = False
     """是否需要图片输入"""
     evidence_kind: str = EVIDENCE_KIND_TOOL
-    """证据类型（tool/context）"""
+    """证据/来源类型元数据（tool/context 等），保留供分类与溯源"""
     metadata: dict[str, Any] = field(default_factory=dict)
     """附加元信息"""
 
-    def to_metadata(self) -> dict[str, Any]:
-        """导出元数据字典
+    def to_openai_tool(self) -> dict[str, Any]:
+        """导出为 OpenAI function-calling 工具定义
 
         返回:
-            dict: 元数据字典
+            dict[str, Any]: 符合 OpenAI tools 数组元素格式的定义
         """
         return {
-            "intent_tags": list(self.intent_tags),
-            "latency_class": self.latency_class,
-            "requires_network": self.requires_network,
-            "requires_image": self.requires_image,
-            "evidence_kind": self.evidence_kind,
-            "description": self.description,
-            **self.metadata,
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters
+                or {"type": "object", "properties": {}},
+            },
         }
 
 
 class ToolRegistry:
     """工具注册中心
 
-    提供 register/get/active/list_names 方法。
-    注册时自动归类到 tool_catalog。
-    保持薄注册层设计，不处理限流/重试/配额。
-    revision 随注册变化递增，供下游（如 planner）做缓存失效判断。
+    提供 register/get/active/openai_tools 能力。
+    保持薄注册层设计，不处理限流/重试/配额/编排。
     """
 
     def __init__(self) -> None:
         """初始化工具注册表"""
         self._tools: dict[str, AgentTool] = {}
-        self.revision: int = 0
 
     def register(self, tool: AgentTool) -> None:
         """注册工具（同名覆盖）
-
-        注册时自动调用 tool_catalog.categorize_by_metadata
-        将工具归类到对应分类。
 
         参数:
             tool: 工具实例
         """
         self._tools[tool.name] = tool
-        self.revision += 1
-        tool_catalog.categorize_by_metadata(
-            tool.name, tool.to_metadata()
-        )
 
     def get(self, name: str) -> AgentTool | None:
         """获取工具
@@ -122,6 +109,14 @@ class ToolRegistry:
             list[AgentTool]: 活动工具列表
         """
         return [t for t in self._tools.values() if not t.is_disabled]
+
+    def openai_tools(self) -> list[dict[str, Any]]:
+        """导出全部活动工具的 OpenAI 格式定义
+
+        返回:
+            list[dict[str, Any]]: tools 数组，供原生 function-calling 使用
+        """
+        return [t.to_openai_tool() for t in self.active_tools()]
 
     def list_names(self) -> list[str]:
         """列出所有工具名

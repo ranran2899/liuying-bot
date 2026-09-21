@@ -32,9 +32,6 @@ import yaml
 
 from liuying.utils.log import logger
 
-from ..agent.runtime.tool_catalog import (
-    apply_tool_metadata_defaults,
-)
 from ..config import get_config
 from ..tools import AgentTool, ToolRegistry, tool_registry
 from ..tools.mcp import mcp_bridge
@@ -234,7 +231,6 @@ class SkillpackLoader:
                 report.loaded += 1
                 report.tools += count
 
-        apply_tool_metadata_defaults(registry)
         self._report = report
 
         logger.info(

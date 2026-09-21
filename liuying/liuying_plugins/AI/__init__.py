@@ -37,21 +37,8 @@ from .handlers import (
 )
 from .jobs import setup_jobs
 from .skills import SkillRuntime, skill_loader
-from .tools import (  # 公开API供第三方注册工具
-    AgentTool,
-    register_external_tool,
-    tool_registry,
-)
 from .tools.external import smart_tool_bridge
 from .tools.mcp import mcp_bridge
-
-__all__ = [
-    "AgentTool",
-    "register_external_tool",
-    "tool_registry",
-]
-# AI插件公开API（供第三方插件注册自定义Agent工具）
-
 
 __plugin_meta__ = PluginMetadata(
     name="流萤AI",
@@ -459,7 +446,7 @@ async def _init_ai_plugin() -> None:
     通过 PriorityLifecycle 注册，优先级=20，作为业务插件在核心服务
     （数据库/LLM/缓存，优先级<=10）就绪后加载。
     """
-    if not get_config("ENABLE_AI", True):
+    if not get_config("ENABLE_AI", False):
         logger.info("AI插件已禁用", command="AI")
         return
 

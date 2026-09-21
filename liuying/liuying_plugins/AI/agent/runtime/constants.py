@@ -1,28 +1,8 @@
 """Agent运行时常量定义
 
-定义Agent循环中使用的各种常量，包括回合动作、输出模式、
-证据类型、延迟级别等。
+定义工具元数据与循环默认值：证据/来源类型、延迟级别、
+工具意图标签、工具超时等。
 """
-
-# ===== 回合动作 =====
-TURN_ACTION_REPLY = "reply"
-"""回复用户"""
-TURN_ACTION_SILENCE = "silence"
-"""保持沉默"""
-TURN_ACTION_ASK_CLARIFY = "ask_clarify"
-"""请求澄清"""
-
-# ===== 输出模式 =====
-OUTPUT_MODE_CHAT_SHORT = "chat_short"
-"""短聊天回复"""
-OUTPUT_MODE_CHAT_ANSWER = "chat_answer"
-"""完整答案回复"""
-OUTPUT_MODE_STRUCTURED_HELP = "structured_help"
-"""结构化帮助"""
-OUTPUT_MODE_SOURCE_SUMMARY = "source_summary"
-"""来源摘要"""
-OUTPUT_MODE_SILENCE = "silence"
-"""静默"""
 
 # ===== 证据类型 =====
 EVIDENCE_KIND_TOOL = "tool"
@@ -39,14 +19,8 @@ LATENCY_CLASS_SLOW = "slow"
 """慢速（>5s）"""
 
 # ===== 默认值 =====
-DEFAULT_AGENT_MAX_STEPS = 10
-"""默认Agent最大步数"""
-
 DEFAULT_TOOL_TIMEOUT = 30.0
 """默认工具超时（秒）"""
-
-DEFAULT_RETRY_COUNT = 2
-"""默认重试次数"""
 
 # ===== 工具意图标签 =====
 INTENT_TAG_REALTIME = "realtime"

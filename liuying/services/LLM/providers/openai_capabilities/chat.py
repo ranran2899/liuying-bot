@@ -21,24 +21,31 @@ class OpenAIChatCapability:
         """
         self._client = client or OpenAIClient()
 
-    async def chat(
+    async def _chat_multi(
         self,
         model: str,
-        messages: list[dict[str, str]],
-        options: dict[str, Any] | None = None,
-    ) -> tuple[str, str]:
-        """调用 OpenAI 兼容 API 进行对话，支持多配置轮询
+        messages: list[dict[str, Any]],
+        options: dict[str, Any] | None,
+        return_message: bool,
+    ) -> Any:
+        """多配置轮询对话核心
+
+        在候选 provider 间轮询，首个成功即返回。供 chat 与
+        chat_with_tools 共用，避免 provider 选择逻辑重复。
 
         参数:
             model: 模型名称
             messages: 对话消息列表
-            options: 额外选项，原样透传到请求体（如 reasoning_effort
-                等模型原生思考参数，由调用方自行指定）
+            options: 额外选项
+            return_message: True 时返回完整 assistant 消息
+                （含 tool_calls），False 时返回 (reasoning, content)
 
         返回:
-            tuple[str, str]: (reasoning_content, content)
-                - reasoning_content: 思考链内容，无思考链时为空串
-                - content: 正常回复内容
+            Any: 解析后的元组或消息字典
+
+        异常:
+            APIError: 未配置任何有效 provider
+            MultiAPIError: 所有候选配置均调用失败
         """
         providers = self._client.get_provider_configs()
         if not providers:
@@ -62,7 +69,8 @@ class OpenAIChatCapability:
             try:
                 is_ernie = "baidubce.com" in provider.api_base
                 return await self._chat_request(
-                    provider, model, messages, options, is_ernie
+                    provider, model, messages, options, is_ernie,
+                    return_message=return_message,
                 )
             except Exception as e:
                 errors.append((provider.api_base, e))
@@ -70,14 +78,65 @@ class OpenAIChatCapability:
 
         raise MultiAPIError(errors)
 
+    async def chat(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        options: dict[str, Any] | None = None,
+    ) -> tuple[str, str]:
+        """调用 OpenAI 兼容 API 进行对话，支持多配置轮询
+
+        参数:
+            model: 模型名称
+            messages: 对话消息列表
+            options: 额外选项，原样透传到请求体（如 reasoning_effort
+                等模型原生思考参数，由调用方自行指定）
+
+        返回:
+            tuple[str, str]: (reasoning_content, content)
+                - reasoning_content: 思考链内容，无思考链时为空串
+                - content: 正常回复内容
+        """
+        return await self._chat_multi(
+            model, messages, options, return_message=False
+        )
+
+    async def chat_with_tools(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """原生 function-calling 对话
+
+        将 ``tools``（OpenAI tool schema 列表）注入请求体，返回含
+        ``tool_calls`` 的完整 assistant 消息，供上层 ReAct 循环消费。
+
+        参数:
+            model: 模型名称
+            messages: 对话消息列表（可含 tool_calls / role=tool 消息）
+            tools: OpenAI 格式工具定义列表
+            options: 额外选项（含 tool_choice 等），与 tools 合并后透传
+
+        返回:
+            dict[str, Any]: 完整 assistant 消息字典
+        """
+        merged = {**(options or {}), "tools": tools}
+        return await self._chat_multi(
+            model, messages, merged, return_message=True
+        )
+
+
     async def _chat_request(
         self,
         provider: Any,
         model: str,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         options: dict[str, Any] | None = None,
         is_ernie: bool = False,
-    ) -> tuple[str, str]:
+        return_message: bool = False,
+    ) -> Any:
         """通用对话请求
 
         参数:
@@ -87,9 +146,10 @@ class OpenAIChatCapability:
             options: 额外选项，原样透传到请求体（如 reasoning_effort
                 等模型原生思考参数，由调用方自行指定）
             is_ernie: 是否为文心一言 API
+            return_message: True 时返回含 tool_calls 的完整消息字典
 
         返回:
-            tuple[str, str]: (reasoning_content, content)
+            Any: (reasoning_content, content) 或完整消息字典
         """
         base_url = provider.api_base.rstrip("/")
         url = base_url if is_ernie else f"{base_url}/chat/completions"
@@ -127,8 +187,14 @@ class OpenAIChatCapability:
                 f"响应格式错误: {response}", "INVALID_RESPONSE", "openai"
             )
 
-        result = ResponseParser.parse_chat_response(
-            response, "ernie" if is_ernie else "openai"
+        result = (
+            ResponseParser.parse_chat_message(
+                response, "ernie" if is_ernie else "openai"
+            )
+            if return_message
+            else ResponseParser.parse_chat_response(
+                response, "ernie" if is_ernie else "openai"
+            )
         )
         await token_tracker.record(
             provider=provider.name,

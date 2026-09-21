@@ -226,6 +226,76 @@ class LLMHelper:
                 return "", cli_result
             raise http_err
 
+    async def chat_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        model: str | None = None,
+        options: dict[str, Any] | None = None,
+        provider_name: str | None = None,
+    ) -> dict[str, Any]:
+        """原生 function-calling 对话（供 ReAct 循环使用）
+
+        返回含 ``tool_calls`` 的完整 assistant 消息字典。复用与
+        chat 相同的 provider 候选/故障转移/思考参数/token 记账；
+        HTTP 全失败且 CLI 降级成功时，返回无 tool_calls 的纯
+        content 消息，使循环退化为直接作答而非崩溃。
+
+        参数:
+            messages: 对话消息列表（可含 tool_calls / role=tool 消息）
+            tools: OpenAI 格式工具定义列表
+            model: 模型名，None时用配置默认
+            options: 额外选项（含 tool_choice 等）
+            provider_name: 指定 provider
+
+        返回:
+            dict[str, Any]: 完整 assistant 消息字典
+
+        异常:
+            ValueError: provider 未配置
+            Exception: HTTP 与 CLI 均失败
+        """
+        chat_cfg = get_config("CHAT_MODEL", {})
+        use_model = model or chat_cfg.get("model", None) or ""
+        candidates = self._build_candidates(
+            Capability.CHAT,
+            provider_name or chat_cfg.get("provider", None),
+        )
+
+        async def _call(name: str) -> dict[str, Any]:
+            chat_cap = LLMHelper._resolve_capability(
+                name, Capability.CHAT, "对话能力"
+            )
+            call_options = {
+                **(options or {}),
+                **_build_thinking_options(chat_cap),
+            }
+            return await chat_cap.chat_with_tools(
+                use_model, messages, tools, call_options
+            )
+
+        try:
+            return await provider_router.call_with_failover(
+                candidates, _call
+            )
+        except Exception as http_err:
+            cli_result = await ai_cli_router.call(
+                prompt="", messages=messages
+            )
+            if cli_result:
+                logger.info(
+                    "工具调用 HTTP provider 全部失败，CLI 路由降级为直答",
+                    command="AI",
+                )
+                return {
+                    "role": "assistant",
+                    "content": cli_result,
+                    "reasoning_content": "",
+                    "tool_calls": [],
+                    "finish_reason": "stop",
+                }
+            raise http_err
+
     async def chat_text(
         self,
         messages: list[dict[str, str]],

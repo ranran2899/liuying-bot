@@ -4,7 +4,7 @@
 
 会话来源：
 - matcher 入口由 nonebot_plugin_uninfo 注入真实 Session（Uninfo 依赖注入），
-  经 bind_session 绑定完整 Session 对象；
+  经 bind_session_scope 在回合作用域内绑定完整 Session 对象；
 - 定时任务/主动行为等无事件上下文的后台路径，由 bind_session_context
   兜底写入 user_id/group_id/persona_name 字符串。
 """
@@ -76,18 +76,28 @@ def get_current_persona_name() -> str:
     return _persona_ctx.get()
 
 
-def bind_session(session: Session) -> None:
-    """绑定 uninfo 注入的真实会话
+@contextmanager
+def bind_session_scope(session: Session):
+    """以作用域方式绑定 uninfo 注入的真实会话
 
-    在 matcher 入口（handle_chat_message 等）调用，
-    将依赖注入得到的 Session 对象写入当前上下文，供本轮工具链统一读取。
+    在 matcher 入口（handle_chat_message 等）以 ``with`` 使用，将 Session
+    及其 user_id/group_id 写入当前上下文，供本轮工具链统一读取；
+    退出作用域时自动 reset，避免 contextvars 跨消息泄漏。
 
     参数:
         session: nonebot_plugin_uninfo 的 Session 对象
     """
-    _session_ctx.set(session)
-    _user_id_ctx.set(session.user.id)
-    _group_id_ctx.set(session.scene.id if session.scene.is_group else "")
+    session_token = _session_ctx.set(session)
+    user_token = _user_id_ctx.set(session.user.id)
+    group_token = _group_id_ctx.set(
+        session.scene.id if session.scene.is_group else ""
+    )
+    try:
+        yield
+    finally:
+        _session_ctx.reset(session_token)
+        _user_id_ctx.reset(user_token)
+        _group_id_ctx.reset(group_token)
 
 
 @contextmanager
@@ -98,7 +108,7 @@ def bind_session_context(
 ):
     """绑定会话上下文
 
-    Agent 执行入口调用。若上层已绑定真实 Session（bind_session 注入），
+    Agent 执行入口调用。若上层已绑定真实 Session（bind_session_scope 注入），
     仅更新人格名；否则写入 user_id/group_id 兜底值，供后台任务路径使用。
     退出时自动恢复原值。
 
@@ -128,8 +138,8 @@ def bind_session_context(
 
 
 __all__ = [
-    "bind_session",
     "bind_session_context",
+    "bind_session_scope",
     "get_current_group_id",
     "get_current_persona_name",
     "get_current_session",
