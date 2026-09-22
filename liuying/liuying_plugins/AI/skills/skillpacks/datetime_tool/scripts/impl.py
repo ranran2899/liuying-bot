@@ -92,6 +92,4 @@ def build_datetime_tool(runtime: Any) -> AgentTool:
             "required": [],
         },
         func=_handler,
-        intent_tags=["local"],
-        latency_class="fast",
     )

@@ -5,11 +5,6 @@
 
 from liuying.utils.log import logger
 
-from ...agent.runtime.constants import (
-    INTENT_TAG_IMAGE,
-    INTENT_TAG_NETWORK,
-    LATENCY_CLASS_SLOW,
-)
 from ...core.llm import llm_helper
 from ..decorators import register_tool
 
@@ -32,9 +27,6 @@ from ..decorators import register_tool
         },
         "required": ["prompt"],
     },
-    intent_tags=[INTENT_TAG_IMAGE, INTENT_TAG_NETWORK],
-    latency_class=LATENCY_CLASS_SLOW,
-    requires_network=True,
     metadata={"output_kind": "image_url"},
 )
 async def image_generate(

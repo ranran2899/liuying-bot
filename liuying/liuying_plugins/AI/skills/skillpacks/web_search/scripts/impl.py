@@ -13,13 +13,6 @@
 import asyncio
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_TOOL,
-    INTENT_TAG_IMAGE,
-    INTENT_TAG_NETWORK,
-    INTENT_TAG_REALTIME,
-    LATENCY_CLASS_SLOW,
-)
 from liuying.liuying_plugins.AI.core.vision import summarize_image
 from liuying.liuying_plugins.AI.skills.media import fetch_images
 from liuying.liuying_plugins.AI.tools import AgentTool
@@ -264,14 +257,5 @@ def build_search_tools(runtime: Any) -> list[AgentTool]:
                 "required": ["query"],
             },
             func=_handler,
-            intent_tags=[
-                INTENT_TAG_IMAGE,
-                INTENT_TAG_NETWORK,
-                INTENT_TAG_REALTIME,
-            ],
-            latency_class=LATENCY_CLASS_SLOW,
-            requires_network=True,
-            requires_image=True,
-            evidence_kind=EVIDENCE_KIND_TOOL,
         )
     ]

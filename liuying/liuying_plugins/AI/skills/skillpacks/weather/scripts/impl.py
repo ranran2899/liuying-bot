@@ -89,7 +89,4 @@ def build_weather_tool(runtime: Any) -> AgentTool:
             "required": ["city"],
         },
         func=_handler,
-        intent_tags=["realtime", "network"],
-        latency_class="network",
-        requires_network=True,
     )

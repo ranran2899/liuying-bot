@@ -19,7 +19,7 @@ from ...core.memory._common import (
     _WORKING_EXPIRE_HOURS,
 )
 from ...models.conversation_record import ConversationRecord
-from ...models.memory_item import MemoryItem
+from ...models.memory_item import MemoryItem, MemoryTier
 
 
 class MemoryConsolidationService:
@@ -60,9 +60,9 @@ class MemoryConsolidationService:
         memory.last_access_time = datetime.now()
         if (
             memory.reinforcement_count >= _REINFORCE_THRESHOLD
-            and memory.tier in ("working", "episodic")
+            and memory.tier in (MemoryTier.WORKING, MemoryTier.EPISODIC)
         ):
-            memory.tier = "semantic"
+            memory.tier = MemoryTier.SEMANTIC
             memory.is_protected = True
         await memory.save(
             update_fields=[
@@ -88,20 +88,20 @@ class MemoryConsolidationService:
 
         # 批量降级 working -> episodic，避免循环 save 的 N+1 问题
         working_expired_ids = await MemoryItem.filter(
-            tier="working",
+            tier=MemoryTier.WORKING,
             expire_time__lt=now,
         ).values_list("id", flat=True)
         if working_expired_ids:
             await MemoryItem.filter(
                 id__in=working_expired_ids
-            ).update(tier="episodic", expire_time=None)
+            ).update(tier=MemoryTier.EPISODIC, expire_time=None)
             count += len(working_expired_ids)
 
         # 批量硬删过期 episodic，向量索引需逐条调用外部 API（无法批量），
         # DB 侧用批量 delete 收尾
         episodic_cutoff = now - timedelta(days=_EPISODIC_EXPIRE_DAYS)
         episodic_expired = await MemoryItem.filter(
-            tier="episodic",
+            tier=MemoryTier.EPISODIC,
             is_protected=False,
             reinforcement_count=0,
             create_time__lt=episodic_cutoff,
@@ -186,7 +186,7 @@ class MemoryConsolidationService:
                 content=history[:500],
                 summary=summary,
                 group_id=group_id,
-                tier="semantic",
+                tier=MemoryTier.SEMANTIC,
                 salience=0.8,
                 persona_name=persona_name,
             )
@@ -195,7 +195,7 @@ class MemoryConsolidationService:
             consolidated_ids = await MemoryItem.filter(
                 user_id=user_id,
                 persona_name=persona_name,
-                tier="working",
+                tier=MemoryTier.WORKING,
                 create_time__lt=cutoff,
             ).values_list("id", flat=True)
             if consolidated_ids:
@@ -205,7 +205,7 @@ class MemoryConsolidationService:
                     reinforcement_count=(
                         MemoryItem.reinforcement_count + 1
                     ),
-                    tier="background",
+                    tier=MemoryTier.BACKGROUND,
                 )
             logger.info(
                 f"记忆巩固完成: {user_id} persona={persona_name}",

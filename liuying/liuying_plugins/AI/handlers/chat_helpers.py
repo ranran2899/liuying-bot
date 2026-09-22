@@ -16,11 +16,32 @@ from liuying.utils.message import MessageUtils
 
 from ..core.group import GroupMuteTracker
 from ..core.tools import MessageExtractor
-from ..core.vision import summarize_image
 
 __all__ = [
     "ChatMatchersHelper",
 ]
+
+
+def _detect_image_mime(data: bytes) -> str:
+    """根据魔数字推断图片 MIME 类型
+
+    参数:
+        data: 图片二进制数据
+
+    返回:
+        str: MIME 类型，无法识别时回退 image/jpeg
+    """
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:2] == b"BM":
+        return "image/bmp"
+    return "image/jpeg"
 
 
 class ChatMatchersHelper:
@@ -50,64 +71,32 @@ class ChatMatchersHelper:
         ]
 
     @staticmethod
-    async def describe_single_image(
-        img: dict[str, Any]
-    ) -> str:
-        """描述单张图片（下载 + 视觉理解）
+    async def extract_first_image(
+        message: UniMsg,
+    ) -> tuple[bytes, str] | None:
+        """提取消息中首张图片的二进制与 MIME 类型
+
+        多模态直传路径：只取首张图片供下游视觉路由使用（
+        与旧版多图片文本描述相比简化为单图，符合多模态消息约定）。
 
         参数:
-            img: 图片段字典，含 url/path/raw 字段
+            message: alconna注入的统一消息
 
         返回:
-            str: 描述文本，失败返回空串
+            tuple[bytes, str] | None: (图片数据, mime)，无图或下载失败时 None
         """
+        images = ChatMatchersHelper.extract_images(message)
+        if not images:
+            return None
+        img = images[0]
         image_data = await MessageExtractor.fetch_image_bytes(
             url=img.get("url", ""),
             path=img.get("path", ""),
             raw=img.get("raw"),
         )
         if not image_data:
-            return ""
-        try:
-            summary = await summarize_image(image_data)
-            if summary.success and summary.description:
-                return summary.description
-        except Exception as e:
-            logger.debug(
-                f"图片理解失败: {e}", command="AI", e=e
-            )
-        return ""
-
-    @staticmethod
-    async def extract_image_descriptions(
-        message: UniMsg,
-    ) -> list[str]:
-        """从统一消息提取图片并生成描述
-
-        多张图片并行处理（asyncio.gather），避免串行耗时。
-
-        参数:
-            message: alconna注入的统一消息
-
-        返回:
-            list[str]: 图片描述列表（与图片顺序对齐）
-        """
-        images = ChatMatchersHelper.extract_images(message)
-        if not images:
-            return []
-
-        tasks = [
-            ChatMatchersHelper.describe_single_image(img)
-            for img in images
-        ]
-        results = await asyncio.gather(
-            *tasks, return_exceptions=True
-        )
-        return [
-            desc
-            for desc in results
-            if isinstance(desc, str) and desc
-        ]
+            return None
+        return image_data, _detect_image_mime(image_data)
 
     @staticmethod
     async def send_reply(

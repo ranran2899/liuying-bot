@@ -10,12 +10,6 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ...agent.runtime.constants import (
-    EVIDENCE_KIND_CONTEXT,
-    INTENT_TAG_LOCAL,
-    INTENT_TAG_PLUGIN,
-    LATENCY_CLASS_FAST,
-)
 from ...core.knowledge import knowledge_store
 from ...core.llm import llm_helper
 from ...core.llm.model_router import ROLE_AGENT, model_router
@@ -116,9 +110,6 @@ async def _resolve_plugin_commands(
         },
         "required": ["plugin_name", "user_intent"],
     },
-    intent_tags=[INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
-    latency_class=LATENCY_CLASS_FAST,
-    evidence_kind=EVIDENCE_KIND_CONTEXT,
     metadata={"knowledge_source": "plugin_meta"},
 )
 async def invoke_plugin_command(
@@ -215,9 +206,6 @@ async def invoke_plugin_command(
         },
         "required": ["plugin_name"],
     },
-    intent_tags=[INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
-    latency_class=LATENCY_CLASS_FAST,
-    evidence_kind=EVIDENCE_KIND_CONTEXT,
     metadata={"knowledge_source": "plugin_meta"},
 )
 async def get_plugin_command_help(plugin_name: str) -> str:
@@ -259,9 +247,6 @@ async def get_plugin_command_help(plugin_name: str) -> str:
         },
         "required": ["query"],
     },
-    intent_tags=[INTENT_TAG_PLUGIN, INTENT_TAG_LOCAL],
-    latency_class=LATENCY_CLASS_FAST,
-    evidence_kind=EVIDENCE_KIND_CONTEXT,
     metadata={"knowledge_source": "plugin_meta"},
 )
 async def search_plugin_by_capability(

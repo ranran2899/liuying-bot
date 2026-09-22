@@ -9,11 +9,6 @@ import math
 import operator
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_TOOL,
-    INTENT_TAG_LOCAL,
-    LATENCY_CLASS_FAST,
-)
 from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_EXPR_LENGTH = 200
@@ -219,7 +214,4 @@ def build_calculator_tool(runtime: Any) -> AgentTool:
             "required": ["expression"],
         },
         func=_handler,
-        intent_tags=[INTENT_TAG_LOCAL],
-        latency_class=LATENCY_CLASS_FAST,
-        evidence_kind=EVIDENCE_KIND_TOOL,
     )

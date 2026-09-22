@@ -62,28 +62,6 @@ class StickerManager:
                 e=e,
             )
 
-    def should_send_sticker(
-        self,
-        group_id: str | None,
-        is_private: bool,
-        probability: float | None = None,
-    ) -> bool:
-        """决策是否发送贴纸
-
-        参数:
-            group_id: 群组ID，None为私聊
-            is_private: 是否私聊
-            probability: 触发概率，None时用配置默认
-
-        返回:
-            bool: 是否发送贴纸
-        """
-        return sticker_curation.should_send(
-            group_id=group_id,
-            is_private=is_private,
-            probability=probability,
-        )
-
     async def choose_sticker_item(
         self,
         text: str,
@@ -149,7 +127,9 @@ class StickerManager:
         返回:
             StickerItem | None: 表情包条目，不发时返回None
         """
-        if not self.should_send_sticker(group_id, is_private):
+        if not sticker_curation.should_send(
+            group_id=group_id, is_private=is_private
+        ):
             return None
         try:
             return await self.choose_sticker_item(

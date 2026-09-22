@@ -9,11 +9,6 @@
 
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_CONTEXT,
-    INTENT_TAG_MEMORY,
-    LATENCY_CLASS_FAST,
-)
 from liuying.liuying_plugins.AI.agent.runtime.session_context import (
     get_current_group_id,
     get_current_persona_name,
@@ -170,9 +165,6 @@ def build_profile_tools(runtime: Any) -> list[AgentTool]:
                 "required": ["fact"],
             },
             func=_remember,
-            intent_tags=[INTENT_TAG_MEMORY],
-            latency_class=LATENCY_CLASS_FAST,
-            evidence_kind=EVIDENCE_KIND_CONTEXT,
         ),
         AgentTool(
             name="get_user_profile",
@@ -186,8 +178,5 @@ def build_profile_tools(runtime: Any) -> list[AgentTool]:
                 "required": [],
             },
             func=_profile,
-            intent_tags=[INTENT_TAG_MEMORY],
-            latency_class=LATENCY_CLASS_FAST,
-            evidence_kind=EVIDENCE_KIND_CONTEXT,
         ),
     ]

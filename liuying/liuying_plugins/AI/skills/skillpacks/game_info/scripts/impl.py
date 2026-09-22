@@ -92,7 +92,4 @@ def build_game_info_tool(runtime: Any) -> AgentTool:
             "required": ["game"],
         },
         func=_handler,
-        intent_tags=["network"],
-        latency_class="network",
-        requires_network=True,
     )

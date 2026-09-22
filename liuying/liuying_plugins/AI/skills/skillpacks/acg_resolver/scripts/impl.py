@@ -6,11 +6,6 @@
 
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_TOOL,
-    INTENT_TAG_NETWORK,
-    LATENCY_CLASS_NETWORK,
-)
 from liuying.liuying_plugins.AI.tools import AgentTool
 
 _MAX_RESULTS = 4
@@ -151,8 +146,4 @@ def build_acg_tool(runtime: Any) -> AgentTool:
             "required": ["name"],
         },
         func=_handler,
-        intent_tags=[INTENT_TAG_NETWORK],
-        latency_class=LATENCY_CLASS_NETWORK,
-        requires_network=True,
-        evidence_kind=EVIDENCE_KIND_TOOL,
     )

@@ -10,12 +10,6 @@
 import asyncio
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_CONTEXT,
-    INTENT_TAG_IMAGE,
-    INTENT_TAG_LOCAL,
-    LATENCY_CLASS_NETWORK,
-)
 from liuying.liuying_plugins.AI.core.vision import vision_router
 from liuying.liuying_plugins.AI.tools import AgentTool
 
@@ -140,9 +134,5 @@ def build_caller_tools(runtime: Any) -> list[AgentTool]:
                 "required": [],
             },
             func=_handler,
-            intent_tags=[INTENT_TAG_IMAGE, INTENT_TAG_LOCAL],
-            latency_class=LATENCY_CLASS_NETWORK,
-            requires_network=True,
-            evidence_kind=EVIDENCE_KIND_CONTEXT,
         )
     ]

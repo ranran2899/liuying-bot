@@ -15,7 +15,7 @@ from liuying.utils.log import logger
 from ...agent.intent.memory_consolidate import MemoryConsolidationService
 from ...agent.intent.memory_evolve import MemoryEvolveService
 from ...config import get_config
-from ...models.memory_item import MemoryItem
+from ...models.memory_item import MemoryItem, MemoryTier
 from ..knowledge_index import knowledge_base
 from ._common import (
     _DEFAULT_PERSONA,
@@ -24,7 +24,7 @@ from ._common import (
 )
 from .background_intelligence import background_intelligence
 from .embedding_service import EmbeddingService
-from .recall import MemoryRecallService
+from .recall import MemoryRecallItem, MemoryRecallService
 
 _BG_SEMAPHORE = asyncio.Semaphore(4)
 """后台任务并发信号量
@@ -74,7 +74,7 @@ class MemoryManager:
         top_k: int = 5,
         mode: str = "auto",
         persona_name: str = _DEFAULT_PERSONA,
-    ) -> list[dict]:
+    ) -> list[MemoryRecallItem]:
         """记忆召回（委托召回服务）
 
         参数:
@@ -136,7 +136,7 @@ class MemoryManager:
         content: str,
         summary: str | None = None,
         group_id: str | None = None,
-        tier: str = "working",
+        tier: str = MemoryTier.WORKING,
         topic_tags: list[str] | None = None,
         entity_tags: list[str] | None = None,
         salience: float = 0.5,

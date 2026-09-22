@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import math
 import re
 
-from ...models.memory_item import MemoryItem
+from ...models.memory_item import MemoryItem, MemoryTier
 
 _ENTITY_PATTERN = re.compile(
     r"[\u4e00-\u9fa5]{2,8}|[A-Z][a-z]+(?:\s[A-Z][a-z]+)?"
@@ -195,10 +195,10 @@ class CurationExtractor:
             1.0, memory.reinforcement_count * 0.2
         )
         tier_bonus = {
-            "semantic": 0.2,
-            "episodic": 0.1,
-            "working": 0.05,
-            "background": 0.0,
+            MemoryTier.SEMANTIC: 0.2,
+            MemoryTier.EPISODIC: 0.1,
+            MemoryTier.WORKING: 0.05,
+            MemoryTier.BACKGROUND: 0.0,
         }.get(memory.tier, 0.0)
 
         score = (

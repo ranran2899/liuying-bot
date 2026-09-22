@@ -17,6 +17,7 @@ from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_WARMUP, model_router
 from ..core.memory import memory_manager
 from ..core.persona import persona_manager
+from ..models.memory_item import MemoryTier
 
 __all__ = ["setup_diary_job"]
 
@@ -89,7 +90,7 @@ class DiaryHelper:
                 await memory_manager.add(
                     user_id="diary",
                     content=f"[日记-{date_str}]\n{diary_text}",
-                    tier="episodic",
+                    tier=MemoryTier.EPISODIC,
                     group_id=None,
                 )
                 logger.info(

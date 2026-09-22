@@ -10,6 +10,8 @@ import re
 import time
 from typing import Any
 
+from ...models.memory_item import MemoryTier
+
 __all__ = ["SearchRanker", "search_ranker"]
 
 
@@ -272,9 +274,9 @@ class SearchRanker:
             and payload_user_id == requested_user_id
         ):
             score += _SAME_USER_BONUS
-        if tier == "semantic":
+        if tier == MemoryTier.SEMANTIC:
             score += _SEMANTIC_TIER_BONUS
-        elif tier == "background":
+        elif tier == MemoryTier.BACKGROUND:
             score += _BACKGROUND_TIER_PENALTY
         if superseded_by:
             score += _SUPERSEDED_PENALTY
@@ -291,7 +293,7 @@ class SearchRanker:
         )
         if (
             SearchRanker.query_looks_latest(query)
-            and tier == "background"
+            and tier == MemoryTier.BACKGROUND
         ):
             score -= 0.10
         return round(score, 6)

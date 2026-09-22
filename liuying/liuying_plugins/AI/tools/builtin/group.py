@@ -8,11 +8,6 @@
 
 from liuying.utils.log import logger
 
-from ...agent.runtime.constants import (
-    EVIDENCE_KIND_CONTEXT,
-    INTENT_TAG_LOCAL,
-    LATENCY_CLASS_FAST,
-)
 from ...agent.runtime.session_context import get_current_group_id
 from ...core.group import group_member_service
 from ..decorators import register_tool
@@ -36,9 +31,6 @@ from ..decorators import register_tool
         },
         "required": [],
     },
-    intent_tags=[INTENT_TAG_LOCAL],
-    latency_class=LATENCY_CLASS_FAST,
-    evidence_kind=EVIDENCE_KIND_CONTEXT,
 )
 async def get_group_members(limit: int = 50) -> str:
     """查询当前群成员列表
@@ -83,9 +75,6 @@ async def get_group_members(limit: int = 50) -> str:
         },
         "required": ["user_id"],
     },
-    intent_tags=[INTENT_TAG_LOCAL],
-    latency_class=LATENCY_CLASS_FAST,
-    evidence_kind=EVIDENCE_KIND_CONTEXT,
 )
 async def get_group_member_info(user_id: str) -> str:
     """查询当前群中指定成员信息
@@ -134,9 +123,6 @@ async def get_group_member_info(user_id: str) -> str:
         },
         "required": ["name"],
     },
-    intent_tags=[INTENT_TAG_LOCAL],
-    latency_class=LATENCY_CLASS_FAST,
-    evidence_kind=EVIDENCE_KIND_CONTEXT,
 )
 async def find_group_member(name: str) -> str:
     """按名称模糊查找当前群成员

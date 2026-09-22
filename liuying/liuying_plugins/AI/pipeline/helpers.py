@@ -16,6 +16,7 @@ from ..config import get_config
 from ..core.context import ContextPolicy, context_manager
 from ..core.memory import memory_manager
 from ..models.conversation_record import ConversationRecord
+from ..models.memory_item import MemoryTier
 from .humanize import HumanizeToolkit
 from .types import ReplyContext
 
@@ -239,7 +240,7 @@ class ReplyPipeline:
                 content=f"用户: {user_text}\nAI: {reply_text}",
                 summary=reply_text[:100],
                 group_id=ctx.group_id,
-                tier="working",
+                tier=MemoryTier.WORKING,
                 persona_name=ctx.persona_name,
             )
             if get_config("MEMORY_ENABLED", True)

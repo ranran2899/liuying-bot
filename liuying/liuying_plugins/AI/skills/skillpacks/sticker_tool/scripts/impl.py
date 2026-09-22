@@ -9,12 +9,6 @@
 
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_TOOL,
-    INTENT_TAG_IMAGE,
-    INTENT_TAG_LOCAL,
-    LATENCY_CLASS_FAST,
-)
 from liuying.liuying_plugins.AI.agent.runtime.session_context import (
     get_current_group_id,
     get_current_user_id,
@@ -183,9 +177,6 @@ def build_sticker_tools(runtime: Any) -> list[AgentTool]:
                 "required": [],
             },
             func=select_sticker,
-            intent_tags=[INTENT_TAG_IMAGE, INTENT_TAG_LOCAL],
-            latency_class=LATENCY_CLASS_FAST,
-            evidence_kind=EVIDENCE_KIND_TOOL,
         ),
         AgentTool(
             name="search_sticker",
@@ -213,9 +204,6 @@ def build_sticker_tools(runtime: Any) -> list[AgentTool]:
                 "required": ["query"],
             },
             func=search_sticker,
-            intent_tags=[INTENT_TAG_IMAGE, INTENT_TAG_LOCAL],
-            latency_class=LATENCY_CLASS_FAST,
-            evidence_kind=EVIDENCE_KIND_TOOL,
         ),
         AgentTool(
             name="sticker_stats",
@@ -229,8 +217,5 @@ def build_sticker_tools(runtime: Any) -> list[AgentTool]:
                 "required": [],
             },
             func=sticker_stats,
-            intent_tags=[INTENT_TAG_IMAGE, INTENT_TAG_LOCAL],
-            latency_class=LATENCY_CLASS_FAST,
-            evidence_kind=EVIDENCE_KIND_TOOL,
         ),
     ]

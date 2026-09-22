@@ -7,7 +7,6 @@
 import asyncio
 import base64
 from dataclasses import dataclass
-import hashlib
 import io
 from typing import Any
 
@@ -273,11 +272,10 @@ async def summarize_image(
     use_prompt = prompt or "请用中文简要描述这张图片的内容，不超过50字。"
     data_url = VisionUtils.to_data_url(image_data, mime)
 
-    # 同一图片（内容哈希一致）命中缓存时跳过重复多模态调用；
-    # data_url 可达数百KB~MB，先哈希为定长key再查缓存，
-    # 避免以大字符串作为缓存键
-    cache_key = hashlib.sha256(data_url.encode()).hexdigest()
-    cached = image_result_cache.get(cache_key)
+    # 同一图片（data_url 内容一致）命中缓存时跳过重复多模态调用；
+    # ImageResultCache 内部统一对入参哈希为定长键，此处直接传 data_url
+    # 与写入路径保持同一口径，避免调用方与缓存各自哈希导致键不一致
+    cached = image_result_cache.get(data_url)
     if cached:
         return ImageSummary(description=cached, success=True)
 
@@ -315,8 +313,11 @@ async def summarize_image(
             model=route_model,
             provider_name=route_provider,
         )
+        description = description.strip()
+        if description:
+            image_result_cache.set(data_url, description)
         return ImageSummary(
-            description=description.strip(),
+            description=description,
             success=True,
             error=fallback_note,
         )

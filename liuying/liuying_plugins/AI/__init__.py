@@ -100,9 +100,6 @@ __plugin_meta__ = PluginMetadata(
         - bot人格切换 [名称]: 切换AI人格
         - 流萤AI状态: 查看AI子功能开关
         - 流萤AI开关 [功能] [on/off]: 全局AI子功能开关
-        - 流萤AI群开关 [群号] [功能名] [on/off]: 群组级AI子功能开关
-        - 流萤AI用户开关 [用户ID] [功能名] [on/off]: 用户级AI子功能开关
-        - 流萤AI重置: 重置所有运行时覆盖
         - 全局清空记忆: 清空所有用户的所有人格记忆与对话记录
 
         注意: ban/unban/黑名单/管理员授权请使用流萤本体命令:
@@ -345,36 +342,6 @@ ai_switch_cmd = on_alconna(
     block=True,
 )
 
-ai_group_switch_cmd = on_alconna(
-    Alconna(
-        "流萤AI群开关",
-        Args["group_id", str]["feature", str]["state", str],
-    ),
-    aliases={"AI群开关"},
-    rule=admin_check(5),
-    priority=48,
-    block=True,
-)
-
-ai_user_switch_cmd = on_alconna(
-    Alconna(
-        "流萤AI用户开关",
-        Args["user_id", str]["feature", str]["state", str],
-    ),
-    aliases={"AI用户开关"},
-    rule=admin_check(5),
-    priority=48,
-    block=True,
-)
-
-ai_reset_cmd = on_alconna(
-    Alconna("流萤AI重置"),
-    aliases={"AI重置"},
-    rule=admin_check(10),
-    priority=48,
-    block=True,
-)
-
 ai_clear_all_memory_cmd = on_alconna(
     Alconna("全局清空记忆"),
     aliases={"AI全局清空记忆", "流萤AI全局清空"},
@@ -396,38 +363,6 @@ async def handle_ai_switch(
 ) -> None:
     """设置全局AI功能开关"""
     await AdminCommands.handle_switch(session, feature, state)
-
-
-@ai_group_switch_cmd.handle()
-async def handle_ai_group_switch(
-    session: Uninfo,
-    group_id: str = "",
-    feature: str = "",
-    state: str = "",
-) -> None:
-    """设置群组级AI功能开关"""
-    await AdminCommands.handle_group_switch(
-        session, group_id, feature, state
-    )
-
-
-@ai_user_switch_cmd.handle()
-async def handle_ai_user_switch(
-    session: Uninfo,
-    user_id: str = "",
-    feature: str = "",
-    state: str = "",
-) -> None:
-    """设置用户级AI功能开关"""
-    await AdminCommands.handle_user_switch(
-        session, user_id, feature, state
-    )
-
-
-@ai_reset_cmd.handle()
-async def handle_ai_reset(session: Uninfo) -> None:
-    """重置所有AI运行时覆盖"""
-    await AdminCommands.handle_reset(session)
 
 
 @ai_clear_all_memory_cmd.handle()

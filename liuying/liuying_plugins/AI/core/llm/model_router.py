@@ -6,15 +6,18 @@
 角色定义：
 - intent:  意图推断（低温度，需要确定性）
 - review:  响应审查（低温度，需要严谨判断）
-- agent:   统一 ReAct 循环模型（工具编排与最终回复一体，中温度）
+- agent:   统一 ReAct 循环工具编排阶段（只做工具决策与收束，
+  不写正文，中温度）
 - sticker: 贴纸选择（中温度，需要语义理解）
 - warmup:  预热任务（高温度，用于主动发言等创意场景）
-- chat:    常规对话（默认角色，回退到 CHAT_MODEL）
+- chat:    常规对话（默认角色，回退到 CHAT_MODEL），
+  正文（人格回复）统一由本角色生成
 
 未配置角色模型时，自动回退到 CHAT_MODEL，保证向后兼容。
 """
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from ...config import get_config
@@ -26,28 +29,45 @@ __all__ = [
     "ROLE_REVIEW",
     "ROLE_STICKER",
     "ROLE_WARMUP",
+    "LLMRole",
     "ModelRole",
     "ModelRouter",
     "model_router",
 ]
 
-ROLE_INTENT = "intent"
+
+class LLMRole(StrEnum):
+    """模型功能角色枚举
+
+    以字符串枚举统一角色标识，消除裸串拼写风险；成员即 str，
+    与配置中的字符串键、旧代码中的 ROLE_* 常量完全兼容。
+    """
+
+    INTENT = "intent"
+    REVIEW = "review"
+    AGENT = "agent"
+    STICKER = "sticker"
+    WARMUP = "warmup"
+    CHAT = "chat"
+
+
+ROLE_INTENT = LLMRole.INTENT
 """意图推断角色"""
 
-ROLE_REVIEW = "review"
+ROLE_REVIEW = LLMRole.REVIEW
 """响应审查角色"""
 
-ROLE_AGENT = "agent"
-"""统一 ReAct 循环模型角色（规划+工具+回复一体）"""
+ROLE_AGENT = LLMRole.AGENT
+"""统一 ReAct 循环工具编排阶段角色（只做工具决策与收束，不写正文）"""
 
-ROLE_STICKER = "sticker"
+ROLE_STICKER = LLMRole.STICKER
 """贴纸选择角色"""
 
-ROLE_WARMUP = "warmup"
+ROLE_WARMUP = LLMRole.WARMUP
 """预热任务角色"""
 
-ROLE_CHAT = "chat"
-"""常规对话角色（默认）"""
+ROLE_CHAT = LLMRole.CHAT
+"""常规对话角色（默认，正文由此角色生成）"""
 
 _DEFAULT_TEMPERATURES: dict[str, float] = {
     ROLE_INTENT: 0.1,

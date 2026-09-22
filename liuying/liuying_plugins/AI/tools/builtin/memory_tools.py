@@ -5,11 +5,6 @@
 
 from liuying.utils.log import logger
 
-from ...agent.runtime.constants import (
-    EVIDENCE_KIND_CONTEXT,
-    INTENT_TAG_MEMORY,
-    LATENCY_CLASS_FAST,
-)
 from ...agent.runtime.session_context import (
     get_current_persona_name,
     get_current_user_id,
@@ -36,9 +31,6 @@ from ..decorators import register_tool
         },
         "required": ["query"],
     },
-    intent_tags=[INTENT_TAG_MEMORY],
-    latency_class=LATENCY_CLASS_FAST,
-    evidence_kind=EVIDENCE_KIND_CONTEXT,
     metadata={"tier_filter": ["working", "episodic", "semantic"]},
 )
 async def recall_memory(query: str, top_k: int = 5) -> str:

@@ -5,6 +5,7 @@
 """
 
 from datetime import datetime, timedelta
+from enum import StrEnum
 import json
 from typing import ClassVar
 
@@ -15,6 +16,19 @@ from liuying.services.liuying_db import Model
 
 _DEFAULT_PERSONA = "default"
 """默认人格名（未指定时回退）"""
+
+
+class MemoryTier(StrEnum):
+    """记忆层级枚举
+
+    成员即 str，与 ORM String 列、DB 回读的纯字符串、
+    以及历史传入的字符串字面量完全兼容。
+    """
+
+    WORKING = "working"
+    EPISODIC = "episodic"
+    SEMANTIC = "semantic"
+    BACKGROUND = "background"
 
 
 class MemoryItem(Model):
@@ -53,7 +67,7 @@ class MemoryItem(Model):
     """bot人格名（实现人设间记忆数据隔离）"""
 
     tier: Mapped[str] = mapped_column(
-        String(32), default="working", comment="记忆层级"
+        String(32), default=MemoryTier.WORKING, comment="记忆层级"
     )
     """记忆层级：working/episodic/semantic/background"""
 
@@ -145,7 +159,7 @@ class MemoryItem(Model):
         content: str,
         summary: str | None = None,
         group_id: str | None = None,
-        tier: str = "working",
+        tier: str = MemoryTier.WORKING,
         topic_tags: list[str] | None = None,
         entity_tags: list[str] | None = None,
         salience: float = 0.5,
@@ -170,7 +184,7 @@ class MemoryItem(Model):
             MemoryItem: 创建的记忆项
         """
         expire_time = None
-        if tier == "working":
+        if tier == MemoryTier.WORKING:
             expire_time = datetime.now() + timedelta(hours=24)
 
         return await cls.create(
@@ -183,7 +197,8 @@ class MemoryItem(Model):
             topic_tags=json.dumps(topic_tags or [], ensure_ascii=False),
             entity_tags=json.dumps(entity_tags or [], ensure_ascii=False),
             salience=salience,
-            is_protected=is_protected or tier in ("semantic", "background"),
+            is_protected=is_protected
+            or tier in (MemoryTier.SEMANTIC, MemoryTier.BACKGROUND),
             expire_time=expire_time,
         )
 

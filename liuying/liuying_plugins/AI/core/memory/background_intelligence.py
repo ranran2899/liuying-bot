@@ -12,7 +12,7 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ...models.memory_item import MemoryItem
+from ...models.memory_item import MemoryItem, MemoryTier
 from ._common import _DEFAULT_PERSONA, tokenize
 
 _DEBOUNCE_SECONDS = 30.0
@@ -163,7 +163,7 @@ class BackgroundIntelligence:
         query = MemoryItem.filter(
             user_id=user_id,
             persona_name=persona_name,
-            tier__in=["working", "episodic"],
+            tier__in=[MemoryTier.WORKING, MemoryTier.EPISODIC],
         )
         if group_id:
             query = query.filter(group_id=group_id)
@@ -186,7 +186,7 @@ class BackgroundIntelligence:
                         update_fields=["reinforcement_count"]
                     )
                     mem.superseded_by = seen_mem.id
-                    mem.tier = "background"
+                    mem.tier = MemoryTier.BACKGROUND
                     await mem.save(
                         update_fields=["superseded_by", "tier"]
                     )
@@ -214,13 +214,13 @@ class BackgroundIntelligence:
         memories = await MemoryItem.filter(
             user_id=user_id,
             persona_name=persona_name,
-            tier="episodic",
+            tier=MemoryTier.EPISODIC,
             access_count__gte=_CRYSTALIZE_THRESHOLD,
             is_protected=False,
         ).limit(_BATCH_SIZE).all()
         count = 0
         for mem in memories:
-            mem.tier = "semantic"
+            mem.tier = MemoryTier.SEMANTIC
             mem.is_protected = True
             await mem.save(
                 update_fields=["tier", "is_protected"]

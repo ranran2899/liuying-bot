@@ -10,12 +10,6 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_CONTEXT,
-    EVIDENCE_KIND_TOOL,
-    INTENT_TAG_LOCAL,
-    LATENCY_CLASS_FAST,
-)
 from liuying.liuying_plugins.AI.tools import AgentTool
 
 from . import rhythm
@@ -327,9 +321,6 @@ def build_time_tools(runtime: Any) -> list[AgentTool]:
                 "required": ["start", "end"],
             },
             func=_diff,
-            intent_tags=[INTENT_TAG_LOCAL],
-            latency_class=LATENCY_CLASS_FAST,
-            evidence_kind=EVIDENCE_KIND_TOOL,
         ),
         AgentTool(
             name="days_until",
@@ -346,9 +337,6 @@ def build_time_tools(runtime: Any) -> list[AgentTool]:
                 "required": ["target"],
             },
             func=_until,
-            intent_tags=[INTENT_TAG_LOCAL],
-            latency_class=LATENCY_CLASS_FAST,
-            evidence_kind=EVIDENCE_KIND_TOOL,
         ),
         AgentTool(
             name="shift_date",
@@ -369,9 +357,6 @@ def build_time_tools(runtime: Any) -> list[AgentTool]:
                 "required": ["base", "days"],
             },
             func=_shift,
-            intent_tags=[INTENT_TAG_LOCAL],
-            latency_class=LATENCY_CLASS_FAST,
-            evidence_kind=EVIDENCE_KIND_TOOL,
         ),
         AgentTool(
             name="time_companion",
@@ -399,8 +384,5 @@ def build_time_tools(runtime: Any) -> list[AgentTool]:
                 "required": [],
             },
             func=_companion,
-            intent_tags=[INTENT_TAG_LOCAL],
-            latency_class=LATENCY_CLASS_FAST,
-            evidence_kind=EVIDENCE_KIND_CONTEXT,
         ),
     ]

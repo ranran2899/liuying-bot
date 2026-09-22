@@ -9,11 +9,6 @@ liuying/plugins/web_search 插件提供免配置降级兜底。
 
 from liuying.utils.log import logger
 
-from ...agent.runtime.constants import (
-    INTENT_TAG_NETWORK,
-    INTENT_TAG_REALTIME,
-    LATENCY_CLASS_NETWORK,
-)
 from ...core.llm import llm_helper
 from ...core.tools import web_fetch
 from ..decorators import register_tool
@@ -40,9 +35,6 @@ from ..decorators import register_tool
         },
         "required": ["query"],
     },
-    intent_tags=[INTENT_TAG_REALTIME, INTENT_TAG_NETWORK],
-    latency_class=LATENCY_CLASS_NETWORK,
-    requires_network=True,
     metadata={
         "fallback_strategy": "free_clients",
         "max_results": 10,
@@ -104,9 +96,6 @@ async def web_search(query: str, count: int = 5) -> str:
         },
         "required": ["url"],
     },
-    intent_tags=[INTENT_TAG_NETWORK, INTENT_TAG_REALTIME],
-    latency_class=LATENCY_CLASS_NETWORK,
-    requires_network=True,
     metadata={"output_kind": "webpage_text"},
 )
 async def fetch_webpage(url: str, max_length: int = 4000) -> str:

@@ -16,7 +16,7 @@ from ...core.llm import llm_helper
 from ...core.llm.model_router import ROLE_INTENT, model_router
 from ...core.memory._common import _DEFAULT_PERSONA
 from ...core.memory.recall import MemoryRecallService
-from ...models.memory_item import MemoryItem
+from ...models.memory_item import MemoryItem, MemoryTier
 from .memory_consolidate import MemoryConsolidationService
 
 _RELATION_REPLACES = "replaces"
@@ -174,7 +174,7 @@ class MemoryEvolveService:
         for r in results:
             if r.get("id") == new_memory_id:
                 continue
-            if r.get("tier") == "background":
+            if r.get("tier") == MemoryTier.BACKGROUND:
                 continue
             candidates.append(r)
         return candidates
@@ -370,7 +370,7 @@ class MemoryEvolveService:
         if not memory:
             return
         memory.superseded_by = new_id
-        memory.tier = "background"
+        memory.tier = MemoryTier.BACKGROUND
         memory.is_protected = False
         await memory.save(
             update_fields=["superseded_by", "tier", "is_protected"]

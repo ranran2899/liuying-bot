@@ -101,7 +101,4 @@ def build_news_tool(runtime: Any) -> AgentTool:
             "required": [],
         },
         func=_handler,
-        intent_tags=["realtime", "network"],
-        latency_class="network",
-        requires_network=True,
     )

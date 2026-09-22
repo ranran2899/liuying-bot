@@ -108,10 +108,8 @@ class ChatCommands:
                 session.scene.id if session.scene.is_group else None
             )
 
-            # 运行时开关检查
-            if not runtime_switch.is_enabled(
-                "ai", user_id=user_id, group_id=group_id
-            ):
+            # 运行时开关检查（全局维度）
+            if not runtime_switch.is_enabled("ai"):
                 return
 
             is_private = not session.scene.is_group
@@ -135,26 +133,18 @@ class ChatCommands:
                     )
                     return
 
-            image_descs: list[str] = []
+            # 图片多模态直传：仅取首张交由下游视觉路由处理，
+            # 不再在上游转成文本描述注入消息
+            image_data: bytes | None = None
+            image_mime = "image/jpeg"
             if get_config("VISION", {}).get("enabled", True):
-                image_descs = (
-                    await ChatMatchersHelper.extract_image_descriptions(
-                        message
-                    )
+                extracted = await ChatMatchersHelper.extract_first_image(
+                    message
                 )
+                if extracted is not None:
+                    image_data, image_mime = extracted
 
-            if image_descs:
-                desc_text = "\n".join(
-                    f"[图片{i + 1}] {d}"
-                    for i, d in enumerate(image_descs)
-                )
-                text = (
-                    f"{text}\n{desc_text}".strip()
-                    if text
-                    else desc_text
-                )
-
-            if not text:
+            if not text and image_data is None:
                 return
 
             label = "AI私聊消息" if is_private else "AI@消息"
@@ -164,8 +154,11 @@ class ChatCommands:
                 session=session,
             )
 
-            # 消息批量缓冲：合并短时间内的多条消息
-            if get_config("REPLY_BUFFER", {}).get("enabled", True):
+            # 消息批量缓冲：合并短时间内的多条文本消息
+            # （图片走多模态直传，单图不参与文本合并）
+            if text and get_config("REPLY_BUFFER", {}).get(
+                "enabled", True
+            ):
                 session_key = (
                     f"private:{user_id}"
                     if is_private
@@ -188,6 +181,8 @@ class ChatCommands:
                 group_id,
                 is_private,
                 message_id=getattr(event, "message_id", None),
+                image_data=image_data,
+                image_mime=image_mime,
             )
 
     @staticmethod
@@ -198,6 +193,8 @@ class ChatCommands:
         group_id: str | None,
         is_private: bool,
         message_id: int | None = None,
+        image_data: bytes | None = None,
+        image_mime: str = "image/jpeg",
     ) -> None:
         """统一处理回复生成与发送
 
@@ -208,6 +205,8 @@ class ChatCommands:
             group_id: 群组ID
             is_private: 是否私聊
             message_id: 触发消息的ID，用于引用回复/表情表态
+            image_data: 图片二进制数据，None表示无图片
+            image_mime: 图片MIME类型
         """
         err_text = ""
         result: ReplyResult | None = None
@@ -232,6 +231,8 @@ class ChatCommands:
                 # to_me 规则命中的消息均直达bot（私聊/@bot/回复bot），
                 # 下游据此禁止静默，避免用户被无视
                 is_at_bot=True,
+                image_data=image_data,
+                image_mime=image_mime,
             )
         except Exception as e:
             logger.error(

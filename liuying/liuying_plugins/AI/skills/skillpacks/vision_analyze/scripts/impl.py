@@ -11,12 +11,6 @@
 import asyncio
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_TOOL,
-    INTENT_TAG_IMAGE,
-    INTENT_TAG_NETWORK,
-    LATENCY_CLASS_SLOW,
-)
 from liuying.liuying_plugins.AI.core.vision import (
     summarize_gif,
     summarize_image,
@@ -260,11 +254,6 @@ def build_vision_tools(runtime: Any) -> list[AgentTool]:
                 "required": ["image_url"],
             },
             func=_analyze_one,
-            intent_tags=[INTENT_TAG_IMAGE, INTENT_TAG_NETWORK],
-            latency_class=LATENCY_CLASS_SLOW,
-            requires_network=True,
-            requires_image=True,
-            evidence_kind=EVIDENCE_KIND_TOOL,
         ),
         AgentTool(
             name="analyze_images",
@@ -291,10 +280,5 @@ def build_vision_tools(runtime: Any) -> list[AgentTool]:
                 "required": ["image_urls"],
             },
             func=_analyze_many,
-            intent_tags=[INTENT_TAG_IMAGE, INTENT_TAG_NETWORK],
-            latency_class=LATENCY_CLASS_SLOW,
-            requires_network=True,
-            requires_image=True,
-            evidence_kind=EVIDENCE_KIND_TOOL,
         ),
     ]

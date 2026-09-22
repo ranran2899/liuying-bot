@@ -16,7 +16,7 @@ from typing import Any
 from liuying.utils.log import logger
 
 from ...models.conversation_record import ConversationRecord
-from ...models.memory_item import MemoryItem
+from ...models.memory_item import MemoryItem, MemoryTier
 from ...models.user_persona import UserPersonaProfile
 from ._common import _REINFORCE_THRESHOLD
 from .extractors import CurationExtractor
@@ -170,7 +170,7 @@ class MemoryCurator:
             if score < _QUALITY_THRESHOLD:
                 report.low_quality += 1
                 if (
-                    mem.tier == "background"
+                    mem.tier == MemoryTier.BACKGROUND
                     and mem.reinforcement_count == 0
                 ):
                     await mem.delete()
@@ -299,7 +299,7 @@ class MemoryCurator:
             new_count = mem.reinforcement_count + 1
             if (
                 new_count >= _REINFORCE_THRESHOLD
-                and mem.tier in ("working", "episodic")
+                and mem.tier in (MemoryTier.WORKING, MemoryTier.EPISODIC)
             ):
                 promote_ids.append(mem.id)
             else:
@@ -320,7 +320,7 @@ class MemoryCurator:
                 ),
                 access_count=MemoryItem.access_count + 1,
                 last_access_time=now,
-                tier="semantic",
+                tier=MemoryTier.SEMANTIC,
                 is_protected=True,
             )
 
@@ -337,7 +337,7 @@ class MemoryCurator:
         返回:
             int: 形成的主题数
         """
-        query = MemoryItem.filter(tier="episodic")
+        query = MemoryItem.filter(tier=MemoryTier.EPISODIC)
         if user_id:
             query = query.filter(user_id=user_id)
         memories = await query.limit(100).all()
@@ -381,7 +381,7 @@ class MemoryCurator:
             existing = await MemoryItem.filter(
                 user_id=cluster[0].user_id,
                 persona_name=persona_name,
-                tier="semantic",
+                tier=MemoryTier.SEMANTIC,
                 summary=combined[:200],
             ).first()
             if existing:
@@ -391,7 +391,7 @@ class MemoryCurator:
                 content=combined[:500],
                 summary=combined[:200],
                 group_id=cluster[0].group_id,
-                tier="semantic",
+                tier=MemoryTier.SEMANTIC,
                 topic_tags=[cluster[0].user_id],
                 salience=0.7,
                 persona_name=persona_name,

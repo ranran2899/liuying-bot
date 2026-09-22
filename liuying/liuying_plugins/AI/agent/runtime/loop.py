@@ -37,8 +37,8 @@ from .types import AgentOutcome, PersonaResponse, ToolCallRecord
 TOOL_FINISH = "finish"
 """收束元工具名：工具编排阶段调用它结束本回合（不写正文）"""
 
-_DEFAULT_MAX_STEPS = 6
-"""默认最大循环步数（每步一次 LLM 往返 + 若干工具调用）"""
+_DEFAULT_MAX_STEPS = 10
+"""默认最大循环步数（与 config_items AGENT.max_steps 默认口径一致）"""
 
 _FINISH_TOOL: dict[str, Any] = {
     "type": "function",

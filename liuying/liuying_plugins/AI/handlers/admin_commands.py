@@ -36,22 +36,18 @@ class AdminCommands:
     """AI管理命令基础等级"""
 
     @staticmethod
-    def _format_status_line(
-        name: str, enabled: bool, source: str
-    ) -> str:
+    def _format_status_line(name: str, enabled: bool) -> str:
         """格式化状态行
 
         参数:
             name: 功能名
             enabled: 是否启用
-            source: 来源
 
         返回:
             str: 格式化文本
         """
         mark = "[ON] " if enabled else "[OFF]"
-        source_tag = f" ({source})" if source != "global" else ""
-        return f"{mark} {name}{source_tag}"
+        return f"{mark} {name}"
 
     @staticmethod
     def _parse_state(state: str) -> bool | None:
@@ -71,23 +67,18 @@ class AdminCommands:
         return None
 
     @staticmethod
-    def _validate_switch_args(
-        scope_id: str | None, feature: str, state: str
-    ) -> str | None:
-        """校验开关命令参数
+    def _validate_switch_args(feature: str, state: str) -> str | None:
+        """校验全局开关命令参数
 
-        校验顺序：空作用域ID -> 状态合法性 -> 功能名合法性。
+        校验顺序：状态合法性 -> 功能名合法性。
 
         参数:
-            scope_id: 群号/用户ID，全局开关传None跳过空值校验
             feature: 功能名
             state: 状态文本
 
         返回:
             str | None: 错误提示文本，校验通过返回None
         """
-        if scope_id is not None and not scope_id.strip():
-            return "请提供群号/用户ID"
         if AdminCommands._parse_state(state) is None:
             return "状态值无效，请用 on/off"
         if (feature or "").strip().lower() not in FEATURE_LIST:
@@ -103,19 +94,13 @@ class AdminCommands:
         if not get_config("ENABLE_AI", False):
             return
 
-        group_id = (
-            session.scene.id if session.scene.is_group else None
-        )
-        user_id = session.user.id
-        statuses = runtime_switch.get_status(
-            user_id=user_id, group_id=group_id
-        )
+        statuses = runtime_switch.get_status()
 
         lines: list[str] = ["=== AI功能状态 ==="]
         for s in statuses:
             lines.append(
                 AdminCommands._format_status_line(
-                    s.name, s.enabled, s.source
+                    s.name, s.enabled
                 )
             )
 
@@ -130,10 +115,6 @@ class AdminCommands:
             lines.append(
                 f"已禁用: {', '.join(report['disabled_features'])}"
             )
-        lines.append(
-            f"群组覆盖: {report['group_overrides_count']} 条，"
-            f"用户覆盖: {report['user_overrides_count']} 条"
-        )
 
         await MessageUtils.build_message(
             "\n".join(lines)
@@ -148,9 +129,7 @@ class AdminCommands:
             return
 
         feature = (feature or "").strip().lower()
-        if err := AdminCommands._validate_switch_args(
-            None, feature, state
-        ):
+        if err := AdminCommands._validate_switch_args(feature, state):
             await MessageUtils.build_message(err).finish()
             return
         enabled = AdminCommands._parse_state(state)
@@ -161,76 +140,6 @@ class AdminCommands:
             else f"设置失败: {feature}"
         )
         await MessageUtils.build_message(msg).finish()
-
-    @staticmethod
-    async def handle_group_switch(
-        session: Uninfo,
-        group_id: str = "",
-        feature: str = "",
-        state: str = "",
-    ) -> None:
-        """设置群组级开关"""
-        if not get_config("ENABLE_AI", False):
-            return
-
-        group_id = (group_id or "").strip()
-        feature = (feature or "").strip().lower()
-        if err := AdminCommands._validate_switch_args(
-            group_id, feature, state
-        ):
-            await MessageUtils.build_message(err).finish()
-            return
-        enabled = AdminCommands._parse_state(state)
-        ok = runtime_switch.set_group(group_id, feature, enabled)
-        msg = (
-            f"已设置群 {group_id} 开关 {feature} = {enabled}"
-            if ok
-            else f"设置失败: {feature}"
-        )
-        await MessageUtils.build_message(msg).finish()
-
-    @staticmethod
-    async def handle_user_switch(
-        session: Uninfo,
-        user_id: str = "",
-        feature: str = "",
-        state: str = "",
-    ) -> None:
-        """设置用户级开关"""
-        if not get_config("ENABLE_AI", False):
-            return
-
-        user_id = (user_id or "").strip()
-        feature = (feature or "").strip().lower()
-        if err := AdminCommands._validate_switch_args(
-            user_id, feature, state
-        ):
-            await MessageUtils.build_message(err).finish()
-            return
-        enabled = AdminCommands._parse_state(state)
-        ok = runtime_switch.set_user(user_id, feature, enabled)
-        msg = (
-            f"已设置用户 {user_id} 开关 {feature} = {enabled}"
-            if ok
-            else f"设置失败: {feature}"
-        )
-        await MessageUtils.build_message(msg).finish()
-
-    @staticmethod
-    async def handle_reset(session: Uninfo) -> None:
-        """重置所有运行时覆盖"""
-        if not get_config("ENABLE_AI", False):
-            return
-
-        runtime_switch.reset_all()
-        logger.info(
-            f"管理员 {session.user.id} 重置所有AI运行时覆盖",
-            command="AI",
-            session=session,
-        )
-        await MessageUtils.build_message(
-            "已重置所有群组/用户级开关覆盖"
-        ).finish()
 
     @staticmethod
     async def handle_clear_all_memory(

@@ -77,17 +77,14 @@ class SmartToolBridge:
             )
             return 0
         merged_metadata = {**tag.metadata, "source": f"plugin:{plugin_name}"}
+        # AICallableTag 的 intent_tags/latency_class/requires_network/
+        # requires_image/evidence_kind 已废弃，不再向 AgentTool 透传
         tool_registry.register(
             AgentTool(
                 name=tag.name,
                 description=tag.description,
                 parameters=self._convert_parameters(tag.parameters),
                 func=self._wrap_handler(tag.name, tag.func),
-                intent_tags=tag.intent_tags,
-                latency_class=tag.latency_class,
-                requires_network=tag.requires_network,
-                requires_image=tag.requires_image,
-                evidence_kind=tag.evidence_kind,
                 metadata=merged_metadata,
             )
         )

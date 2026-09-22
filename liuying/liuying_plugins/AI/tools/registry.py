@@ -9,15 +9,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..agent.runtime.constants import (
-    EVIDENCE_KIND_TOOL,
-    LATENCY_CLASS_FAST,
-)
-
 
 @dataclass(slots=True)
 class AgentTool:
     """工具定义
+
+    承载 JSON Schema 参数与异步执行函数，并可导出为
+    OpenAI function-calling 格式，供统一 ReAct 循环调用。
 
     Attributes:
         name: 工具名（唯一键）
@@ -25,10 +23,6 @@ class AgentTool:
         parameters: JSON Schema参数定义
         func: 工具执行函数（异步）
         is_disabled: 是否禁用
-        intent_tags: 意图标签列表
-        latency_class: 延迟级别（fast/network/slow）
-        requires_network: 是否需要网络
-        requires_image: 是否需要图片输入
         metadata: 附加元信息
     """
 
@@ -42,16 +36,6 @@ class AgentTool:
     """工具执行函数（异步）"""
     is_disabled: bool = False
     """是否禁用"""
-    intent_tags: list[str] = field(default_factory=list)
-    """意图标签列表"""
-    latency_class: str = LATENCY_CLASS_FAST
-    """延迟级别（fast/network/slow）"""
-    requires_network: bool = False
-    """是否需要网络"""
-    requires_image: bool = False
-    """是否需要图片输入"""
-    evidence_kind: str = EVIDENCE_KIND_TOOL
-    """证据/来源类型元数据（tool/context 等），保留供分类与溯源"""
     metadata: dict[str, Any] = field(default_factory=dict)
     """附加元信息"""
 

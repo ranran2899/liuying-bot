@@ -11,17 +11,30 @@ setup_to_scheduler()将所有触发器注册到APScheduler调度。
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
 from liuying.services.apscheduler import task_manager
 from liuying.utils.log import logger
 
 __all__ = [
+    "ScheduleKind",
     "SocialContext",
     "SocialTrigger",
     "SocialTriggerRegistry",
     "social_trigger_registry",
 ]
+
+
+class ScheduleKind(StrEnum):
+    """触发器调度类型枚举
+
+    成员即 str，与注册时传入的字符串字面量兼容。
+    """
+
+    CRON = "cron"
+    INTERVAL = "interval"
+    EVENT = "event"
 
 
 @dataclass(slots=True)
@@ -66,7 +79,7 @@ class SocialTrigger:
     handler: Callable[
         [SocialContext], Awaitable[None]
     ]
-    schedule_kind: str = "event"
+    schedule_kind: str = ScheduleKind.EVENT
     schedule_args: dict[str, Any] = field(
         default_factory=dict
     )
@@ -120,18 +133,18 @@ class SocialTriggerRegistry:
         for trigger in self.list():
             if not trigger.enabled(None):
                 continue
-            if trigger.schedule_kind == "event":
+            if trigger.schedule_kind == ScheduleKind.EVENT:
                 continue
             wrapped = self._wrap_handler(trigger.handler)
             task_id = f"ai_social_{trigger.name}"
             try:
-                if trigger.schedule_kind == "cron":
+                if trigger.schedule_kind == ScheduleKind.CRON:
                     await task_manager.add_cron(
                         task_id=task_id,
                         func=wrapped,
                         **trigger.schedule_args,
                     )
-                elif trigger.schedule_kind == "interval":
+                elif trigger.schedule_kind == ScheduleKind.INTERVAL:
                     await task_manager.add_interval(
                         task_id=task_id,
                         func=wrapped,

@@ -5,11 +5,6 @@
 
 from liuying.utils.user.favor import UserFavor
 
-from ...agent.runtime.constants import (
-    EVIDENCE_KIND_CONTEXT,
-    INTENT_TAG_LOCAL,
-    LATENCY_CLASS_FAST,
-)
 from ...agent.runtime.session_context import get_current_user_id
 from ..decorators import register_tool
 
@@ -22,9 +17,6 @@ from ..decorators import register_tool
         "properties": {},
         "required": [],
     },
-    intent_tags=[INTENT_TAG_LOCAL],
-    latency_class=LATENCY_CLASS_FAST,
-    evidence_kind=EVIDENCE_KIND_CONTEXT,
 )
 async def get_favor() -> str:
     """查询当前用户好感度

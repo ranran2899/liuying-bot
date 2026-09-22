@@ -7,7 +7,7 @@
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, TypedDict
 
 from liuying.utils.log import logger
 
@@ -23,6 +23,24 @@ from ._common import (
 )
 from .embedding_service import EmbeddingService
 from .search_ranker import search_ranker
+
+
+class MemoryRecallItem(TypedDict):
+    """记忆召回结果项
+
+    Attributes:
+        id: 记忆ID
+        summary: 记忆摘要
+        content: 原始内容
+        tier: 记忆层级
+        score: 融合重排得分
+    """
+
+    id: int
+    summary: str
+    content: str
+    tier: str
+    score: float
 
 
 class MemoryRecallService:
@@ -53,7 +71,7 @@ class MemoryRecallService:
         top_k: int = 5,
         mode: str = "auto",
         persona_name: str = _DEFAULT_PERSONA,
-    ) -> list[dict]:
+    ) -> list[MemoryRecallItem]:
         """记忆召回主入口
 
         5路召回 + RRF融合 + search_ranker综合重排序。
@@ -169,7 +187,7 @@ class MemoryRecallService:
 
         scored.sort(key=lambda x: x[0], reverse=True)
 
-        results = []
+        results: list[MemoryRecallItem] = []
         accessed_ids: list[int] = []
         for final_score, memory in scored[:top_k]:
             results.append(

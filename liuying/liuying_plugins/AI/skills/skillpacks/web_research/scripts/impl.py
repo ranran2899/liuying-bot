@@ -10,12 +10,6 @@
 import asyncio
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_TOOL,
-    INTENT_TAG_NETWORK,
-    INTENT_TAG_REALTIME,
-    LATENCY_CLASS_SLOW,
-)
 from liuying.liuying_plugins.AI.core.llm.model_router import (
     ROLE_AGENT,
     model_router,
@@ -295,8 +289,4 @@ def build_research_tool(runtime: Any) -> AgentTool:
             "required": ["question"],
         },
         func=_handler,
-        intent_tags=[INTENT_TAG_NETWORK, INTENT_TAG_REALTIME],
-        latency_class=LATENCY_CLASS_SLOW,
-        requires_network=True,
-        evidence_kind=EVIDENCE_KIND_TOOL,
     )

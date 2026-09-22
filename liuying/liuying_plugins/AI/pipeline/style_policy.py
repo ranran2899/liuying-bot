@@ -6,7 +6,12 @@
 所有文本为模块级常量，导入时构建一次，不发起 LLM 调用。
 """
 
-__all__ = ["ReplyStylePolicy", "TOOL_GUIDANCE_PROMPT", "CROSSTALK_GUARD_PROMPT", "CROSSTALK_MARKER"]
+__all__ = [
+    "CROSSTALK_GUARD_PROMPT",
+    "CROSSTALK_MARKER",
+    "TOOL_GUIDANCE_PROMPT",
+    "ReplyStylePolicy",
+]
 
 
 _STYLE_BASE_PROMPT = """## 人设与输出风格（高优先级）

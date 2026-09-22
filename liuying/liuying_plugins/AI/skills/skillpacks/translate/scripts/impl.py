@@ -6,11 +6,6 @@
 
 from typing import Any
 
-from liuying.liuying_plugins.AI.agent.runtime.constants import (
-    EVIDENCE_KIND_TOOL,
-    INTENT_TAG_NETWORK,
-    LATENCY_CLASS_NETWORK,
-)
 from liuying.liuying_plugins.AI.core.llm.model_router import (
     ROLE_AGENT,
     model_router,
@@ -166,8 +161,4 @@ def build_translate_tool(runtime: Any) -> AgentTool:
             "required": ["text"],
         },
         func=_handler,
-        intent_tags=[INTENT_TAG_NETWORK],
-        latency_class=LATENCY_CLASS_NETWORK,
-        requires_network=True,
-        evidence_kind=EVIDENCE_KIND_TOOL,
     )

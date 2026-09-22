@@ -17,6 +17,7 @@ from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_AGENT, ROLE_INTENT, model_router
 from ..core.memory import memory_manager
 from ..core.tools.json_utils import extract_json_payload
+from ..models.memory_item import MemoryTier
 
 _DAILY_QUOTA = 10
 """每日主动学习配额"""
@@ -193,7 +194,7 @@ class ActiveLearning:
                     user_id=user_id,
                     content=f"查证: {question}",
                     summary=finding[:200],
-                    tier="semantic",
+                    tier=MemoryTier.SEMANTIC,
                     salience=0.8,
                     persona_name=persona_name,
                 )
