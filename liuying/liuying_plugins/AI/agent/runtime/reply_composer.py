@@ -17,12 +17,6 @@ from liuying.utils.log import logger
 from ...core.llm import LLMHelper, llm_helper
 from ...core.llm.model_router import ROLE_CHAT, model_router
 from ...core.tools.json_utils import extract_json_payload
-from ...pipeline.style_policy import (
-    MODE_HINT_WITH_EVIDENCE,
-    MODE_HINT_WITHOUT_EVIDENCE,
-    REPLY_EVIDENCE_HEADER,
-    build_reply_stage_instruction,
-)
 from .constants import IMAGE_OUTPUT_KIND
 from .types import PersonaResponse, ToolCallRecord
 
@@ -61,6 +55,46 @@ _REPLY_TEXT_PATTERN = re.compile(
     r'"reply_text"\s*:\s*"((?:\\.|[^"\\])*)"', re.IGNORECASE
 )
 """compose 产出非标准JSON时兜底提取 reply_text 字段"""
+
+
+def _build_reply_stage_instruction(
+    min_chars: int, max_chars: int, need_tool: bool
+) -> str:
+    """构建正文生成阶段指令（沿用旧 responder 的角色文案与约束清单）
+
+    输出格式为只含 reply_text 的 JSON：是否静默/澄清/情绪等
+    元信息已由编排阶段 finish 工具给出，正文无需其他字段。
+
+    参数:
+        min_chars: 字数下限
+        max_chars: 字数上限
+        need_tool: 本轮是否已用工具查证（否则追加禁编造硬约束）
+
+    返回:
+        str: 回复生成指令
+    """
+    constraints = [
+        "1. 回复风格符合人格设定和用户好感度",
+        "2. 不暴露工具调用细节和证据合成过程",
+        "3. 不提及自己是AI助手",
+        "4. 回复简洁自然，符合对话场景",
+        "5. 不编造具体数字、链接、日期",
+        "6. 未调用工具且不确定时，用简短模糊回应，禁止编造",
+        "7. 不要每轮都用反问或提问收尾，别连环问；"
+        "多数时候用陈述自然接话",
+    ]
+    if not need_tool:
+        constraints.append(
+            "8. 涉及具体事实/数字/时间/人名/新闻/产品参数/专有名词/"
+            "梗，未调用工具且不确定时必须简短含糊回应，禁止编造"
+        )
+    return (
+        "你是角色化响应器。基于人格设定和证据，生成符合角色的回复。\n"
+        '只输出一个JSON对象：{"reply_text": "回复正文"}，'
+        "不要其他字段、解释、markdown或代码块。\n\n"
+        f"字数约束：reply_text必须在{min_chars}-{max_chars}字之间。\n\n"
+        "约束：\n" + "\n".join(constraints)
+    )
 
 
 class ReplyComposer:
@@ -104,10 +138,10 @@ class ReplyComposer:
         min_chars, max_chars = self._reply_budget(
             bool(evidence), max_reply_chars
         )
-        combined_system = (
-            f"{system_prompt}\n\n"
-            f"{build_reply_stage_instruction(min_chars, max_chars, bool(evidence))}"
+        instruction = _build_reply_stage_instruction(
+            min_chars, max_chars, bool(evidence)
         )
+        combined_system = f"{system_prompt}\n\n{instruction}"
         reply_messages: list[dict[str, Any]] = [
             {"role": "system", "content": combined_system}
         ]
@@ -176,7 +210,10 @@ class ReplyComposer:
             lines.append(f"[{r.tool_name}] {text[:_EVIDENCE_TRUNC]}")
         if not lines:
             return ""
-        return f"{REPLY_EVIDENCE_HEADER}\n" + "\n".join(lines)
+        return (
+            "[本轮工具已查证到的信息，请自然融入回复，不要照搬原文、"
+            "不要提及工具或来源]\n" + "\n".join(lines)
+        )
 
     @staticmethod
     def _extract_system_prompt(
@@ -260,7 +297,7 @@ class ReplyComposer:
 
     @staticmethod
     def _mode_hint(has_evidence: bool) -> str:
-        """就近的回复模式提示（文案集中定义于 style_policy）
+        """就近的回复模式提示，在用户轮末尾锁定本轮详略
 
         参数:
             has_evidence: 本轮是否有工具证据
@@ -269,8 +306,11 @@ class ReplyComposer:
             str: 模式提示文本
         """
         if has_evidence:
-            return MODE_HINT_WITH_EVIDENCE
-        return MODE_HINT_WITHOUT_EVIDENCE
+            return "带工具证据，自然融入证据，不要说'根据搜索结果'"
+        return (
+            "短聊天回复，只回一到两句；用户没问就别自我介绍、"
+            "不要罗列人设设定里的爱好或背景，也别总用反问收尾"
+        )
 
     @staticmethod
     def _parse_compose(

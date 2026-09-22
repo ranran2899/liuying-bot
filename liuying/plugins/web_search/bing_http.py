@@ -73,7 +73,7 @@ _BING_EXCLUDE_DOMAINS = ("bing.com", "microsoft.com")
         requires_api_key=False,
         free=True,
         keywords=("bing_http",),
-        priority=10,
+        priority=20,
     )
 )
 class BingHttpClient(FreeSearchClientBase):

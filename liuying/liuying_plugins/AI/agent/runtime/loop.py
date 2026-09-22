@@ -23,14 +23,6 @@ from liuying.utils.log import logger
 from ...config import get_config
 from ...core.llm import LLMHelper, llm_helper
 from ...core.llm.model_router import ROLE_AGENT, model_router
-from ...pipeline.style_policy import (
-    CROSSTALK_GUARD_PROMPT,
-    CROSSTALK_MARKER,
-    FINISH_KEY_POINTS_DESCRIPTION,
-    FINISH_STAGE_DESCRIPTION,
-    LOOP_INSTRUCTION_PROMPT,
-    TOOL_GUIDANCE_PROMPT,
-)
 from ...tools import ToolRegistry, tool_registry
 from .constants import DEFAULT_TOOL_TIMEOUT, IMAGE_OUTPUT_KIND
 from .reply_composer import ReplyComposer
@@ -47,7 +39,12 @@ _FINISH_TOOL: dict[str, Any] = {
     "type": "function",
     "function": {
         "name": TOOL_FINISH,
-        "description": FINISH_STAGE_DESCRIPTION,
+        "description": (
+            "结束工具编排阶段。当你已掌握足够信息、或判断应静默/"
+            "需澄清时调用它。不要在此写面向用户的正文，正文由后续的"
+            "人格回复阶段生成；这里只需给出是否静默/是否澄清与情绪/TTS/"
+            "贴纸等提示。"
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -73,7 +70,10 @@ _FINISH_TOOL: dict[str, Any] = {
                 },
                 "key_points": {
                     "type": "string",
-                    "description": FINISH_KEY_POINTS_DESCRIPTION,
+                    "description": (
+                        "供回复阶段参考的要点/结论（内部用，可空）："
+                        "跨工具查证后的结论性信息，用简短要点，勿写成整句回复"
+                    ),
                 },
             },
             "required": [],
@@ -147,7 +147,12 @@ class AgentLoop:
         scratchpad.append(
             {
                 "role": "system",
-                "content": LOOP_INSTRUCTION_PROMPT,
+                "content": (
+                    "你在工具编排阶段：按上面的工具使用原则决定要不要调用工具"
+                    "支撑回答，需要就调用、读结果后可继续；信息够了或判断该静默/"
+                    "该澄清时调用 finish 收束。本阶段只做工具决策与收束，不要写"
+                    "面向用户的正文。"
+                ),
             }
         )
 
@@ -246,11 +251,31 @@ class AgentLoop:
         返回:
             list[dict[str, Any]]: 注入后的消息副本
         """
-        extra = f"{TOOL_GUIDANCE_PROMPT}\n\n{CROSSTALK_GUARD_PROMPT}\n\n"
+        extra = (
+            "工具使用总原则：能直接回答就别起工具；不确定、高风险、时效性强、"
+            "明显需要查证时再调用工具。\n"
+            "当当前消息包含你不认识、无法确定指代或可能有圈内含义的专有名词、"
+            "角色名、作品名、游戏/动漫术语、外号、别称、缩写、谐音、梗或活动名时，"
+            "如果可用工具里有联网搜索，必须先调用查证；不要凭记忆猜，"
+            "也不要直接在群里问这是什么梗/什么意思。\n"
+            "用户明确要求生成图片时，必须调用图片生成工具，不要只给提示词。\n"
+            "最终回复只输出纯文本，不要markdown、项目符号列表、编号列表，"
+            "也不要说正在查询、根据搜索结果或我需要确认一下。\n"
+            "群聊接梗场景优先像群友接话，不要为了显得聪明而滥用工具。"
+            "\n\n"
+            "群聊里通常多个话题并行：A 群友讨论地震、B 群友讨论自己的近况、"
+            "C 群友在闲扯，时间相近不代表语义相关。\n"
+            "硬性规则：\n"
+            "1. 你回复的是上下文中标记为当前消息的那一条；其它发言只是背景，"
+            "不要把它们的内容拿来回答当前问题。\n"
+            "2. 不要把不同人说的关键词（地名、人名、状态）跨话题拼接。"
+            "拿不准时宁可简短、含糊或承认不知道，也不要把无关上下文糊上去。"
+            "\n\n"
+        )
         copied = [dict(m) for m in messages]
         for msg in copied:
             if msg.get("role") == "system" and msg.get("content"):
-                if CROSSTALK_MARKER in msg["content"]:
+                if "也不要把无关上下文糊上去。" in msg["content"]:
                     return copied
                 msg["content"] = f"{msg['content']}{extra}"
                 return copied

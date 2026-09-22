@@ -406,4 +406,8 @@ class HumanizeToolkit:
         if use_rng.random() >= adjusted:
             return text
         phrase = use_rng.choice(catchphrases)
+        # 回复自身已以口癖开头时不再前置，避免"好哒嗯……"式叠加
+        stripped = text.lstrip()
+        if any(stripped.startswith(p) for p in catchphrases):
+            return text
         return f"{phrase}{text}"

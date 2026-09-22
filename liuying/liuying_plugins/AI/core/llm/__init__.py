@@ -7,8 +7,10 @@
 from .ai_routes import AiCliRoute, AiCliRouter, ai_cli_router
 from .helper import LLMHelper, llm_helper
 from .model_router import (
+    ModelCapability,
     ModelRole,
     ModelRouter,
+    declared_capabilities,
     model_router,
 )
 from .provider_router import ProviderRouter, ProviderState, provider_router
@@ -22,6 +24,7 @@ __all__ = [
     "AiCliRoute",
     "AiCliRouter",
     "LLMHelper",
+    "ModelCapability",
     "ModelRole",
     "ModelRouter",
     "ProviderRouter",
@@ -29,6 +32,7 @@ __all__ = [
     "TokenLedger",
     "TokenTrackingHelper",
     "ai_cli_router",
+    "declared_capabilities",
     "llm_helper",
     "model_router",
     "provider_router",

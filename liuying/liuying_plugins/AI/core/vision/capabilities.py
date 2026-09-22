@@ -14,6 +14,7 @@ from liuying.services.LLM import Capability, llm_manager
 from liuying.utils.log import logger
 
 from ...config import get_config
+from ..llm.model_router import ModelCapability, declared_capabilities
 
 _PROBE_CACHE_TTL_HOURS = 6
 """能力探测缓存TTL（小时）"""
@@ -167,6 +168,23 @@ class VisionCapabilityRouter:
 
         return False, 0.3
 
+    def _declared_vision(self, model: str) -> tuple[bool, bool]:
+        """从 MODEL_ROUTES 能力声明判断模型是否声明看图
+
+        复用 model_router.declared_capabilities 集中解析入口；
+        显式声明优先于关键词与主动探测。
+
+        参数:
+            model: 模型名
+
+        返回:
+            tuple[bool, bool]: (是否存在显式声明, 声明是否支持视觉)
+        """
+        caps = declared_capabilities(model)
+        if caps is None:
+            return False, False
+        return True, ModelCapability.VISION in caps
+
     async def probe_capability(
         self,
         provider: str,
@@ -203,6 +221,14 @@ class VisionCapabilityRouter:
             chat_cap = prov.get_capability(Capability.CHAT)
             if chat_cap is None:
                 info.error = "provider不支持chat能力"
+                self._cache_set(info)
+                return info
+
+            declared, declared_vision = self._declared_vision(model)
+            if declared:
+                info.detection_method = "config"
+                info.supports_vision = declared_vision
+                info.confidence = 1.0
                 self._cache_set(info)
                 return info
 
@@ -315,8 +341,11 @@ class VisionCapabilityRouter:
                 (self._preferred_vision_provider, self._preferred_vision_model)
             )
 
-        # 默认对话模型作为兜底候选（provider/model统一从CHAT_MODEL取）
-        chat_cfg = get_config("CHAT_MODEL", {})
+        # 对话主模型作为兜底候选（provider/model 从 MODEL_ROUTES.chat 取）
+        routes = get_config("MODEL_ROUTES", {})
+        chat_cfg = routes.get("chat", {}) if isinstance(routes, dict) else {}
+        if not isinstance(chat_cfg, dict):
+            chat_cfg = {}
         default_provider = chat_cfg.get("provider", None)
         default_model = chat_cfg.get("model", None)
         if default_provider and default_model:

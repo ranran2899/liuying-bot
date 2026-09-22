@@ -18,7 +18,6 @@ from ..core.persona import persona_manager
 from ..core.safety import SafetyFilter, SafetyRefusalError
 from ..core.vision import summarize_image, vision_router
 from .helpers import ReplyPipeline
-from .style_policy import RETRY_PERSONA_HINT_TEMPLATE
 from .types import ReplyContext
 
 _FALLBACK_REPLIES: list[str] = [
@@ -273,8 +272,10 @@ class ReplyGenerator:
                     ctx.persona_name
                 )
                 retry_name = persona.get("name") or "AI"
-                retry_hint = RETRY_PERSONA_HINT_TEMPLATE.format(
-                    persona=retry_name
+                retry_hint = (
+                    f"\n[重要提示] 请直接以{retry_name}的身份回复，"
+                    "不要使用模板化拒绝用语，不要提及自己是AI或助手。"
+                    "如果确实无法回答，简短说一句即可。"
                 )
                 retry_messages = list(use_messages)
                 retry_messages.append(

@@ -41,6 +41,7 @@ _MODULE = "BAIDU_SEARCH"
         default_base_url="https://qianfan.baidubce.com",
         requires_api_key=True,
         keywords=("baidu", "baidubce", "qianfan"),
+        priority=10,
     )
 )
 class BaiduClient(BaseSearchClient):

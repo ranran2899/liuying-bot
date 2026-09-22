@@ -12,6 +12,7 @@ from liuying.utils.log import logger
 
 from ...config import get_config
 from .ai_routes import ai_cli_router
+from .model_router import _REASONING_OPTION_KEY
 from .provider_router import provider_router
 
 _CANDIDATES_TTL = 60.0
@@ -21,32 +22,30 @@ provider注册与能力集在运行期不变，冷却切换由
 provider_router 在故障转移时处理，候选枚举无需每次重算。
 """
 
-_VALID_EFFORTS = {"max", "high", "low"}
-"""思考强度合法值：max（深度推理）/ high（增强推理）/ low（轻度推理）"""
+def _build_reasoning_options(
+    cap: Any, reasoning: dict[str, Any] | None
+) -> dict[str, Any]:
+    """按 provider 家族将角色思考意图转成模型原生请求参数（原样透传）
 
-
-def _build_thinking_options(cap: Any) -> dict[str, Any]:
-    """按 provider 家族构建模型原生思考请求参数（原样透传）
-
-    THINKING.enabled 开启时按 THINKING.effort 传思考强度，
-    关闭时对智谱链路显式关闭思考（openai 兼容链路不传即无思考）。
+    思考意图来自已解析的角色配置（options 携带的 _reasoning）：
+    开启时按 effort 传思考强度，关闭时对智谱链路显式关闭思考
+    （openai 兼容链路不传即无思考）；effort 已在路由层校验合法值。
 
     参数:
         cap: provider 的对话能力实例，用于识别 provider 家族
+        reasoning: 角色思考意图 {enabled, effort}，None 视为不开启
 
     返回:
         dict[str, Any]: 模型原生思考参数（reasoning_effort / thinking）
     """
-    thinking_cfg = get_config("THINKING", {}) or {}
-    enabled = bool(thinking_cfg.get("enabled", False))
+    enabled = bool(reasoning.get("enabled", False)) if reasoning else False
     is_zhipu = "zhipu" in type(cap).__module__.lower()
     if not enabled:
         return {"thinking": {"type": "disabled"}} if is_zhipu else {}
-    raw = str(thinking_cfg.get("effort", "high") or "").strip().lower()
-    effort = raw if raw in _VALID_EFFORTS else "high"
     if is_zhipu:
         # 智谱思考仅有开关，强度由模型自行决定
         return {"thinking": {"type": "enabled"}}
+    effort = str((reasoning or {}).get("effort", "high") or "high")
     return {"reasoning_effort": effort}
 
 
@@ -134,7 +133,11 @@ class LLMHelper:
             provider = llm_manager.get_provider(name)
             return bool(provider and provider.get_capability(capability))
 
-        chat_provider = get_config("CHAT_MODEL", {}).get("provider", None)
+        routes = get_config("MODEL_ROUTES", {})
+        chat_cfg = routes.get("chat", {}) if isinstance(routes, dict) else {}
+        chat_provider = (
+            chat_cfg.get("provider") if isinstance(chat_cfg, dict) else None
+        )
         if preferred and _supports(preferred):
             names.append(preferred.lower())
         if (
@@ -164,7 +167,7 @@ class LLMHelper:
         """对话调用
 
         返回思考链与回复内容两个字段。
-        根据 THINKING 配置（enabled/effort）向 provider
+        按 options 携带的角色思考意图（_reasoning）向 provider
         传递模型原生思考参数（reasoning_effort / thinking，原样透传）。
 
         参数:
@@ -182,20 +185,18 @@ class LLMHelper:
             ValueError: provider未配置
             Exception: 调用失败
         """
-        chat_cfg = get_config("CHAT_MODEL", {})
-        use_model = model or chat_cfg.get("model", None) or ""
-        candidates = self._build_candidates(
-            Capability.CHAT,
-            provider_name or chat_cfg.get("provider", None),
-        )
+        use_model = model or ""
+        candidates = self._build_candidates(Capability.CHAT, provider_name)
 
         async def _call(name: str) -> tuple[str, str]:
             chat_cap = LLMHelper._resolve_capability(
                 name, Capability.CHAT, "对话能力"
             )
+            opts = dict(options or {})
+            reasoning = opts.pop(_REASONING_OPTION_KEY, None)
             call_options = {
-                **(options or {}),
-                **_build_thinking_options(chat_cap),
+                **opts,
+                **_build_reasoning_options(chat_cap, reasoning),
             }
             return await chat_cap.chat(
                 use_model, messages, call_options
@@ -255,20 +256,18 @@ class LLMHelper:
             ValueError: provider 未配置
             Exception: HTTP 与 CLI 均失败
         """
-        chat_cfg = get_config("CHAT_MODEL", {})
-        use_model = model or chat_cfg.get("model", None) or ""
-        candidates = self._build_candidates(
-            Capability.CHAT,
-            provider_name or chat_cfg.get("provider", None),
-        )
+        use_model = model or ""
+        candidates = self._build_candidates(Capability.CHAT, provider_name)
 
         async def _call(name: str) -> dict[str, Any]:
             chat_cap = LLMHelper._resolve_capability(
                 name, Capability.CHAT, "对话能力"
             )
+            opts = dict(options or {})
+            reasoning = opts.pop(_REASONING_OPTION_KEY, None)
             call_options = {
-                **(options or {}),
-                **_build_thinking_options(chat_cap),
+                **opts,
+                **_build_reasoning_options(chat_cap, reasoning),
             }
             return await chat_cap.chat_with_tools(
                 use_model, messages, tools, call_options

@@ -9,15 +9,6 @@ from ._common import RegisterConfig, cfg
 __all__ = ["LLM_CONFIGS"]
 
 LLM_CONFIGS: list[RegisterConfig] = [
-    # ===== 对话模型 =====
-    cfg(
-        "CHAT_MODEL",
-        {"provider": None, "model": None},
-        "对话模型配置\n"
-        " - provider: 供应商，None时用默认\n"
-        " - model: 模型名，None时用provider默认",
-        dict,
-    ),
     # ===== 嵌入模型 =====
     cfg(
         "EMBEDDING",
@@ -25,18 +16,6 @@ LLM_CONFIGS: list[RegisterConfig] = [
         "嵌入模型配置（用于记忆/知识库向量生成）\n"
         " - provider: 供应商\n"
         " - model: 模型名（如embedding-3，不能用对话模型）",
-        dict,
-    ),
-    # ===== 思考模式 =====
-    cfg(
-        "THINKING",
-        {"enabled": False, "effort": "high"},
-        "深度思考配置\n"
-        " - enabled: 是否开启深度思考（开启时向模型请求思考链）\n"
-        " - effort: 思考强度，可选值：\n"
-        "   max: 深度推理（最消耗token）\n"
-        "   high: 增强推理（默认）\n"
-        "   low: 轻度推理",
         dict,
     ),
     # ===== 用户对话Token额度 =====
@@ -57,20 +36,52 @@ LLM_CONFIGS: list[RegisterConfig] = [
     cfg(
         "MODEL_ROUTES",
         {
-            "intent": {"model": None, "provider": None, "temperature": 0.1},
-            "review": {"model": None, "provider": None, "temperature": 0.1},
-            "agent": {"model": None, "provider": None, "temperature": 0.3},
-            "sticker": {"model": None, "provider": None, "temperature": 0.4},
-            "warmup": {"model": None, "provider": None, "temperature": 0.7},
+            "chat": {
+                "model": None, "provider": None, "temperature": 0.6,
+                "capabilities": [],
+                "reasoning": {"enabled": True, "effort": "high"},
+            },
+            "intent": {
+                "model": None, "provider": None, "temperature": 0.1,
+                "capabilities": [],
+                "reasoning": {"enabled": False, "effort": "high"},
+            },
+            "review": {
+                "model": None, "provider": None, "temperature": 0.1,
+                "capabilities": [],
+                "reasoning": {"enabled": False, "effort": "high"},
+            },
+            "agent": {
+                "model": None, "provider": None, "temperature": 0.3,
+                "capabilities": [],
+                "reasoning": {"enabled": False, "effort": "high"},
+            },
+            "sticker": {
+                "model": None, "provider": None, "temperature": 0.4,
+                "capabilities": [],
+                "reasoning": {"enabled": False, "effort": "high"},
+            },
+            "warmup": {
+                "model": None, "provider": None, "temperature": 0.7,
+                "capabilities": [],
+                "reasoning": {"enabled": False, "effort": "high"},
+            },
         },
-        "模型按角色路由配置\n"
-        "每个角色可独立指定 model/provider/temperature\n"
-        "model为None时回退到CHAT_MODEL.model\n"
-        "provider为None时回退到CHAT_MODEL.provider\n"
-        "跨供应商使用模型时必须配置provider\n"
+        "模型按角色路由配置（chat 为对话主模型，其余角色缺省回退到 chat）\n"
+        "每个角色可独立指定 model/provider/temperature/capabilities/reasoning\n"
+        "chat 角色的 model/provider 即全局主模型\n"
+        "非 chat 角色 model/provider 为 None 时回退到 chat 角色\n"
+        "跨供应商使用模型时必须配置 provider\n"
+        'capabilities 统一声明该模型支持的能力，词表：'
+        '"vision"(看图/多模态输入)、"tools"(原生 function-calling)，'
+        "空列表表示未声明（看图能力回退到关键词/探测判定）\n"
+        "reasoning 声明该角色是否使用深度思考及强度：\n"
+        " - enabled: 是否开启深度思考（按模型自定义，chat 默认开）\n"
+        " - effort: 思考强度 max/high/low\n"
+        " - chat: 对话主模型与正文生成（默认开启深度思考）\n"
         " - intent: 意图推断（低温度0.1）\n"
         " - review: 响应审查（低温度0.1）\n"
-        " - agent: 统一 ReAct 循环模型（需支持 function-calling，中温度0.3）\n"
+        " - agent: 统一 ReAct 循环模型（需 function-calling，中温度0.3）\n"
         " - sticker: 贴纸选择（中温度0.4）\n"
         " - warmup: 预热任务（高温度0.7）",
         dict,
