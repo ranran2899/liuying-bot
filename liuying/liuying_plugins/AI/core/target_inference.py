@@ -89,7 +89,7 @@ class TargetInference:
         return at_ids
 
     @staticmethod
-    def _extract_reply_sender_id(
+    def extract_reply_sender_id(
         reply: Any,
     ) -> str:
         """从回复消息中提取原消息发送者ID
@@ -151,7 +151,7 @@ class TargetInference:
         reply = getattr(event, "reply", None)
         if reply is not None:
             reply_sender = (
-                TargetInference._extract_reply_sender_id(reply)
+                TargetInference.extract_reply_sender_id(reply)
             )
             if reply_sender:
                 if reply_sender == self_id:

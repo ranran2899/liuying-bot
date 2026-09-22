@@ -17,13 +17,13 @@ from nonebot_plugin_alconna import Image
 
 from liuying.utils.log import logger
 
-from ..agent.intent.emotion import emotion_manager
 from ..agent.runner import AgentResult
 from ..config import get_config
+from ..core.emotion import emotion_manager
 from ..core.llm import llm_helper
 from ..core.persona import persona_manager
+from ..core.sticker import sticker_curation
 from .humanize import HumanizeToolkit
-from .sticker import sticker_manager
 from .types import ReplyContext
 
 _TTS_AUTO_TEXT_MIN_LEN = 5
@@ -49,7 +49,7 @@ class ReplyDecisions:
         """贴纸决策
 
         优先使用 agent_result.response.sticker_mood_hint；
-        同时传入 user_id 以便策展器记录偏好。
+        直连 sticker_curation，命中时同步记录使用供策展学习。
 
         参数:
             text: 回复文本
@@ -67,17 +67,22 @@ class ReplyDecisions:
             mood_hint = ""
             if agent_result and agent_result.response:
                 mood_hint = agent_result.response.sticker_mood_hint
-            item = await sticker_manager.choose_reply_sticker_item(
-                text,
+            if not sticker_curation.should_send(
+                group_id=ctx.group_id, is_private=ctx.is_private
+            ):
+                return None
+            item = await sticker_curation.choose_for_reply(
+                text=text,
                 persona_mood=persona_mood,
                 mood_hint=mood_hint,
                 group_id=ctx.group_id,
-                is_private=ctx.is_private,
                 user_id=ctx.user_id,
+                is_private=ctx.is_private,
+                force=True,
             )
             if not item:
                 return None
-            await sticker_manager.record_usage(
+            await sticker_curation.record_usage(
                 sticker_id=item.id,
                 context_text=text,
                 detected_mood=mood_hint or persona_mood,
@@ -86,7 +91,7 @@ class ReplyDecisions:
                 user_id=ctx.user_id,
                 bot_id=ctx.bot_id or "",
             )
-            return await sticker_manager.item_to_image(item)
+            return await sticker_curation.item_to_image(item)
         except Exception as e:
             logger.debug(
                 f"贴纸决策失败: {e}", command="AI", e=e

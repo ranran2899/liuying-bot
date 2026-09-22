@@ -17,6 +17,12 @@ from liuying.utils.log import logger
 from ...core.llm import LLMHelper, llm_helper
 from ...core.llm.model_router import ROLE_CHAT, model_router
 from ...core.tools.json_utils import extract_json_payload
+from ...pipeline.style_policy import (
+    MODE_HINT_WITH_EVIDENCE,
+    MODE_HINT_WITHOUT_EVIDENCE,
+    REPLY_EVIDENCE_HEADER,
+    build_reply_stage_instruction,
+)
 from .constants import IMAGE_OUTPUT_KIND
 from .types import PersonaResponse, ToolCallRecord
 
@@ -29,6 +35,27 @@ _EMPTY_RESULT_MARKERS: tuple[str, ...] = (
     "搜索失败",
 )
 """空结果文本标记，命中的工具结果不作为证据喂给回复阶段"""
+
+_HISTORY_TAIL = 4
+"""正文阶段携带的最近历史条数"""
+
+_HISTORY_TRUNC = 200
+"""单条历史消息截断长度"""
+
+_USER_TRUNC = 500
+"""当前用户消息截断长度"""
+
+_COMPOSE_MAX_TOKENS = 2048
+"""正文生成的输出 token 上限"""
+
+_EVIDENCE_TRUNC = 200
+"""单条工具证据截断长度"""
+
+_BUDGET_CHAT = (8, 40)
+"""无工具证据的闲聊字数预算"""
+
+_BUDGET_ANSWER = (30, 120)
+"""有工具证据的说明型字数预算"""
 
 _REPLY_TEXT_PATTERN = re.compile(
     r'"reply_text"\s*:\s*"((?:\\.|[^"\\])*)"', re.IGNORECASE
@@ -56,6 +83,7 @@ class ReplyComposer:
         messages: list[dict[str, Any]],
         records: list[ToolCallRecord],
         meta: dict[str, Any],
+        max_reply_chars: int | None = None,
     ) -> PersonaResponse:
         """人格回复阶段：用主模型(ROLE_CHAT)受约束地写最终正文
 
@@ -63,6 +91,8 @@ class ReplyComposer:
             messages: 完整消息列表（[system人格, *历史, 用户]）
             records: 工具阶段的成功记录（作为证据）
             meta: finish 阶段给出的情绪/静默/澄清/TTS/贴纸/详略/要点
+            max_reply_chars: 人格声明的最大回复字数，非空时收紧
+                预算上限，作为回合级长度的唯一裁剪源
 
         返回:
             PersonaResponse: 含正文与元信息的角色化响应
@@ -71,21 +101,23 @@ class ReplyComposer:
         system_prompt = self._extract_system_prompt(messages)
         evidence = self._render_evidence(records)
         user_message = self._extract_last_user_message(messages)
-        min_chars, max_chars = self._reply_budget(bool(evidence))
+        min_chars, max_chars = self._reply_budget(
+            bool(evidence), max_reply_chars
+        )
         combined_system = (
             f"{system_prompt}\n\n"
-            f"{self._reply_instruction(min_chars, max_chars, bool(evidence))}"
+            f"{build_reply_stage_instruction(min_chars, max_chars, bool(evidence))}"
         )
         reply_messages: list[dict[str, Any]] = [
             {"role": "system", "content": combined_system}
         ]
-        for msg in self._extract_chat_history(messages)[-4:]:
+        for msg in self._extract_chat_history(messages)[-_HISTORY_TAIL:]:
             text = _flatten_content(msg.get("content", ""))
             if text:
                 reply_messages.append(
                     {
                         "role": str(msg.get("role")),
-                        "content": text[:200],
+                        "content": text[:_HISTORY_TRUNC],
                     }
                 )
         user_parts: list[str] = [
@@ -96,7 +128,7 @@ class ReplyComposer:
         key_points = str(meta.get("key_points") or "").strip()
         if key_points:
             user_parts.append(f"编排要点（内部参考，勿照搬）：{key_points}")
-        user_parts.append(f"用户消息：{user_message[:500]}")
+        user_parts.append(f"用户消息：{user_message[:_USER_TRUNC]}")
         user_parts.append("请输出角色化响应JSON。")
         reply_messages.append(
             {"role": "user", "content": "\n\n".join(user_parts)}
@@ -105,7 +137,9 @@ class ReplyComposer:
             _, content = await self._llm.chat(
                 reply_messages,
                 model=role_chat.model or None,
-                options=role_chat.apply_to_options({"max_tokens": 2048}),
+                options=role_chat.apply_to_options(
+                    {"max_tokens": _COMPOSE_MAX_TOKENS}
+                ),
                 provider_name=role_chat.provider or None,
             )
         except Exception as e:
@@ -139,13 +173,10 @@ class ReplyComposer:
                 continue
             if r.metadata.get("output_kind") == IMAGE_OUTPUT_KIND:
                 text = "已生成图片，将以图片消息形式发送"
-            lines.append(f"[{r.tool_name}] {text[:200]}")
+            lines.append(f"[{r.tool_name}] {text[:_EVIDENCE_TRUNC]}")
         if not lines:
             return ""
-        return (
-            "[本轮工具已查证到的信息，请自然融入回复，不要照搬原文、"
-            "不要提及工具或来源]\n" + "\n".join(lines)
-        )
+        return f"{REPLY_EVIDENCE_HEADER}\n" + "\n".join(lines)
 
     @staticmethod
     def _extract_system_prompt(
@@ -203,65 +234,33 @@ class ReplyComposer:
         return history
 
     @staticmethod
-    def _reply_budget(has_evidence: bool) -> tuple[int, int]:
+    def _reply_budget(
+        has_evidence: bool, cap: int | None = None
+    ) -> tuple[int, int]:
         """回复字数预算：无工具证据按闲聊短句，有证据放宽到说明型
 
-        复刻旧 planner 的 chat_short/chat_answer 长度控制。不再让
-        编排模型自选详略档（便宜模型常把闲聊误判成正常回答放宽到
-        120 字，导致堆砌背景设定的废话）。
+        不再让编排模型自选详略档（便宜模型常把闲聊误判成正常回答
+        放宽到 120 字，导致堆砌背景设定的废话）；人格声明的
+        max_response_length 作为额外上限裁剪 max，不低于 min。
 
         参数:
             has_evidence: 本轮是否有工具证据
+            cap: 人格声明的最大回复字数，None 时不裁剪
 
         返回:
             tuple[int, int]: (最小字数, 最大字数)
         """
-        return (30, 120) if has_evidence else (8, 40)
-
-    @staticmethod
-    def _reply_instruction(
-        min_chars: int, max_chars: int, need_tool: bool
-    ) -> str:
-        """回复阶段指令（沿用旧 responder.py 的角色文案与约束清单）
-
-        直接抄用旧响应器的约束与字数硬约束，仅把输出格式保持为只含
-        reply_text 的 JSON——是否静默/澄清/情绪等元信息已由编排阶段的
-        finish 工具给出，正文无需其他字段。
-
-        参数:
-            min_chars: 字数下限
-            max_chars: 字数上限
-            need_tool: 本轮是否已用工具查证（否则追加禁编造硬约束）
-
-        返回:
-            str: 回复生成指令
-        """
-        constraints = [
-            "1. 回复风格符合人格设定和用户好感度",
-            "2. 不暴露工具调用细节和证据合成过程",
-            "3. 不提及自己是AI助手",
-            "4. 回复简洁自然，符合对话场景",
-            "5. 不编造具体数字、链接、日期",
-            "6. 未调用工具且不确定时，用简短模糊回应，禁止编造",
-            "7. 不要每轮都用反问或提问收尾，别连环问；"
-            "多数时候用陈述自然接话",
-        ]
-        if not need_tool:
-            constraints.append(
-                "8. 涉及具体事实/数字/时间/人名/新闻/产品参数/专有名词/"
-                "梗，未调用工具且不确定时必须简短含糊回应，禁止编造"
-            )
-        return (
-            "你是角色化响应器。基于人格设定和证据，生成符合角色的回复。\n"
-            '只输出一个JSON对象：{"reply_text": "回复正文"}，'
-            "不要其他字段、解释、markdown或代码块。\n\n"
-            f"字数约束：reply_text必须在{min_chars}-{max_chars}字之间。\n\n"
-            "约束：\n" + "\n".join(constraints)
+        min_chars, max_chars = (
+            _BUDGET_ANSWER if has_evidence else _BUDGET_CHAT
         )
+        if cap is not None and cap > 0:
+            max_chars = min(max_chars, cap)
+            min_chars = min(min_chars, max_chars)
+        return min_chars, max_chars
 
     @staticmethod
     def _mode_hint(has_evidence: bool) -> str:
-        """就近的回复模式提示（复刻旧 responder 的 mode_hint）
+        """就近的回复模式提示（文案集中定义于 style_policy）
 
         参数:
             has_evidence: 本轮是否有工具证据
@@ -270,11 +269,8 @@ class ReplyComposer:
             str: 模式提示文本
         """
         if has_evidence:
-            return "带工具证据，自然融入证据，不要说'根据搜索结果'"
-        return (
-            "短聊天回复，只回一到两句；用户没问就别自我介绍、"
-            "不要罗列人设设定里的爱好或背景，也别总用反问收尾"
-        )
+            return MODE_HINT_WITH_EVIDENCE
+        return MODE_HINT_WITHOUT_EVIDENCE
 
     @staticmethod
     def _parse_compose(

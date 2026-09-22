@@ -20,11 +20,10 @@ from liuying.utils.log import logger
 from liuying.utils.manager.priority_manager import PriorityLifecycle
 from liuying.utils.rules import admin_check
 
-from .config import PluginConfig, get_config
-from .core.knowledge_index import knowledge_base
-from .core.llm import llm_helper, token_ledger
-from .core.memory import memory_manager
-from .core.runtime import runtime_switch
+from .boot import ensure_ai_ready
+from .config import PluginConfig
+from .core.knowledge_index import kb_connection
+from .core.llm import token_ledger
 from .handlers import (
     AdminCommands,
     ChatCommands,
@@ -35,9 +34,6 @@ from .handlers import (
     TaskCommands,
     TtsCommands,
 )
-from .jobs import setup_jobs
-from .skills import SkillRuntime, skill_loader
-from .tools.external import smart_tool_bridge
 from .tools.mcp import mcp_bridge
 
 __plugin_meta__ = PluginMetadata(
@@ -373,57 +369,16 @@ async def handle_ai_clear_all_memory(session: Uninfo) -> None:
 
 @PriorityLifecycle.on_startup(priority=20)
 async def _init_ai_plugin() -> None:
-    """AI插件初始化
+    """AI插件启动初始化
 
-    初始化内置知识库（独立 SQLite，与 liuying_db 解耦），
-    注册定时任务和技能包。
-
+    matcher 在模块导入时已注册；知识库/定时任务/技能包等
+    运行资源由 boot.ensure_ai_ready 引导（幂等），
+    运行期首次打开总开关时可补挂，无需重启。
     通过 PriorityLifecycle 注册，优先级=20，作为业务插件在核心服务
     （数据库/LLM/缓存，优先级<=10）就绪后加载。
     """
-    if not get_config("ENABLE_AI", False):
+    if not await ensure_ai_ready():
         logger.info("AI插件已禁用", command="AI")
-        return
-
-    await knowledge_base.init()
-    logger.info(
-        f"AI插件初始化完成，人格: {get_config('DEFAULT_PERSONA', 'liuying')}",
-        command="AI",
-    )
-
-    # 内置Agent工具在 tools 包导入时自动注册
-    logger.debug("Agent内置工具已自动注册", command="AI")
-
-    # 初始化运行时开关（从配置加载全局状态）
-    runtime_switch.initialize()
-    logger.debug("运行时开关已初始化", command="AI")
-
-    await setup_jobs()
-
-
-    # 显式注入主插件服务给技能包（LLM助手 + 记忆管理器）
-    runtime = SkillRuntime(
-        llm_helper=llm_helper,
-        memory_manager=memory_manager,
-    )
-    tool_count = skill_loader.register_all(runtime=runtime)
-    logger.debug(
-        f"AI技能包已加载，注册工具{tool_count}个", command="AI"
-    )
-
-    # 注册MCP远程工具（涉及子进程通信，需在异步上下文中执行）
-    mcp_count = await skill_loader.register_mcp_tools()
-    if mcp_count:
-        logger.debug(
-            f"MCP远程工具已注册{mcp_count}个", command="AI"
-        )
-
-    # 注册本体插件声明的智能模式函数工具（smart_tools桥接）
-    smart_count = smart_tool_bridge.register_all()
-    if smart_count:
-        logger.info(
-            f"已注册本体插件智能工具{smart_count}个", command="AI"
-        )
 
 
 @PriorityLifecycle.on_shutdown(priority=5)
@@ -432,5 +387,7 @@ async def _shutdown_ai_plugin() -> None:
     """
     # 关闭MCP连接池，释放全部子进程
     await mcp_bridge.close()
+    # 关闭知识库独立 SQLite 连接，释放 WAL 文件句柄
+    await kb_connection.close()
     await token_ledger.prune_old(days=1)
     logger.info("AI插件已关闭", command="AI")

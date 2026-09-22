@@ -18,8 +18,8 @@ MEMORY_CONFIGS: list[RegisterConfig] = [
     # ===== 记忆召回 =====
     cfg(
         "MEMORY_RECALL",
-        {"top_k": 5, "mode": "auto"},
-        "记忆召回配置\n - top_k: 召回数量\n - mode: 召回模式（auto/fast/deep）",
+        {"top_k": 5},
+        "记忆召回配置\n - top_k: 召回数量",
         dict,
     ),
     # ===== 记忆衰减 =====

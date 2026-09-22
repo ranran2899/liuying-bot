@@ -115,8 +115,6 @@ class ProtocolHelper:
     async def _try_api(
         bot: Any,
         api: str,
-        *,
-        logger_: Any = None,
         **kwargs: Any,
     ) -> bool:
         """尝试调用API，失败则标记unsupported
@@ -124,7 +122,6 @@ class ProtocolHelper:
         参数:
             bot: Bot对象
             api: API名
-            logger_: 日志器
             **kwargs: API调用参数
 
         返回:
@@ -137,12 +134,11 @@ class ProtocolHelper:
             return True
         except Exception as exc:
             ProtocolHelper._mark_unsupported(bot, api)
-            if logger_ is not None:
-                logger.debug(
-                    f"协议扩展 {api} 调用失败，标记为不支持: {exc}",
-                    command="AI",
-                    e=exc,
-                )
+            logger.debug(
+                f"协议扩展 {api} 调用失败，标记为不支持: {exc}",
+                command="AI",
+                e=exc,
+            )
             return False
 
     @staticmethod

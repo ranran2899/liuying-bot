@@ -8,10 +8,12 @@ import hashlib
 import math
 import re
 
+from ...config import DEFAULT_PERSONA_FALLBACK
+
 __all__ = ["MemoryEmbeddingUtils", "tokenize"]
 
-_DEFAULT_PERSONA = "default"
-"""默认人格名（未指定时回退）"""
+_DEFAULT_PERSONA = DEFAULT_PERSONA_FALLBACK
+"""默认人格名（数据列占位值，单源定义于插件 config）"""
 
 _EMBEDDING_DIM = 64
 """默认嵌入维度"""

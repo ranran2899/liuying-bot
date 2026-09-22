@@ -419,5 +419,5 @@ class TaskService:
         )
 
 
-task_service = TaskService
-"""用户任务服务单例（类方法形式，无需实例化）"""
+task_service = TaskService()
+"""用户任务服务单例（与 core 层其他有状态服务一致）"""

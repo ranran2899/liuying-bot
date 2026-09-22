@@ -21,18 +21,6 @@ MISC_CONFIGS: list[RegisterConfig] = [
         str,
     ),
     cfg(
-        "MAX_RESPONSE_LENGTH",
-        200,
-        "最大响应长度",
-        int,
-    ),
-    cfg(
-        "COST_GOLD",
-        0,
-        "调用花费金币",
-        int,
-    ),
-    cfg(
         "WEBUI_ENABLED",
         True,
         "是否启用WebUI管理接口（挂载到本体web_ui插件）",
@@ -42,12 +30,6 @@ MISC_CONFIGS: list[RegisterConfig] = [
         "DIARY_ENABLED",
         True,
         "是否启用日记系统",
-        bool,
-    ),
-    cfg(
-        "PROACTIVE_DIAGNOSTICS_ENABLED",
-        False,
-        "是否启用主动诊断",
         bool,
     ),
     cfg(

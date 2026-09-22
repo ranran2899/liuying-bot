@@ -436,9 +436,9 @@ class PersonaManager:
                     + "\n".join(meme_lines)
                 )
 
-        max_len = persona.get("max_response_length", 200)
-        parts.append(f"\n\n[输出要求]\n回复保持简洁，不超过{max_len}字")
-
+        # 回复长度不再在人格提示词中声明：回合级字数预算由
+        # ReplyComposer 单点控制，人格的 max_response_length
+        # 字段由回复生成器读取并作为预算上限
         return "".join(parts)
 
     async def get_user_persona(self, user_id: str) -> str:

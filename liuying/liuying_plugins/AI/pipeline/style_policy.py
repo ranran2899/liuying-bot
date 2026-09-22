@@ -1,16 +1,26 @@
-"""回复风格策略
+"""回复风格与生成阶段提示词策略
 
-构建人设与输出风格提示词，防止 AI 堆砌网络热词、圈子黑话、
-流行梗或模板化口癖。同时提供图片身份保护，避免 AI 代入图片角色。
+集中管理对话生成链路的共享 LLM 指令文案：人设与输出风格、
+工具使用原则、多话题防串扰、工具编排阶段指令、finish 收束
+描述、回复阶段受约束生成指令与模式提示、证据块头部与
+安全重试提示模板，防止同类文案多处漂移。
 
-所有文本为模块级常量，导入时构建一次，不发起 LLM 调用。
+所有文本为模块级常量/纯函数，导入时构建一次，不发起 LLM 调用。
 """
 
 __all__ = [
     "CROSSTALK_GUARD_PROMPT",
     "CROSSTALK_MARKER",
+    "FINISH_KEY_POINTS_DESCRIPTION",
+    "FINISH_STAGE_DESCRIPTION",
+    "LOOP_INSTRUCTION_PROMPT",
+    "MODE_HINT_WITHOUT_EVIDENCE",
+    "MODE_HINT_WITH_EVIDENCE",
+    "REPLY_EVIDENCE_HEADER",
+    "RETRY_PERSONA_HINT_TEMPLATE",
     "TOOL_GUIDANCE_PROMPT",
     "ReplyStylePolicy",
+    "build_reply_stage_instruction",
 ]
 
 
@@ -72,6 +82,92 @@ CROSSTALK_GUARD_PROMPT = (
 
 CROSSTALK_MARKER = "也不要把无关上下文糊上去。"
 """防串扰提示尾部特征子串，用于幂等检查防止重复注入"""
+
+LOOP_INSTRUCTION_PROMPT = (
+    "你在工具编排阶段：按上面的工具使用原则决定要不要调用工具"
+    "支撑回答，需要就调用、读结果后可继续；信息够了或判断该静默/"
+    "该澄清时调用 finish 收束。本阶段只做工具决策与收束，不要写"
+    "面向用户的正文。"
+)
+"""工具编排阶段指令（只讲循环机制，工具取舍原则交给 TOOL_GUIDANCE）"""
+
+FINISH_STAGE_DESCRIPTION = (
+    "结束工具编排阶段。当你已掌握足够信息、或判断应静默/"
+    "需澄清时调用它。不要在此写面向用户的正文，正文由后续的"
+    "人格回复阶段生成；这里只需给出是否静默/是否澄清与情绪/TTS/"
+    "贴纸等提示。"
+)
+"""finish 元工具描述：收束编排阶段且不写正文"""
+
+FINISH_KEY_POINTS_DESCRIPTION = (
+    "供回复阶段参考的要点/结论（内部用，可空）："
+    "跨工具查证后的结论性信息，用简短要点，勿写成整句回复"
+)
+"""finish 元工具 key_points 参数描述"""
+
+MODE_HINT_WITH_EVIDENCE = (
+    "带工具证据，自然融入证据，不要说'根据搜索结果'"
+)
+"""回复模式提示：有工具证据"""
+
+MODE_HINT_WITHOUT_EVIDENCE = (
+    "短聊天回复，只回一到两句；用户没问就别自我介绍、"
+    "不要罗列人设设定里的爱好或背景，也别总用反问收尾"
+)
+"""回复模式提示：无工具证据的短聊天"""
+
+REPLY_EVIDENCE_HEADER = (
+    "[本轮工具已查证到的信息，请自然融入回复，不要照搬原文、"
+    "不要提及工具或来源]"
+)
+"""正文阶段证据块头部说明"""
+
+RETRY_PERSONA_HINT_TEMPLATE = (
+    "\n[重要提示] 请直接以{persona}的身份回复，"
+    "不要使用模板化拒绝用语，不要提及自己是AI或助手。"
+    "如果确实无法回答，简短说一句即可。"
+)
+"""安全过滤命中后的重试提示模板（{persona} 代入人格名）"""
+
+
+def build_reply_stage_instruction(
+    min_chars: int, max_chars: int, need_tool: bool
+) -> str:
+    """构建正文生成阶段指令（沿用旧 responder 的角色文案与约束清单）
+
+    输出格式为只含 reply_text 的 JSON：是否静默/澄清/情绪等
+    元信息已由编排阶段 finish 工具给出，正文无需其他字段。
+
+    参数:
+        min_chars: 字数下限
+        max_chars: 字数上限
+        need_tool: 本轮是否已用工具查证（否则追加禁编造硬约束）
+
+    返回:
+        str: 回复生成指令
+    """
+    constraints = [
+        "1. 回复风格符合人格设定和用户好感度",
+        "2. 不暴露工具调用细节和证据合成过程",
+        "3. 不提及自己是AI助手",
+        "4. 回复简洁自然，符合对话场景",
+        "5. 不编造具体数字、链接、日期",
+        "6. 未调用工具且不确定时，用简短模糊回应，禁止编造",
+        "7. 不要每轮都用反问或提问收尾，别连环问；"
+        "多数时候用陈述自然接话",
+    ]
+    if not need_tool:
+        constraints.append(
+            "8. 涉及具体事实/数字/时间/人名/新闻/产品参数/专有名词/"
+            "梗，未调用工具且不确定时必须简短含糊回应，禁止编造"
+        )
+    return (
+        "你是角色化响应器。基于人格设定和证据，生成符合角色的回复。\n"
+        '只输出一个JSON对象：{"reply_text": "回复正文"}，'
+        "不要其他字段、解释、markdown或代码块。\n\n"
+        f"字数约束：reply_text必须在{min_chars}-{max_chars}字之间。\n\n"
+        "约束：\n" + "\n".join(constraints)
+    )
 
 
 class ReplyStylePolicy:

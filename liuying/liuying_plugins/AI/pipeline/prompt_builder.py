@@ -9,12 +9,11 @@ import asyncio
 
 from liuying.utils.log import logger
 
-from ..agent.intent.emotion import emotion_manager
-from ..agent.intent.group_style import ProfileToolkit, group_profile
 from ..config import get_config
 from ..core.context import ContextPolicy, context_manager, thread_tracker
+from ..core.emotion import emotion_manager
 from ..core.group import group_social
-from ..core.llm import llm_helper
+from ..core.group.profile import ProfileToolkit, group_profile
 from ..core.memory import memory_manager
 from ..core.peer_awareness import peer_awareness
 from ..core.persona import persona_manager
@@ -86,10 +85,10 @@ class PromptBuilder:
         parts.append(context_manager.get_time_flavor_prompt())
 
         if ctx.group_id:
+            # 群风格只读注入：抽取与持久化由 group_style_autobuild
+            # 定时任务负责，热路径不再针对单条消息触发 LLM 抽取
             try:
-                style = await group_profile.get_or_extract_style(
-                    ctx.group_id, ctx.text, llm_helper
-                )
+                style = await group_profile.get_style(ctx.group_id)
                 style_prompt = ProfileToolkit.build_group_style_prompt_block(style)
                 if style_prompt:
                     parts.append(style_prompt)

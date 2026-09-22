@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from liuying.liuying_plugins.AI.agent.intent.emotion import emotion_manager
+from liuying.liuying_plugins.AI.core.emotion import emotion_manager
 from liuying.liuying_plugins.AI.core.memory import memory_manager
 from liuying.liuying_plugins.AI.models.group_context import GroupContextSnapshot
 

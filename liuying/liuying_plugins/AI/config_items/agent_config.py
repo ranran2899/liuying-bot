@@ -41,14 +41,8 @@ AGENT_CONFIGS: list[RegisterConfig] = [
     cfg(
         "MEMORY_EVOLVE_ENABLED",
         True,
-        "是否启用记忆进化",
-        bool,
-    ),
-    # ===== 聊天意图语义帧 =====
-    cfg(
-        "CHAT_INTENT_ENABLED",
-        True,
-        "是否启用LLM语义帧推断（关闭时仅用关键词规则）",
+        "是否启用每日批量记忆进化（LLM判断新旧记忆关系；"
+        "关闭后写路径与巩固任务均不触发进化）",
         bool,
     ),
     # ===== 用户自定义定时任务 =====

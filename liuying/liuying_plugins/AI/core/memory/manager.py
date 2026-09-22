@@ -2,19 +2,17 @@
 
 4层记忆管理（working/episodic/semantic/background）+
 5路召回（FTS5/向量/嵌入/实体/时间）+ RRF融合 +
-记忆衰减与巩固 + 记忆进化（覆盖/合并/巩固/冲突）。
+记忆衰减与巩固。写路径只负责落库与建索引；记忆进化
+（覆盖/合并/巩固/冲突的 LLM 判断）由每日巩固任务经
+ evolve_recent 批量执行，避免每条消息触发后台 LLM 风暴。
 所有记忆绑定 persona_name，实现人设间记忆数据隔离。
 """
 
 import asyncio
-from collections.abc import Coroutine
-from typing import Any
+from datetime import datetime, timedelta
 
 from liuying.utils.log import logger
 
-from ...agent.intent.memory_consolidate import MemoryConsolidationService
-from ...agent.intent.memory_evolve import MemoryEvolveService
-from ...config import get_config
 from ...models.memory_item import MemoryItem, MemoryTier
 from ..knowledge_index import knowledge_base
 from ._common import (
@@ -22,18 +20,13 @@ from ._common import (
     _WORKING_EXPIRE_HOURS,
     MemoryEmbeddingUtils,
 )
-from .background_intelligence import background_intelligence
 from .embedding_service import EmbeddingService
+from .memory_consolidate import MemoryConsolidationService
+from .memory_evolve import MemoryEvolveService
 from .recall import MemoryRecallItem, MemoryRecallService
 
-_BG_SEMAPHORE = asyncio.Semaphore(4)
-"""后台任务并发信号量
-
-限制记忆进化与后台智能任务的总并发数为 4：
-每次 add 都会派生两个后台 Task（evolve 与
-background_intelligence），高频写入时若无上限会
-造成任务无限堆积，拖垮事件循环并放大 LLM 调用压力。
-"""
+_EVOLVE_BATCH_LIMIT = 20
+"""单用户单次批量进化的新记忆上限"""
 
 
 class MemoryManager:
@@ -41,9 +34,8 @@ class MemoryManager:
 
     管理4层记忆，提供5路召回+RRF融合的检索能力。
     所有记忆绑定 persona_name，实现人设间数据隔离。
-    集成记忆进化引擎，写入后自动判断与旧记忆的关系。
     召回/巩固/进化能力由组合式内部服务提供，
-    依赖通过构造器显式注入。
+    依赖通过构造器显式注入；进化服务由定时任务批量驱动。
     """
 
     def __init__(self, db=None) -> None:
@@ -55,7 +47,6 @@ class MemoryManager:
         self._db = db or knowledge_base
         self._embedding_service = EmbeddingService()
         self._embedding_dim = self._embedding_service.embedding_dim
-        self._bg_tasks: set[asyncio.Task] = set()
         self._recall_service = MemoryRecallService(
             self._db, self._embedding_service
         )
@@ -72,7 +63,6 @@ class MemoryManager:
         query: str,
         group_id: str | None = None,
         top_k: int = 5,
-        mode: str = "auto",
         persona_name: str = _DEFAULT_PERSONA,
     ) -> list[MemoryRecallItem]:
         """记忆召回（委托召回服务）
@@ -82,7 +72,6 @@ class MemoryManager:
             query: 查询文本
             group_id: 群组ID
             top_k: 返回数量
-            mode: 召回模式（auto/fast/deep）
             persona_name: bot人格名
 
         返回:
@@ -93,7 +82,6 @@ class MemoryManager:
             query=query,
             group_id=group_id,
             top_k=top_k,
-            mode=mode,
             persona_name=persona_name,
         )
 
@@ -179,90 +167,54 @@ class MemoryManager:
                 command="AI",
                 e=e,
             )
-        # 记忆进化：后台异步执行，不阻塞写入返回
-        # 持有Task强引用防止被GC回收导致任务静默取消
-        if get_config("MEMORY_EVOLVE_ENABLED", True):
-            evolve_task = asyncio.create_task(
-                self._run_bg_limited(
-                    self._safe_evolve(
-                        user_id=user_id,
-                        new_memory_id=memory.id,
-                        new_summary=use_summary,
-                        group_id=group_id,
-                        persona_name=persona_name,
-                    )
-                )
-            )
-            self._bg_tasks.add(evolve_task)
-            evolve_task.add_done_callback(self._bg_tasks.discard)
-            # 后台智能：防抖触发去重/晶体化
-            bg_task = asyncio.create_task(
-                self._run_bg_limited(
-                    background_intelligence.notify_memory_added(
-                        user_id=user_id,
-                        memory_id=memory.id,
-                        summary=use_summary,
-                        group_id=group_id,
-                        persona_name=persona_name,
-                    )
-                )
-            )
-            self._bg_tasks.add(bg_task)
-            bg_task.add_done_callback(self._bg_tasks.discard)
         return memory.id
 
-    @staticmethod
-    async def _run_bg_limited(
-        coro: Coroutine[Any, Any, None],
-    ) -> None:
-        """在信号量限流下执行后台协程
-
-        通过 _BG_SEMAPHORE 限制后台任务总并发数，
-        防止高频写入时任务堆积拖垮事件循环。
-        同时兜底吞掉协程异常，避免未检索的 Task 异常告警。
-
-        参数:
-            coro: 待执行的后台协程
-        """
-        async with _BG_SEMAPHORE:
-            try:
-                await coro
-            except Exception as e:
-                logger.debug(
-                    f"后台任务执行失败: {e}", command="AI", e=e
-                )
-
-    async def _safe_evolve(
+    async def evolve_recent(
         self,
         user_id: str,
-        new_memory_id: int,
-        new_summary: str,
-        group_id: str | None,
-        persona_name: str,
-    ) -> None:
-        """安全执行记忆进化（吞异常，不阻塞主流程）
+        persona_name: str = _DEFAULT_PERSONA,
+        group_id: str | None = None,
+        window_hours: int = 24,
+    ) -> int:
+        """对时间窗口内新增记忆批量执行进化判断
+
+        供每日巩固任务调用：逐条召回候选旧记忆并由 LLM
+        判断新旧关系（覆盖/合并/巩固/冲突），进化失败的单条
+        由进化服务内部降级为 unrelated，不中断批次。
 
         参数:
             user_id: 用户ID
-            new_memory_id: 新记忆ID
-            new_summary: 新记忆摘要
-            group_id: 群组ID
             persona_name: bot人格名
+            group_id: 群组ID，None时不限定群组
+            window_hours: 新记忆时间窗口（小时）
+
+        返回:
+            int: 发生有效进化（非 unrelated）的记忆数
         """
-        try:
-            await self._evolve_service.evolve_memory(
+        since = datetime.now() - timedelta(hours=window_hours)
+        query = MemoryItem.filter(
+            user_id=user_id,
+            persona_name=persona_name,
+            create_time__gte=since,
+            superseded_by=None,
+        )
+        if group_id:
+            query = query.filter(group_id=group_id)
+        memories = await query.order_by("-create_time").limit(
+            _EVOLVE_BATCH_LIMIT
+        ).all()
+        evolved = 0
+        for mem in memories:
+            relation = await self._evolve_service.evolve_memory(
                 user_id=user_id,
-                new_memory_id=new_memory_id,
-                new_summary=new_summary,
-                group_id=group_id,
+                new_memory_id=mem.id,
+                new_summary=mem.summary or mem.content,
+                group_id=mem.group_id,
                 persona_name=persona_name,
             )
-        except Exception as e:
-            logger.debug(
-                f"记忆进化后台任务失败: {e}",
-                command="AI",
-                e=e,
-            )
+            if relation != "unrelated":
+                evolved += 1
+        return evolved
 
     async def _index_memory(self, memory: MemoryItem) -> None:
         """为记忆建立检索索引（原子写入）

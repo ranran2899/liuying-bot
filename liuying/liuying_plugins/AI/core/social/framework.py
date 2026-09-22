@@ -1,12 +1,11 @@
 """SocialTrigger框架
 
-把"什么时候触发"（cron/interval/event）与"触发后做什么"
-（handler）解耦。handler通过SocialContext拿到运行所需的
-全部依赖，便于测试和扩展。
+把"什么时候触发"（cron/interval）与"触发后做什么"（handler）
+解耦：触发器以 name/调度类型/参数声明式注册，由注册表统一
+挂到 APScheduler；启用与否由注册方在注册时决定。
 
-注册表模式：通过SocialTriggerRegistry单例注册触发器，
-social_trigger_registry.list()列出所有已注册的触发器。
-setup_to_scheduler()将所有触发器注册到APScheduler调度。
+注册表模式：通过 social_trigger_registry 单例注册触发器，
+setup_to_scheduler() 将所有触发器注册到调度。
 """
 
 from collections.abc import Awaitable, Callable
@@ -19,7 +18,6 @@ from liuying.utils.log import logger
 
 __all__ = [
     "ScheduleKind",
-    "SocialContext",
     "SocialTrigger",
     "SocialTriggerRegistry",
     "social_trigger_registry",
@@ -34,28 +32,6 @@ class ScheduleKind(StrEnum):
 
     CRON = "cron"
     INTERVAL = "interval"
-    EVENT = "event"
-
-
-@dataclass(slots=True)
-class SocialContext:
-    """场景handler收到的运行时上下文
-
-    Attributes:
-        group_id: 群组ID
-        user_id: 用户ID
-        bot: bot实例
-        config_get: 配置读取函数
-        now: 当前时间
-    """
-
-    group_id: str = ""
-    user_id: str = ""
-    bot: Any = None
-    config_get: Callable[[str, Any], Any] = field(
-        default_factory=lambda: lambda k, d: d
-    )
-    now: Any = None
 
 
 @dataclass(slots=True)
@@ -65,35 +41,28 @@ class SocialTrigger:
     schedule_kind/schedule_args决定调度方式：
     - kind="cron" + args={"hour": 8, "minute": 0}
     - kind="interval" + args={"minutes": 30}
-    - kind="event" 则由消息钩子在适当时机调用handler
 
     Attributes:
-        name: 触发器名称（同时作为task_id）
-        handler: 处理函数
-        schedule_kind: 调度类型（cron/interval/event）
+        name: 触发器名称（同时作为task_id后缀）
+        handler: 无参数异步处理函数，内部自行遍历目标群/用户
+        schedule_kind: 调度类型（cron/interval）
         schedule_args: 调度参数
-        enabled: 启用判断函数
     """
 
     name: str
-    handler: Callable[
-        [SocialContext], Awaitable[None]
-    ]
-    schedule_kind: str = ScheduleKind.EVENT
+    handler: Callable[[], Awaitable[None]]
+    schedule_kind: str = ScheduleKind.CRON
     schedule_args: dict[str, Any] = field(
         default_factory=dict
-    )
-    enabled: Callable[[Any], bool] = field(
-        default=lambda _config: True
     )
 
 
 class SocialTriggerRegistry:
     """SocialTrigger注册表
 
-    集中管理所有主动社交触发器的注册与查询，
-    替代原先的模块级散装函数。setup_to_scheduler将
-    所有已注册触发器按schedule_kind注册到APScheduler。
+    集中管理所有主动社交场景触发器的注册与查询。
+    setup_to_scheduler 将所有已注册触发器按 schedule_kind
+    注册到 APScheduler；启用判断由注册方在 register 前完成。
     """
 
     def __init__(self) -> None:
@@ -110,6 +79,10 @@ class SocialTriggerRegistry:
         """
         self._registry[trigger.name] = trigger
 
+    def clear(self) -> None:
+        """清空注册表（重新注册前调用，避免重启叠加）"""
+        self._registry.clear()
+
     def list(self) -> list[SocialTrigger]:
         """列出所有已注册的触发器
 
@@ -121,19 +94,23 @@ class SocialTriggerRegistry:
     async def setup_to_scheduler(self) -> int:
         """将所有触发器注册到APScheduler调度
 
-        遍历注册表，跳过event类型与disabled的触发器，
         按schedule_kind调用task_manager.add_cron /
-        add_interval。event类型由消息钩子手动触发，
-        不在此注册。
+        add_interval，任务体统一兜底异常。
 
         返回:
             int: 成功注册的触发器数量
         """
         count = 0
         for trigger in self.list():
-            if not trigger.enabled(None):
-                continue
-            if trigger.schedule_kind == ScheduleKind.EVENT:
+            if trigger.schedule_kind not in (
+                ScheduleKind.CRON,
+                ScheduleKind.INTERVAL,
+            ):
+                logger.debug(
+                    f"未知调度类型 {trigger.schedule_kind}，"
+                    f"跳过触发器 {trigger.name}",
+                    command="AI",
+                )
                 continue
             wrapped = self._wrap_handler(trigger.handler)
             task_id = f"ai_social_{trigger.name}"
@@ -144,19 +121,12 @@ class SocialTriggerRegistry:
                         func=wrapped,
                         **trigger.schedule_args,
                     )
-                elif trigger.schedule_kind == ScheduleKind.INTERVAL:
+                else:
                     await task_manager.add_interval(
                         task_id=task_id,
                         func=wrapped,
                         **trigger.schedule_args,
                     )
-                else:
-                    logger.debug(
-                        f"未知调度类型 {trigger.schedule_kind}，"
-                        f"跳过触发器 {trigger.name}",
-                        command="AI",
-                    )
-                    continue
                 count += 1
             except Exception as e:
                 logger.warning(
@@ -168,26 +138,22 @@ class SocialTriggerRegistry:
 
     @staticmethod
     def _wrap_handler(
-        handler: Callable[[SocialContext], Awaitable[None]],
+        handler: Callable[[], Awaitable[None]],
     ) -> Callable[[], Awaitable[None]]:
-        """包装handler为无参数协程
+        """包装任务体：统一兜底异常
 
-        SocialTrigger.handler接收SocialContext，但APScheduler
-        的任务函数无参数。包装时传入空SocialContext，
-        handler内部自行遍历目标群/用户。
+        单个社交场景异常不应影响调度器中其他任务的执行。
 
         参数:
             handler: 触发器处理函数
 
         返回:
-            无参数协程函数
+            带兜底的无参数协程函数
         """
 
         async def _wrapped() -> None:
-            # 定时任务体统一兜底：单个社交场景异常
-            # 不应影响调度器中其他任务的执行
             try:
-                await handler(SocialContext())
+                await handler()
             except Exception as e:
                 logger.warning(
                     f"社交触发器执行失败: {e}",
@@ -199,3 +165,4 @@ class SocialTriggerRegistry:
 
 
 social_trigger_registry = SocialTriggerRegistry()
+"""社交触发器注册表单例"""

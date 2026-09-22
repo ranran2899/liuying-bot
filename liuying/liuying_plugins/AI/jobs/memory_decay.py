@@ -1,6 +1,6 @@
 """记忆衰减与巩固任务
 
-定期执行记忆衰减、记忆巩固、用户画像更新。
+定期执行记忆衰减、记忆巩固（含批量记忆进化）、用户画像更新。
 基于 task_manager 注册定时任务。
 """
 
@@ -77,6 +77,8 @@ class MemoryDecayHelper:
                 )
             )
             total = 0
+            evolved = 0
+            evolve_enabled = get_config("MEMORY_EVOLVE_ENABLED", True)
             for user_id, group_id, persona_name in users:
                 # 单用户巩固失败（LLM/DB异常）不中断其余用户
                 try:
@@ -87,15 +89,25 @@ class MemoryDecayHelper:
                         persona_name=persona_name,
                     )
                     total += count
+                    if evolve_enabled:
+                        # 写路径已不再逐条触发进化，
+                        # 由本任务对窗口内新记忆批量判定
+                        evolved += await memory_manager.evolve_recent(
+                            user_id,
+                            persona_name=persona_name,
+                            group_id=group_id,
+                            window_hours=24,
+                        )
                 except Exception as e:
                     logger.warning(
                         f"用户记忆巩固失败 {user_id}: {e}",
                         command="AI",
                         e=e,
                     )
-            if total > 0:
+            if total > 0 or evolved > 0:
                 logger.info(
-                    f"记忆巩固完成，处理{total}条",
+                    f"记忆巩固完成: 巩固{total}条，"
+                    f"有效进化{evolved}条",
                     command="AI",
                 )
         except Exception as e:

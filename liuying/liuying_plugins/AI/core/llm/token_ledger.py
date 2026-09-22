@@ -1,6 +1,6 @@
 """Token消耗账本
 
-会话级用量追踪：通过 patch liuying.services.LLM.token_tracker.record，
+会话级用量追踪：通过本体 token_tracker 的 add_listener 官方回调，
 在一次对话周期内累计所有 LLM 调用的 token 消耗，
 供用户对话额度（UserToken）按实际消耗扣费使用。
 
@@ -11,7 +11,6 @@ from contextvars import ContextVar
 from typing import Any
 
 from liuying.services.LLM import token_tracker
-from liuying.utils.log import logger
 
 from ...models.token_ledger_record import TokenLedgerRecord
 
@@ -21,54 +20,35 @@ _conversation_usage: ContextVar[dict[str, int] | None] = ContextVar(
 )
 """当前对话的 token 用量累加器（None 表示未开启追踪）"""
 
-_tracker_patched = False
-"""token_tracker.record 是否已被 patch（幂等标记）"""
 
+def _on_token_record(
+    provider: str,
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+) -> None:
+    """本体 token_tracker 监听回调：累加到会话级累加器
 
-def _patch_token_tracker() -> None:
-    """patch token_tracker.record 使其同时累计到会话级累加器
+    仅在当前异步上下文开启了追踪时生效；参数已在上游
+    归一（total_tokens 非正时由调用方自行计算）。
 
-    patch 是幂等的，仅执行一次。patch 后所有 provider 调用
-    token_tracker.record 时，若当前会话开启了追踪，则将
-    prompt/completion/total tokens 累加到 ContextVar。
+    参数:
+        provider: 供应商名
+        model: 模型名
+        prompt_tokens: 提示 token 数
+        completion_tokens: 补全 token 数
+        total_tokens: 总 token 数
     """
-    global _tracker_patched
-    if _tracker_patched:
+    acc = _conversation_usage.get()
+    if acc is None:
         return
-    _tracker_patched = True
-
-    original_record = token_tracker.record
-
-    async def _patched_record(
-        provider: str = "",
-        model: str = "",
-        prompt_tokens: int = 0,
-        completion_tokens: int = 0,
-        total_tokens: int = 0,
-    ) -> None:
-        """patched record：先调用原始记录，再累计到会话累加器"""
-        await original_record(
-            provider=provider,
-            model=model,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-        )
-        acc = _conversation_usage.get()
-        if acc is None:
-            return
-        if total_tokens <= 0:
-            total_tokens = prompt_tokens + completion_tokens
-        acc["prompt_tokens"] += max(0, prompt_tokens)
-        acc["completion_tokens"] += max(0, completion_tokens)
-        acc["total_tokens"] += max(0, total_tokens)
-        acc["call_count"] += 1
-
-    token_tracker.record = _patched_record
-    logger.debug(
-        "token_tracker.record 已 patch，启用会话级用量追踪",
-        command="AI",
-    )
+    if total_tokens <= 0:
+        total_tokens = prompt_tokens + completion_tokens
+    acc["prompt_tokens"] += max(0, prompt_tokens)
+    acc["completion_tokens"] += max(0, completion_tokens)
+    acc["total_tokens"] += max(0, total_tokens)
+    acc["call_count"] += 1
 
 
 _EMPTY_USAGE: dict[str, int] = {
@@ -91,13 +71,14 @@ class TokenTrackingHelper:
     def start_conversation_tracking() -> Any:
         """开启会话级 token 用量追踪
 
-        初始化一个累加器字典并通过 ContextVar 绑定到当前异步上下文，
+        向本体 token_tracker 注册监听回调（内部去重，幂等），
+        初始化累加器字典并通过 ContextVar 绑定到当前异步上下文，
         在此上下文内发起的所有 LLM 调用都会累加到此字典。
 
         返回:
             Any: ContextVar token，用于结束后 reset 回原状态。
         """
-        _patch_token_tracker()
+        token_tracker.add_listener(_on_token_record)
         accumulator: dict[str, int] = {
             "prompt_tokens": 0,
             "completion_tokens": 0,

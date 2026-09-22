@@ -9,6 +9,7 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.utils.message import MessageUtils
 
 from ..config import get_config
+from ..core.runtime import Feature, runtime_switch
 from ..core.tasks_service import task_service
 
 __all__ = [
@@ -262,7 +263,7 @@ class TaskCommands:
         返回:
             bool: 是否允许继续处理
         """
-        if not get_config("ENABLE_AI", False):
+        if not runtime_switch.is_enabled(Feature.AI):
             return False
         if not get_config("USER_TASKS_ENABLED", True):
             return False

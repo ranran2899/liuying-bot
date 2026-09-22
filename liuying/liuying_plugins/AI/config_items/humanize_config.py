@@ -35,16 +35,10 @@ HUMANIZE_CONFIGS: list[RegisterConfig] = [
         {
             "enabled": True,
             "probability": 0.24,
-            "semantic_enabled": True,
-            "cache_enabled": True,
-            "auto_label_enabled": False,
         },
         "贴纸配置\n"
         " - enabled: 是否启用\n"
-        " - probability: 触发概率\n"
-        " - semantic_enabled: 语义分析\n"
-        " - cache_enabled: 缓存\n"
-        " - auto_label_enabled: 自动标注",
+        " - probability: 触发概率",
         dict,
     ),
     # ===== 表情表态 =====

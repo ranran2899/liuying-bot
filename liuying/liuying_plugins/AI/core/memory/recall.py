@@ -11,7 +11,6 @@ from typing import Any, TypedDict
 
 from liuying.utils.log import logger
 
-from ...agent.intent.knowledge_rewrite import rewrite_query
 from ...config import get_config
 from ...models.memory_item import MemoryItem
 from ..knowledge_index import KnowledgeBase
@@ -22,6 +21,7 @@ from ._common import (
     MemoryEmbeddingUtils,
 )
 from .embedding_service import EmbeddingService
+from .knowledge_rewrite import rewrite_query
 from .search_ranker import search_ranker
 
 
@@ -69,7 +69,6 @@ class MemoryRecallService:
         query: str,
         group_id: str | None = None,
         top_k: int = 5,
-        mode: str = "auto",
         persona_name: str = _DEFAULT_PERSONA,
     ) -> list[MemoryRecallItem]:
         """记忆召回主入口
@@ -87,7 +86,6 @@ class MemoryRecallService:
             query: 查询文本
             group_id: 群组ID
             top_k: 返回数量
-            mode: 召回模式（auto/fast/deep）
             persona_name: bot人格名
 
         返回:

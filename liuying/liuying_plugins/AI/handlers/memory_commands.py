@@ -7,9 +7,9 @@ from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.message import MessageUtils
 
-from ..config import get_config
 from ..core.memory import memory_manager
 from ..core.persona import persona_manager
+from ..core.runtime import Feature, runtime_switch
 from ..models.conversation_record import ConversationRecord
 
 __all__ = [
@@ -52,7 +52,7 @@ class MemoryCommands:
 
         仅展示当前用户当前人格的记忆，确保人设间数据隔离。
         """
-        if not get_config("ENABLE_AI", False):
+        if not runtime_switch.is_enabled(Feature.AI):
             return
 
         user_id, group_id, persona_name = (
@@ -78,7 +78,7 @@ class MemoryCommands:
 
         仅清空当前用户当前人格的对话记录。
         """
-        if not get_config("ENABLE_AI", False):
+        if not runtime_switch.is_enabled(Feature.AI):
             return
 
         user_id, group_id, persona_name = (
@@ -97,7 +97,7 @@ class MemoryCommands:
 
         清除当前用户当前bot人格的所有记忆数据（含搜索索引）。
         """
-        if not get_config("ENABLE_AI", False):
+        if not runtime_switch.is_enabled(Feature.AI):
             return
 
         user_id, group_id, persona_name = (

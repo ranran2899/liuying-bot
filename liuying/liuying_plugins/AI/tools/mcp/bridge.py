@@ -93,6 +93,9 @@ class McpStdioClient:
         self._env = env or None
         self._proc: asyncio.subprocess.Process | None = None
         self._request_id = 0
+        self._rpc_lock = asyncio.Lock()
+        """RPC 串行锁：stdio 单连接上请求/响应必须一对一，
+        并发读写会互相丢失响应（id 不匹配的消息被丢弃）导致挂起"""
 
     @property
     def alive(self) -> bool:
@@ -189,8 +192,9 @@ class McpStdioClient:
     ) -> dict[str, Any]:
         """发送JSON-RPC请求并等待响应
 
-        读循环中跳过服务器主动推送的 notification 消息
-        （无 id 或 id 不匹配），仅返回与本次请求 id 匹配的响应。
+        全程持有 _rpc_lock 串行化，防止并发调用在同一 stdout
+        读循环上互串响应；持锁期间读到的非本次 id 的消息
+        （服务器主动推送 notification）仍会跳过。
 
         参数:
             method: 方法名
@@ -201,35 +205,37 @@ class McpStdioClient:
 
         异常:
             RuntimeError: 客户端未启动、连接已关闭或响应携带错误
+            ValueError: 响应Content-Length头缺失或非法
         """
         if self._proc is None or self._proc.stdout is None:
             raise RuntimeError("MCP客户端未启动")
-        self._request_id += 1
-        req_id = self._request_id
-        message = json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "method": method,
-                "params": params,
-            },
-            ensure_ascii=False,
-        )
-        await self._write_message(message)
-        while True:
-            response = await self._read_message()
-            if not response:
-                raise RuntimeError("MCP连接已关闭")
-            data = json.loads(response)
-            if data.get("id") != req_id:
-                # notification 推送或过期响应，跳过继续读
-                continue
-            if "error" in data:
-                err = data["error"]
-                raise RuntimeError(
-                    f"MCP错误({err.get('code')}): {err.get('message')}"
-                )
-            return dict(data.get("result", {}))
+        async with self._rpc_lock:
+            self._request_id += 1
+            req_id = self._request_id
+            message = json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "method": method,
+                    "params": params,
+                },
+                ensure_ascii=False,
+            )
+            await self._write_message(message)
+            while True:
+                response = await self._read_message()
+                if not response:
+                    raise RuntimeError("MCP连接已关闭")
+                data = json.loads(response)
+                if data.get("id") != req_id:
+                    # notification 推送或过期响应，跳过继续读
+                    continue
+                if "error" in data:
+                    err = data["error"]
+                    raise RuntimeError(
+                        f"MCP错误({err.get('code')}): {err.get('message')}"
+                    )
+                return dict(data.get("result", {}))
 
     async def _write_message(self, body: str) -> None:
         """写入JSON-RPC消息（带Content-Length头）"""
@@ -241,7 +247,12 @@ class McpStdioClient:
         await self._proc.stdin.drain()
 
     async def _read_message(self) -> str:
-        """读取JSON-RPC消息（解析Content-Length头）"""
+        """读取JSON-RPC消息（解析Content-Length头）
+
+        异常:
+            ValueError: Content-Length 头缺失或非法（非数字），
+                抛出后由上层判定连接损坏并重建
+        """
         if self._proc is None or self._proc.stdout is None:
             return ""
         headers: dict[str, str] = {}
@@ -253,7 +264,13 @@ class McpStdioClient:
             if ":" in line_str:
                 key, _, value = line_str.partition(":")
                 headers[key.strip().lower()] = value.strip()
-        length = int(headers.get("content-length", "0"))
+        raw_length = headers.get("content-length", "")
+        try:
+            length = int(raw_length)
+        except ValueError as e:
+            raise ValueError(
+                f"MCP响应Content-Length头非法: {raw_length!r}"
+            ) from e
         if length <= 0:
             return ""
         data = await self._proc.stdout.readexactly(length)

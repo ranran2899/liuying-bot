@@ -13,10 +13,11 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
-from ..config import get_config
+from ..boot import ensure_ai_ready
 from ..core.memory import memory_manager
 from ..core.runtime import (
     FEATURE_LIST,
+    Feature,
     runtime_switch,
 )
 from ..models.conversation_record import ConversationRecord
@@ -90,10 +91,10 @@ class AdminCommands:
 
     @staticmethod
     async def handle_status(session: Uninfo) -> None:
-        """查看功能开关状态"""
-        if not get_config("ENABLE_AI", False):
-            return
+        """查看功能开关状态
 
+        不受总开关限制：AI禁用时管理员仍需可查询状态以便重新开启。
+        """
         statuses = runtime_switch.get_status()
 
         lines: list[str] = ["=== AI功能状态 ==="]
@@ -124,16 +125,19 @@ class AdminCommands:
     async def handle_switch(
         session: Uninfo, feature: str = "", state: str = ""
     ) -> None:
-        """设置全局开关"""
-        if not get_config("ENABLE_AI", False):
-            return
+        """设置全局开关
 
+        AI总开关首次开启时补挂运行资源引导（定时任务/技能包），
+        无需重启插件。
+        """
         feature = (feature or "").strip().lower()
         if err := AdminCommands._validate_switch_args(feature, state):
             await MessageUtils.build_message(err).finish()
             return
         enabled = AdminCommands._parse_state(state)
         ok = runtime_switch.set_global(feature, enabled)
+        if ok and enabled and feature == Feature.AI:
+            await ensure_ai_ready()
         msg = (
             f"已设置全局开关 {feature} = {enabled}"
             if ok
@@ -151,9 +155,6 @@ class AdminCommands:
         - 所有用户所有人格的对话记录（ConversationRecord）
         - 所有用户所有人格的记忆数据及搜索索引（MemoryItem）
         """
-        if not get_config("ENABLE_AI", False):
-            return
-
         # 纯ORM操作，让异常自然向上传播暴露数据库问题
         record_count = await ConversationRecord.clear_all_records()
         memory_count = await memory_manager.clear_all_memory()

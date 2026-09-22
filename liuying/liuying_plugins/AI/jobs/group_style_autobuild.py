@@ -2,8 +2,9 @@
 
 定时分析群聊历史记录，用LLM推断群组风格特征，
 自动更新 GroupContextSnapshot.style 字段。
-落库为 JSON 对象，键名与 core/group/profile.py 写入方
-保持一致，读取方无需兼容纯文本格式。
+落库为 JSON 对象，键名与 core/group/profile.py 读取方
+解析口径一致（tone/pace/catchphrases/taboos/typical_length），
+本任务为风格的唯一写入方。
 
 分析维度：
 - 语言风格（正式/休闲/玩梗/技术向等）

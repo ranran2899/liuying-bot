@@ -13,8 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from liuying.services.liuying_db import Model
 
-_DEFAULT_PERSONA = "default"
-"""默认人格名（未指定时回退）"""
+from ..config import DEFAULT_PERSONA_FALLBACK as _DEFAULT_PERSONA
 
 
 class EmotionState(Model):

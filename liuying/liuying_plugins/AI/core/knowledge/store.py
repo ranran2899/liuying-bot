@@ -43,6 +43,10 @@ _NON_WORD_RE = re.compile(r"[^\w\u4e00-\u9fa5]+")
 def tokenize(text: str) -> list[str]:
     """分词（简化的中英文混合分词）
 
+    与 core/memory/_common.tokenize 的差异有意保留：插件命令召回
+    需要 2-4 字 n-gram + 停用词过滤以命中命令名/中文短语，
+    而记忆侧 2-gram 方案面向语义相似度，两者目标不同不强行合并。
+
     参数:
         text: 输入文本
 

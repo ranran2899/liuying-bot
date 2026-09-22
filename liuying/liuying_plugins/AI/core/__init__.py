@@ -6,15 +6,10 @@
 agent/（按角色前缀命名），本包不再re-export。
 
 分类标准：独立功能域（含多文件或强内聚状态）组织为子包；
-跨域共用的单文件行为模块（chat_intent/peer_awareness等）
+跨域共用的单文件行为模块（peer_awareness等）
 保留为顶层模块，通过本模块统一 re-export。
 """
 
-from .chat_intent import (
-    SemanticFrameInferrer,
-    TurnSemanticFrame,
-    semantic_frame_inferrer,
-)
 from .context import ContextManager, context_manager
 from .llm import LLMHelper, llm_helper
 from .memory import MemoryManager, memory_manager
@@ -24,7 +19,7 @@ from .reply_turn_trace import (
     reply_turn_trace,
 )
 from .social import (
-    SocialContext,
+    ScheduleKind,
     SocialQuota,
     SocialTrigger,
     SocialTriggerRegistry,
@@ -44,19 +39,16 @@ __all__ = [
     "MessageTarget",
     "PeerAwareness",
     "ReplyTurnTrace",
-    "SemanticFrameInferrer",
-    "SocialContext",
+    "ScheduleKind",
     "SocialQuota",
     "SocialTrigger",
     "SocialTriggerRegistry",
     "TargetInference",
-    "TurnSemanticFrame",
     "context_manager",
     "llm_helper",
     "memory_manager",
     "peer_awareness",
     "reply_turn_trace",
-    "semantic_frame_inferrer",
     "social_quota",
     "social_trigger_registry",
     "target_inference",

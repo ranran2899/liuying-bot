@@ -8,8 +8,8 @@ from nonebot_plugin_uninfo import Uninfo
 from liuying.utils.log import logger
 from liuying.utils.message import MessageUtils
 
-from ..config import get_config
 from ..core.persona import persona_manager
+from ..core.runtime import Feature, runtime_switch
 
 __all__ = [
     "PersonaCommands",
@@ -31,7 +31,7 @@ class PersonaCommands:
         无参数时展示所有可用bot人格列表及简要说明；
         带参数时切换当前用户的bot人格（用户级隔离）。
         """
-        if not get_config("ENABLE_AI", False):
+        if not runtime_switch.is_enabled(Feature.AI):
             return
 
         user_id = session.user.id
@@ -81,7 +81,7 @@ class PersonaCommands:
     @staticmethod
     async def handle_profile(session: Uninfo) -> None:
         """查看用户画像"""
-        if not get_config("ENABLE_AI", False):
+        if not runtime_switch.is_enabled(Feature.AI):
             return
 
         user_id = session.user.id

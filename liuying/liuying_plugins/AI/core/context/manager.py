@@ -1,6 +1,7 @@
 """群上下文与时间上下文管理
 
-提供群风格管理、时间时段判断、活动状态描述等。
+提供时段判断、活动状态描述与群上下文提示组装；
+群风格的抽取与注入归属 group_style 域，不在此重复。
 """
 
 from datetime import datetime
@@ -176,34 +177,6 @@ class ContextManager:
         period = self.get_current_time_period()
         return self._TIME_FLAVOR_MAP.get(period, "")
 
-    async def get_group_style(self, group_id: str) -> str:
-        """获取群风格
-
-        参数:
-            group_id: 群组ID
-
-        返回:
-            str: 群风格描述，无则返回空串
-        """
-        ctx = await GroupContextSnapshot.get_context(group_id)
-        return ctx.style if ctx else ""
-
-    async def set_group_style(
-        self, group_id: str, style: str
-    ) -> GroupContextSnapshot:
-        """设置群风格
-
-        参数:
-            group_id: 群组ID
-            style: 群风格描述
-
-        返回:
-            GroupContextSnapshot: 更新后的群上下文
-        """
-        return await GroupContextSnapshot.update_context(
-            group_id=group_id, style=style
-        )
-
     async def get_group_context(
         self, group_id: str
     ) -> GroupContextSnapshot | None:
@@ -248,6 +221,9 @@ class ContextManager:
     ) -> str:
         """构建完整上下文提示
 
+        群风格不在此注入：其抽取与持久化归 group_style 域，
+        由 PromptBuilder 统一以 [群风格参考] 块注入，避免双份。
+
         参数:
             group_id: 群组ID
 
@@ -255,13 +231,7 @@ class ContextManager:
             str: 完整上下文提示
         """
         prompt = self.build_time_prompt()
-        if group_id:
-            style = await self.get_group_style(group_id)
-            if style:
-                prompt += f"\n群风格: {style}"
-            prompt += self.build_group_prompt(group_id)
-        else:
-            prompt += self.build_group_prompt(None)
+        prompt += self.build_group_prompt(group_id)
         return prompt
 
 

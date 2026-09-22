@@ -6,6 +6,7 @@
 from .protocol import Flavor, ProtocolHelper
 from .switch import (
     FEATURE_LIST,
+    Feature,
     FeatureStatus,
     RuntimeSwitchManager,
     runtime_switch,
@@ -13,6 +14,7 @@ from .switch import (
 
 __all__ = [
     "FEATURE_LIST",
+    "Feature",
     "FeatureStatus",
     "Flavor",
     "ProtocolHelper",

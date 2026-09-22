@@ -21,6 +21,11 @@ from ..models.memory_item import MemoryTier
 
 __all__ = ["setup_diary_job"]
 
+_WEEKDAY_NAMES: tuple[str, ...] = (
+    "周一", "周二", "周三", "周四", "周五", "周六", "周日"
+)
+"""中文星期名（避免 %A 依赖 locale）"""
+
 
 _DIARY_ANGLE_POOL: tuple[str, ...] = (
     "眼前的一个生活小观察",
@@ -47,7 +52,9 @@ class DiaryHelper:
             str: 日记文本
         """
         now = datetime.now()
-        date_str = now.strftime("%Y-%m-%d %A")
+        date_str = (
+            f"{now.strftime('%Y-%m-%d')} {_WEEKDAY_NAMES[now.weekday()]}"
+        )
 
         summaries = await memory_manager.get_memory_summary(
             user_id="diary", limit=10

@@ -8,7 +8,7 @@ import asyncio
 
 from nonebot import get_bot
 from nonebot.adapters import Event
-from nonebot_plugin_alconna import UniMsg
+from nonebot_plugin_alconna import At, UniMsg
 from nonebot_plugin_uninfo import Uninfo
 
 from liuying.utils.log import logger
@@ -18,7 +18,11 @@ from ..agent.runtime.session_context import bind_session_scope
 from ..config import get_config
 from ..core.group import group_social
 from ..core.peer_awareness import peer_awareness
-from ..core.runtime import ProtocolHelper, runtime_switch
+from ..core.runtime import (
+    Feature,
+    ProtocolHelper,
+    runtime_switch,
+)
 from ..core.target_inference import MessageTarget, target_inference
 from ..pipeline.processor import ReplyResult, reply_processor
 from ..pipeline.reply_buffer import reply_buffer
@@ -97,7 +101,8 @@ class ChatCommands:
         注：用户/群组黑名单已由流萤本体 hooks/auth_ban 在事件级拦截，
         此处不再重复检查。
         """
-        if not get_config("ENABLE_AI", False):
+        # 总开关单源：runtime_switch 直读 ENABLE_AI 配置，不再双重检查
+        if not runtime_switch.is_enabled(Feature.AI):
             return
 
         # 以作用域绑定 uninfo 真实会话，退出时自动 reset，避免跨消息泄漏
@@ -107,10 +112,6 @@ class ChatCommands:
             group_id = (
                 session.scene.id if session.scene.is_group else None
             )
-
-            # 运行时开关检查（全局维度）
-            if not runtime_switch.is_enabled("ai"):
-                return
 
             is_private = not session.scene.is_group
 
@@ -146,6 +147,35 @@ class ChatCommands:
 
             if not text and image_data is None:
                 return
+
+            # 记录用户消息到群社交智能（仅群聊）：
+            # 从原始事件与 UniMsg 补齐回复/@目标，驱动互动关系统计；
+            # 仅 to_me 命中的消息会被记录，属已知覆盖范围限制
+            if group_id and get_config(
+                "SOCIAL_INTELLIGENCE_ENABLED", True
+            ):
+                mentioned = [
+                    seg.target
+                    for seg in message
+                    if isinstance(seg, At)
+                    and seg.flag == "user"
+                    and seg.target
+                    and seg.target not in {user_id, session.self_id}
+                ] or None
+                reply_to = (
+                    target_inference.extract_reply_sender_id(
+                        getattr(event, "reply", None)
+                    )
+                )
+                if reply_to in {user_id, session.self_id, ""}:
+                    reply_to = None
+                group_social.record_message(
+                    group_id=group_id,
+                    user_id=user_id,
+                    text=text,
+                    reply_to=reply_to,
+                    mentioned_users=mentioned,
+                )
 
             label = "AI私聊消息" if is_private else "AI@消息"
             logger.info(
@@ -211,16 +241,6 @@ class ChatCommands:
         err_text = ""
         result: ReplyResult | None = None
         try:
-            # 记录用户消息到群社交智能（仅群聊）
-            if group_id and get_config(
-                "SOCIAL_INTELLIGENCE_ENABLED", True
-            ):
-                group_social.record_message(
-                    group_id=group_id,
-                    user_id=user_id,
-                    text=text,
-                )
-
             result = await reply_processor.handle_text(
                 user_id=user_id,
                 text=text,

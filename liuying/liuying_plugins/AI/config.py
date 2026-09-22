@@ -28,10 +28,21 @@ from .config_items import (
     VISION_CONFIGS,
 )
 
-__all__ = ["PluginConfig", "get_config", "set_config"]
+__all__ = [
+    "DEFAULT_PERSONA_FALLBACK",
+    "PluginConfig",
+    "get_config",
+    "set_config",
+]
 
 _MODULE = "AI"
 """配置模块名"""
+
+DEFAULT_PERSONA_FALLBACK = "default"
+"""数据列默认人格名（人格/记忆/情绪等表未声明人格时的占位值）
+
+注意与运行默认人格区分：实际服务的人格由 DEFAULT_PERSONA
+配置决定（默认 liuying），两者语义不同不可混用。"""
 
 _CACHE: dict[tuple[str, str], tuple[float, object]] = {}
 """配置读取 TTL 缓存 {(模块, 键): (过期单调时间戳, 配置值)}"""

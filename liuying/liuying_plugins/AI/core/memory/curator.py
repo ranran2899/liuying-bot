@@ -1,7 +1,7 @@
 """记忆策展器与演化引擎
 
-负责记忆质量评估、去重合并、主题聚合、矛盾检测、
-主动学习（实体识别与画像更新）。
+负责记忆质量评估、去重合并、高频访问晶体化、主题聚合、
+矛盾检测、主动学习（实体识别与画像更新）。
 作为记忆系统的上层策展层，定期对已有记忆进行演化。
 """
 
@@ -31,6 +31,9 @@ _DEDUP_SIMILARITY = 0.85
 _TOPIC_MIN_MEMBERS = 2
 """主题聚合最小成员数"""
 
+_CRYSTALIZE_ACCESS_THRESHOLD = 3
+"""晶体化晋升阈值（情景记忆被访问次数，承接自后台智能层）"""
+
 _ACTIVE_LEARN_BATCH = 20
 """主动学习单批处理条数"""
 
@@ -43,6 +46,7 @@ class CurationReport:
         evaluated: 评估的记忆数
         low_quality: 低质量记忆数
         deduplicated: 去重的记忆数
+        crystallized: 晶体化的记忆数
         merged: 合并的记忆数
         topics_formed: 形成的主题数
         entities_extracted: 提取的实体数
@@ -53,6 +57,7 @@ class CurationReport:
     evaluated: int = 0
     low_quality: int = 0
     deduplicated: int = 0
+    crystallized: int = 0
     merged: int = 0
     topics_formed: int = 0
     entities_extracted: int = 0
@@ -69,6 +74,7 @@ class CurationReport:
             "evaluated": self.evaluated,
             "low_quality": self.low_quality,
             "deduplicated": self.deduplicated,
+            "crystallized": self.crystallized,
             "merged": self.merged,
             "topics_formed": self.topics_formed,
             "entities_extracted": self.entities_extracted,
@@ -119,6 +125,7 @@ class MemoryCurator:
             report.evaluated = await self._evaluate_quality(
                 user_id, max_memories, report
             )
+            report.crystallized = await self._crystallize()
             report.deduplicated = await self._deduplicate(
                 user_id, max_memories // 2
             )
@@ -175,6 +182,28 @@ class MemoryCurator:
                 ):
                     await mem.delete()
         return count
+
+    @staticmethod
+    async def _crystallize() -> int:
+        """晶体化：高频访问的情景记忆晋升为受保护语义记忆
+
+        承接自原后台智能层（写路径防抖去重已由定期向量
+        去重覆盖，晶体化作为定期批处理步骤保留）。
+
+        返回:
+            int: 晋升的记忆数
+        """
+        ids = await MemoryItem.filter(
+            tier=MemoryTier.EPISODIC,
+            access_count__gte=_CRYSTALIZE_ACCESS_THRESHOLD,
+            is_protected=False,
+        ).values_list("id", flat=True)
+        if not ids:
+            return 0
+        await MemoryItem.filter(id__in=list(ids)).update(
+            tier=MemoryTier.SEMANTIC, is_protected=True
+        )
+        return len(ids)
 
     async def _deduplicate(
         self,

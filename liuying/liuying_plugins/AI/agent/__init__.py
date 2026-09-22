@@ -1,15 +1,15 @@
 """Agent 智能体循环
 
-提供规划-执行-响应三层分离的 Agent 核心循环（runner/runtime）、
-MCP 协议桥（mcp/）与各辅助LLM分析模块（情绪/记忆/画像/门控/
-主动学习/检索改写/贴纸语义，按角色前缀命名）。
+提供统一 ReAct 循环入口（runner/runtime）、主动学习（learning）、
+社交门控（review/）与贴纸语义分析（sticker/）。
+情绪、群风格、记忆巩固/进化/检索改写等核心服务
+已回归 core/（emotion/group.profile/memory）。
 
 工具系统已独立为插件根目录的 AI/tools 包（注册表/装饰器/内置工具），
 本包不再导出工具系统符号，需要时直接
 ``from liuying.liuying_plugins.AI.tools import ...``。
 
-本包不提供急切聚合导出：runner 链会拉起 core.memory 等重依赖，
-而 core.memory.manager 需反向导入本包的记忆演化模块，
+本包不提供急切聚合导出：runner 链会拉起 pipeline/core 重依赖，
 惰性导出可保证任意加载顺序均无循环导入。
 """
 

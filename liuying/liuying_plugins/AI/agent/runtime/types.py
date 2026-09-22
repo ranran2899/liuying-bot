@@ -15,13 +15,9 @@ class PersonaResponse:
 
     Attributes:
         reply_text: 回复正文
-        info_added: 是否补充了新信息
-        user_attitude: 推测的用户态度
         bot_emotion: AI情绪
-        expression_style: 表达风格
         tts_style_hint: TTS风格提示
         sticker_mood_hint: 表情包情绪提示
-        ambiguity_level: 回复模糊度
         recommend_silence: 是否建议静默
         ask_clarify: 是否需要澄清
         elapsed: 生成耗时（秒）
@@ -29,13 +25,9 @@ class PersonaResponse:
     """
 
     reply_text: str = ""
-    info_added: bool = False
-    user_attitude: str = "neutral"
     bot_emotion: str = "neutral"
-    expression_style: str = "casual"
     tts_style_hint: str = ""
     sticker_mood_hint: str = ""
-    ambiguity_level: float = 0.0
     recommend_silence: bool = False
     ask_clarify: bool = False
     elapsed: float = 0.0
@@ -54,13 +46,9 @@ class PersonaResponse:
         """
         return {
             "reply_text": self.reply_text,
-            "info_added": self.info_added,
-            "user_attitude": self.user_attitude,
             "bot_emotion": self.bot_emotion,
-            "expression_style": self.expression_style,
             "tts_style_hint": self.tts_style_hint,
             "sticker_mood_hint": self.sticker_mood_hint,
-            "ambiguity_level": self.ambiguity_level,
             "recommend_silence": self.recommend_silence,
             "ask_clarify": self.ask_clarify,
             "elapsed": round(self.elapsed, 3),

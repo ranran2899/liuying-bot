@@ -11,6 +11,7 @@ from liuying.utils.message import MessageUtils
 from ..config import get_config
 from ..core.llm import llm_helper
 from ..core.persona import persona_manager
+from ..core.runtime import Feature, runtime_switch
 from .chat_helpers import ChatMatchersHelper
 
 __all__ = [
@@ -36,7 +37,7 @@ class TtsCommands:
 
         注：用户/群组黑名单已由流萤本体 hooks/auth_ban 在事件级拦截。
         """
-        if not get_config("ENABLE_AI", False):
+        if not runtime_switch.is_enabled(Feature.AI):
             return
 
         # TTS 配置只读取一次，供开关与音色兜底共用

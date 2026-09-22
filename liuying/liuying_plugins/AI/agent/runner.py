@@ -85,6 +85,7 @@ class AgentRunner:
         use_llm_planning: bool = True,
         persona_name: str = "default",
         is_at_bot: bool = False,
+        max_reply_chars: int | None = None,
     ) -> AgentResult:
         """执行统一 ReAct 循环
 
@@ -100,6 +101,7 @@ class AgentRunner:
             use_llm_planning: 兼容旧参数，False时走无工具快速直答
             persona_name: 当前bot人格名（用于记忆/情绪隔离）
             is_at_bot: 是否@bot或直呼bot（用于直达必答裁决）
+            max_reply_chars: 人格声明的最大回复字数，透传正文阶段预算
 
         返回:
             AgentResult: 执行结果
@@ -116,6 +118,7 @@ class AgentRunner:
             is_at_bot=is_at_bot,
             max_steps=max_steps,
             time_budget=time_budget,
+            max_reply_chars=max_reply_chars,
         )
 
         return AgentRunner._to_result(

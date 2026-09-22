@@ -6,7 +6,7 @@
 """
 
 from .framework import (
-    SocialContext,
+    ScheduleKind,
     SocialTrigger,
     SocialTriggerRegistry,
     social_trigger_registry,
@@ -14,7 +14,7 @@ from .framework import (
 from .quota import SocialQuota, social_quota
 
 __all__ = [
-    "SocialContext",
+    "ScheduleKind",
     "SocialQuota",
     "SocialTrigger",
     "SocialTriggerRegistry",

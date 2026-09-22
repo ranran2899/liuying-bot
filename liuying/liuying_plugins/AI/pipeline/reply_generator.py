@@ -18,6 +18,7 @@ from ..core.persona import persona_manager
 from ..core.safety import SafetyFilter, SafetyRefusalError
 from ..core.vision import summarize_image, vision_router
 from .helpers import ReplyPipeline
+from .style_policy import RETRY_PERSONA_HINT_TEMPLATE
 from .types import ReplyContext
 
 _FALLBACK_REPLIES: list[str] = [
@@ -32,6 +33,29 @@ _FALLBACK_REPLIES: list[str] = [
 def _fallback_reply() -> str:
     """兜底回复文案（LLM空响应或调用失败时）"""
     return random.choice(_FALLBACK_REPLIES)
+
+
+async def _persona_max_chars(user_id: str) -> int | None:
+    """读取人格声明的最大回复字数，作为正文阶段预算上限
+
+    人格配置为内存/短TTL缓存读取，不额外压 DB；
+    未声明或非法值返回 None，由预算默认值接管。
+
+    参数:
+        user_id: 用户ID
+
+    返回:
+        int | None: 最大回复字数，未声明时 None
+    """
+    persona = await persona_manager.get_user_persona_config(user_id)
+    raw = persona.get("max_response_length")
+    if (
+        isinstance(raw, int | float)
+        and not isinstance(raw, bool)
+        and raw > 0
+    ):
+        return int(raw)
+    return None
 
 
 class ReplyGenerator:
@@ -164,6 +188,9 @@ class ReplyGenerator:
                     persona_name=ctx.persona_name,
                     has_image=vision_provider is not None,
                     is_at_bot=ctx.is_at_bot,
+                    max_reply_chars=await _persona_max_chars(
+                        ctx.user_id
+                    ),
                 )
                 # 仅当无正文时才尊重静默建议；
                 # LLM已生成回复文本时不应因silence标记丢弃正文
@@ -246,10 +273,8 @@ class ReplyGenerator:
                     ctx.persona_name
                 )
                 retry_name = persona.get("name") or "AI"
-                retry_hint = (
-                    f"\n[重要提示] 请直接以{retry_name}的身份回复，"
-                    "不要使用模板化拒绝用语，不要提及自己是AI或助手。"
-                    "如果确实无法回答，简短说一句即可。"
+                retry_hint = RETRY_PERSONA_HINT_TEMPLATE.format(
+                    persona=retry_name
                 )
                 retry_messages = list(use_messages)
                 retry_messages.append(

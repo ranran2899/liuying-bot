@@ -16,6 +16,7 @@ from ..config import get_config
 from ..core.llm import llm_helper
 from ..core.llm.model_router import ROLE_AGENT, ROLE_INTENT, model_router
 from ..core.memory import memory_manager
+from ..core.memory._common import _DEFAULT_PERSONA
 from ..core.tools.json_utils import extract_json_payload
 from ..models.memory_item import MemoryTier
 
@@ -24,9 +25,6 @@ _DAILY_QUOTA = 10
 
 _MIN_CONFIDENCE_TO_RESEARCH = 0.5
 """触发查证的最高置信度阈值"""
-
-_DEFAULT_PERSONA = "default"
-"""默认人格名"""
 
 _QUOTA_LOCK = asyncio.Lock()
 """配额临界区锁

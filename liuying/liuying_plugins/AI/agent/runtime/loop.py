@@ -26,6 +26,9 @@ from ...core.llm.model_router import ROLE_AGENT, model_router
 from ...pipeline.style_policy import (
     CROSSTALK_GUARD_PROMPT,
     CROSSTALK_MARKER,
+    FINISH_KEY_POINTS_DESCRIPTION,
+    FINISH_STAGE_DESCRIPTION,
+    LOOP_INSTRUCTION_PROMPT,
     TOOL_GUIDANCE_PROMPT,
 )
 from ...tools import ToolRegistry, tool_registry
@@ -44,12 +47,7 @@ _FINISH_TOOL: dict[str, Any] = {
     "type": "function",
     "function": {
         "name": TOOL_FINISH,
-        "description": (
-            "结束工具编排阶段。当你已掌握足够信息、或判断应静默/"
-            "需澄清时调用它。不要在此写面向用户的正文，正文由后续的"
-            "人格回复阶段生成；这里只需给出是否静默/是否澄清与情绪/TTS/"
-            "贴纸等提示。"
-        ),
+        "description": FINISH_STAGE_DESCRIPTION,
         "parameters": {
             "type": "object",
             "properties": {
@@ -75,10 +73,7 @@ _FINISH_TOOL: dict[str, Any] = {
                 },
                 "key_points": {
                     "type": "string",
-                    "description": (
-                        "供回复阶段参考的要点/结论（内部用，可空）："
-                        "跨工具查证后的结论性信息，用简短要点，勿写成整句回复"
-                    ),
+                    "description": FINISH_KEY_POINTS_DESCRIPTION,
                 },
             },
             "required": [],
@@ -114,6 +109,7 @@ class AgentLoop:
         is_at_bot: bool = False,
         max_steps: int | None = None,
         time_budget: float | None = None,
+        max_reply_chars: int | None = None,
     ) -> AgentOutcome:
         """执行 ReAct 循环
 
@@ -125,6 +121,7 @@ class AgentLoop:
             is_at_bot: 消息是否直达bot（私聊/@bot/回复bot）
             max_steps: 最大步数，None时用配置或默认
             time_budget: 总时间预算（秒），None时用配置或默认
+            max_reply_chars: 人格声明的最大回复字数，透传正文阶段
 
         返回:
             AgentOutcome: 循环产出
@@ -150,7 +147,7 @@ class AgentLoop:
         scratchpad.append(
             {
                 "role": "system",
-                "content": self._loop_instruction(),
+                "content": LOOP_INSTRUCTION_PROMPT,
             }
         )
 
@@ -228,23 +225,11 @@ class AgentLoop:
                 sticker_mood_hint=str(meta.get("sticker_mood_hint", "")),
             )
         else:
-            response = await self._composer.compose(messages, records, meta)
+            response = await self._composer.compose(
+                messages, records, meta, max_reply_chars
+            )
 
         return self._finalize(response, records, start, step)
-
-    @staticmethod
-    def _loop_instruction() -> str:
-        """工具编排阶段指令（只讲循环机制，工具取舍原则交给 TOOL_GUIDANCE）
-
-        返回:
-            str: 指令文本
-        """
-        return (
-            "你在工具编排阶段：按上面的工具使用原则决定要不要调用工具"
-            "支撑回答，需要就调用、读结果后可继续；信息够了或判断该静默/"
-            "该澄清时调用 finish 收束。本阶段只做工具决策与收束，不要写"
-            "面向用户的正文。"
-        )
 
     @staticmethod
     def _inject_guidance(
@@ -370,9 +355,8 @@ class AgentLoop:
         timeout = min(DEFAULT_TOOL_TIMEOUT, max(remaining, 1.0))
         start = time.time()
         try:
-            result = await asyncio.wait_for(
-                tool.func(**use_args), timeout=timeout
-            )
+            async with asyncio.timeout(timeout):
+                result = await tool.func(**use_args)
             record.result = (
                 result if isinstance(result, str) else str(result)
             )

@@ -1,7 +1,8 @@
 """表情包策展
 
 基于情绪检测、用户反馈、群级/用户级偏好与冷却管理，
-智能选择回复表情包。反馈学习逻辑由 FeedbackLearner 承担。
+智能选择回复表情包，并提供首次扫描入库与条目转发送图片。
+反馈学习逻辑由 FeedbackLearner 承担。
 情绪关键词定义统一在 constants 模块维护。
 """
 
@@ -9,13 +10,18 @@ import random
 import time
 from typing import Any
 
+from nonebot_plugin_alconna import Image
+
+from liuying.services.bed_layout import BedLayout
 from liuying.services.cache import CacheDict
+from liuying.utils.log import logger
 
 from ...config import get_config
 from ...models.sticker_item import StickerItem
 from ...models.sticker_usage import StickerUsage
 from .constants import MOOD_KEYWORDS
 from .feedback import FeedbackLearner
+from .importer import resolve_sticker_path, sticker_importer
 from .library import StickerLibrary, sticker_library
 
 _DEFAULT_COOLDOWN_SECONDS = 180
@@ -45,6 +51,66 @@ class StickerCuration:
         self._group_cooldowns: CacheDict = CacheDict(
             "AI_STICKER_GROUP_CD", expire=7200, max_size=2000
         )
+        self._scanned = False
+        """表情包库是否已完成首次扫描入库"""
+
+    async def ensure_scanned(self) -> None:
+        """确保表情包库已扫描入库（仅首次）
+
+        扫描失败不阻断选择，仅记录日志。
+        """
+        if self._scanned:
+            return
+        self._scanned = True
+        try:
+            stats = await sticker_importer.scan_directory(
+                rescan=False, llm_describe=False
+            )
+            if stats["added"] > 0:
+                logger.info(
+                    f"表情包库首次扫描入库: {stats}",
+                    command="AI",
+                )
+        except Exception as e:
+            logger.debug(
+                f"表情包库扫描失败（不影响主流程）: {e}",
+                command="AI",
+                e=e,
+            )
+
+    async def item_to_image(
+        self, item: StickerItem | None
+    ) -> Image | None:
+        """将表情包条目转为可直接发送的图片对象
+
+        优先使用 bed_layout 本地图床 URL，未迁移时回退本地文件。
+
+        参数:
+            item: 表情包条目
+
+        返回:
+            Image | None: alc Image 对象
+        """
+        if not item:
+            return None
+        if item.bed_layout_filename:
+            try:
+                url = await BedLayout.get_url(item.bed_layout_filename)
+                return Image(url=url)
+            except Exception as e:
+                logger.debug(
+                    f"获取 bed_layout URL 失败: {e}",
+                    command="AI",
+                    e=e,
+                )
+        if not item.file_path:
+            return None
+        full_path = resolve_sticker_path(
+            sticker_importer.root_dir, item.file_path
+        )
+        if full_path and full_path.exists():
+            return Image(path=full_path)
+        return None
 
     def _get_library(self) -> StickerLibrary:
         """获取表情包库
@@ -211,6 +277,7 @@ class StickerCuration:
         if not force and not self.should_send(group_id, is_private):
             return None
 
+        await self.ensure_scanned()
         library = self._get_library()
         mood = self._detect_mood(text, persona_mood, mood_hint)
         exclude_ids = self._get_exclude_ids(group_id, user_id)

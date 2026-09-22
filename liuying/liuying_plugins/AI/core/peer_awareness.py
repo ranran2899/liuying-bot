@@ -199,10 +199,9 @@ class PeerAwareness:
             "不要将这些功能说成你自己的能力。",
             "当用户询问这些功能时，引导用户使用对应命令。",
         ]
-        peer_count = len(self._known_peers)
-        if peer_count > 0:
+        if self._known_peers:
             lines.append(
-                f"群内检测到 {peer_count} 个其他bot，"
+                "近期在多个群组内检测到其他bot发言，"
                 "避免与其他bot互相对话。"
             )
         return "\n".join(lines)

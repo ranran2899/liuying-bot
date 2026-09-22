@@ -10,10 +10,10 @@ from typing import Any
 
 from liuying.utils.log import logger
 
-from ..agent.intent.emotion import emotion_manager
 from ..agent.runner import AgentResult
 from ..config import get_config
 from ..core.context import ContextPolicy, context_manager
+from ..core.emotion import emotion_manager
 from ..core.memory import memory_manager
 from ..models.conversation_record import ConversationRecord
 from ..models.memory_item import MemoryTier
@@ -21,6 +21,9 @@ from .humanize import HumanizeToolkit
 from .types import ReplyContext
 
 __all__ = ["ReplyPipeline"]
+
+_SUMMARY_MAX_LEN = 100
+"""对话记忆的摘要截断长度"""
 
 
 class ReplyPipeline:
@@ -212,25 +215,17 @@ class ReplyPipeline:
                 persona_name=ctx.persona_name,
             )
 
-        async def _safe(
-            task: Any, name: str, level: str = "debug"
-        ) -> None:
+        async def _safe(task: Any, name: str) -> None:
             """安全执行子任务并记录异常
 
             参数:
                 task: 子任务协程
                 name: 任务名（用于日志）
-                level: 日志级别（warning/debug）
             """
             try:
                 await task
             except Exception as e:
-                log_fn = (
-                    logger.warning
-                    if level == "warning"
-                    else logger.debug
-                )
-                log_fn(
+                logger.warning(
                     f"{name}失败: {e}", command="AI", e=e
                 )
 
@@ -238,7 +233,7 @@ class ReplyPipeline:
             memory_manager.add(
                 user_id=ctx.user_id,
                 content=f"用户: {user_text}\nAI: {reply_text}",
-                summary=reply_text[:100],
+                summary=reply_text[:_SUMMARY_MAX_LEN],
                 group_id=ctx.group_id,
                 tier=MemoryTier.WORKING,
                 persona_name=ctx.persona_name,
@@ -248,7 +243,7 @@ class ReplyPipeline:
         )
 
         await asyncio.gather(
-            _safe(_persist_records(), "持久化对话记录", "warning"),
+            _safe(_persist_records(), "持久化对话记录"),
             _safe(
                 emotion_manager.update_after_chat(
                     ctx.user_id,
