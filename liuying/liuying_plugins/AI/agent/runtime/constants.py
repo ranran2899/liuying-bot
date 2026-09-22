@@ -22,6 +22,10 @@ LATENCY_CLASS_SLOW = "slow"
 DEFAULT_TOOL_TIMEOUT = 30.0
 """默认工具超时（秒）"""
 
+# ===== 工具产出标记 =====
+IMAGE_OUTPUT_KIND = "image_url"
+"""图片生成类工具的产出标记（metadata.output_kind 的值）"""
+
 # ===== 工具意图标签 =====
 INTENT_TAG_REALTIME = "realtime"
 """实时信息查询"""
