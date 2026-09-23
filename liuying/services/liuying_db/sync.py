@@ -158,7 +158,7 @@ class DBSyncManager:
                         parsed = datetime.strptime(value, fmt)
                         value = parsed.date() if isinstance(col_type, Date) else parsed
                         break
-                    except ValueError, TypeError:
+                    except (ValueError, TypeError):
                         continue
             converted[key] = value
         return converted

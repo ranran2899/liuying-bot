@@ -93,10 +93,6 @@ class ItemTemplate(Model):
         return [
             "ALTER TABLE item_template "
             "ADD COLUMN shop_name VARCHAR(255) DEFAULT 'default';",
-            "UPDATE item_template SET item_data = json_set("
-            "item_data, '$.id', item_id) "
-            "WHERE item_id IS NOT NULL "
-            "AND json_extract(item_data, '$.id') IS NULL;",
             "CREATE INDEX IF NOT EXISTS ix_item_template_shop_name "
             "ON item_template (shop_name);",
         ]

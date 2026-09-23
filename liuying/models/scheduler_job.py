@@ -417,7 +417,7 @@ class SchedulerJob(Model):
         """数据库迁移脚本"""
         return [
             "ALTER TABLE scheduler_job ADD name VARCHAR(255) DEFAULT '';",
-            "ALTER TABLE scheduler_job ADD group VARCHAR(100) DEFAULT 'default';",
+            "ALTER TABLE scheduler_job ADD \"group\" VARCHAR(100) DEFAULT 'default';",
             "ALTER TABLE scheduler_job ADD description TEXT DEFAULT '';",
             "ALTER TABLE scheduler_job ADD run_count INTEGER DEFAULT 0;",
             "ALTER TABLE scheduler_job ADD func_module VARCHAR(255);",

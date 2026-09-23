@@ -75,8 +75,7 @@ class UserIntroInfo(Model):
             list: SQL语句列表，用于数据库表结构更新
         """
         return [
+            "ALTER TABLE user_intro ADD COLUMN avatar VARCHAR(500) DEFAULT '';",
             "ALTER TABLE user_intro "
-            "ADD COLUMN avatar VARCHAR(500) DEFAULT '' COMMENT '用户头像'",
-            "ALTER TABLE user_intro "
-            "ADD COLUMN platform VARCHAR(255) DEFAULT '' COMMENT '用户所在平台'",
+            "ADD COLUMN platform VARCHAR(255) DEFAULT '';",
         ]

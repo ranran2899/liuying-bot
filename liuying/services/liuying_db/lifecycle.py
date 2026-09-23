@@ -31,6 +31,42 @@ from .utils import DbUtils
 
 driver = nonebot.get_driver()
 
+# 各方言“迁移已应用 / 对象不存在”的良性错误特征。
+# 脚本先于 create_all 执行：新装库缺表、旧装库列已存在或已删除均会报错，
+# 识别后静默跳过；语法错误等真实故障不在此列，必须显式告警。
+_BENIGN_SQLITE_KEYWORDS = (
+    "duplicate column",
+    "already exists",
+    "no such column",
+    "no such table",
+)
+_BENIGN_POSTGRES_CODES = frozenset({"42701", "42703", "42P01", "42P06", "42P07"})
+_BENIGN_MYSQL_CODES = frozenset({1050, 1060, 1091, 1146})
+
+
+def _is_benign_migration_error(error: Exception, dialect: str) -> bool:
+    """判断迁移失败是否属于“已应用过 / 对象不存在”的可忽略情况
+
+    参数:
+        error: SQLAlchemy 包装后的数据库异常
+        dialect: 数据库方言名（sqlite/postgresql/mysql）
+
+    返回:
+        bool: 是否为可忽略的幂等迁移错误
+    """
+    orig = getattr(error, "orig", None)
+    match dialect:
+        case "sqlite":
+            message = str(orig).lower()
+            return any(k in message for k in _BENIGN_SQLITE_KEYWORDS)
+        case "postgresql":
+            return getattr(orig, "pgcode", None) in _BENIGN_POSTGRES_CODES
+        case "mysql" | "mariadb":
+            args = getattr(orig, "args", ())
+            return bool(args) and args[0] in _BENIGN_MYSQL_CODES
+        case _:
+            return False
+
 
 class LifecycleManager:
     """数据库生命周期管理器
@@ -51,6 +87,12 @@ class LifecycleManager:
         注意: 脚本先于 ``create_all`` 执行。全新安装时引用新表的脚本会因
         表不存在而失败，属预期行为（create_all 随后会带上新字段建表，
         结果自愈）；已安装库上的重复迁移失败同样被容忍并跳过。
+
+        每条 SQL 独立提交，失败后必须显式回滚：PostgreSQL/MySQL 上失败
+        语句会使事务进入中止态，不回滚将导致后续脚本全部级联失败。
+        良性幂等错误（列已存在、列/表不存在、对象已存在）仅记 debug，
+        其余错误逐条输出 warning 并在库维度汇总，避免真实迁移故障被
+        “可能为已应用过的迁移”的汇总告警长期掩盖。
         """
         if not db_model.script_methods:
             return
@@ -91,8 +133,10 @@ class LifecycleManager:
                     )
 
         for db_name, sql_list in scripts_by_db.items():
-            failed_sqls: list[str] = []
+            skipped = 0
+            failed_sqls: list[tuple[str, Exception]] = []
             async with session_manager.get_session(db_name) as session:
+                dialect = session.bind.dialect.name if session.bind else "unknown"
                 for sql in sql_list:
                     logger.debug(f"执行SQL: {sql}", LOG_COMMAND)
                     try:
@@ -102,14 +146,27 @@ class LifecycleManager:
                         )
                         await session.commit()
                     except Exception as e:
-                        # 幂等迁移重复执行时的常规失败（如列已存在）记 debug，
-                        # 汇总失败数在下方以 warning 呈现，避免每次启动刷屏
-                        logger.debug(f"执行SQL: {sql} 错误...", LOG_COMMAND, e=e)
-                        failed_sqls.append(sql)
+                        # 回滚失败语句，恢复事务可用状态，防止后续脚本级联失败
+                        await session.rollback()
+                        if _is_benign_migration_error(e, dialect):
+                            skipped += 1
+                            logger.debug(
+                                f"迁移已应用，跳过: {sql}", LOG_COMMAND, e=e
+                            )
+                        else:
+                            failed_sqls.append((sql, e))
+                            logger.warning(
+                                f"迁移 SQL 执行失败: {sql}", LOG_COMMAND, e=e
+                            )
+            if skipped:
+                logger.debug(
+                    f"数据库 {db_name} 有 {skipped} 条迁移已应用，自动跳过",
+                    LOG_COMMAND,
+                )
             if failed_sqls:
                 logger.warning(
-                    f"数据库 {db_name} 有 {len(failed_sqls)} 条脚本 SQL 执行失败"
-                    f"（可能为已应用过的迁移），已跳过",
+                    f"数据库 {db_name} 有 {len(failed_sqls)} 条迁移 SQL "
+                    f"执行失败，请检查上方具体错误",
                     LOG_COMMAND,
                 )
 

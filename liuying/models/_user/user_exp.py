@@ -525,9 +525,13 @@ class UserExpInfo(Model):
 
     @classmethod
     def _run_script(cls):
-        """运行数据库迁移脚本"""
+        """运行数据库迁移脚本
+
+        SQLite 不支持 ``DROP COLUMN IF EXISTS`` 语法，列已删除时
+        报错由迁移框架按“对象不存在”良性错误跳过。
+        """
         return [
-            "ALTER TABLE user_exp DROP COLUMN IF EXISTS default_exp;",
-            "ALTER TABLE user_exp DROP COLUMN IF EXISTS default_max;",
-            "ALTER TABLE user_exp DROP COLUMN IF EXISTS next_default_exp;",
+            "ALTER TABLE user_exp DROP COLUMN default_exp;",
+            "ALTER TABLE user_exp DROP COLUMN default_max;",
+            "ALTER TABLE user_exp DROP COLUMN next_default_exp;",
         ]

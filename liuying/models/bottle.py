@@ -175,9 +175,13 @@ class BottleRecord(Model):
 
     @classmethod
     def _run_script(cls):
-        """移除 group_id 字段（漂流瓶与群组解耦）"""
+        """移除 group_id 字段（漂流瓶与群组解耦）
+
+        SQLite 不支持 ``DROP COLUMN IF EXISTS`` 语法，列已删除时
+        报错由迁移框架按“对象不存在”良性错误跳过。
+        """
         return [
-            "ALTER TABLE bottle_record DROP COLUMN IF EXISTS group_id;",
+            "ALTER TABLE bottle_record DROP COLUMN group_id;",
         ]
 
 

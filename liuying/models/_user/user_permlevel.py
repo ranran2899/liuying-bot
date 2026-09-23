@@ -304,6 +304,6 @@ class UserPermLevel(Model):
     def _run_script(cls):
         """数据库初始化脚本"""
         return [
-            "ALTER TABLE level_user ADD bot_id VARCHAR(255) DEFAULT NULL;",
-            "ALTER TABLE level_user ADD platform VARCHAR(255) DEFAULT NULL;",
+            "ALTER TABLE user_perm_level ADD bot_id VARCHAR(255) DEFAULT NULL;",
+            "ALTER TABLE user_perm_level ADD platform VARCHAR(255) DEFAULT NULL;",
         ]

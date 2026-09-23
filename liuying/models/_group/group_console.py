@@ -426,6 +426,6 @@ class GroupConsole(Model):
             "ALTER TABLE group_console ADD superuser_block_plugin TEXT DEFAULT '';",
             "ALTER TABLE group_console ADD superuser_block_task TEXT DEFAULT '';",
             "ALTER TABLE group_console ADD block_task TEXT DEFAULT '';",
-            "ALTER TABLE group_console DROP proactive_allowed;",
+            "ALTER TABLE group_console DROP COLUMN proactive_allowed;",
             "ALTER TABLE group_console ADD platform VARCHAR(255) DEFAULT '';",
         ]
